@@ -1,6 +1,18 @@
 # Design Notes — Evolución de Cartas y Pantalla de Descanso (Ronda 2)
 
-Estado: propuesta del Game Designer, pendiente de validación del Director Creativo. No se ha tocado `decisions.md` ni el GDD.
+**Estado: SUPERADO parcialmente — validado y formalizado el 2026-07-05 en `.ai-studio/memory/decisions.md` (sección "Descanso entre combates y evolución de la baraja"). Este documento queda como registro histórico del análisis; para la decisión vigente, consultar siempre decisions.md, no este archivo.**
+
+Qué se validó tal cual se recomendaba aquí:
+- Evoluciones de cartas mediante **plantillas genéricas parametrizadas por tipo de carta** (§2), con la puerta abierta a evoluciones únicas a mano más adelante.
+- Tope de **1 evolución por carta por run**; evolucionar una carta evoluciona **todas sus copias** (§3).
+- Formato "elige 1 de 3" para la evolución de cartas (§3).
+
+Qué se decidió **distinto** a la recomendación de este documento:
+- **Vida del Líder → Lectura A, no Lectura B.** El Director Creativo eligió recuperación automática del 50% de vida máxima entre combates, siempre y para todos, sin elección (§1 de este documento recomendaba lo contrario). Esto vacía de contenido la vía "Reparación": ya no existe como elección, la cura es automática.
+- **Refuerzo y Reparación dejan de ser vías excluyentes.** La estructura de "elige una vía" de §3 y §4 de este documento queda sustituida: ahora la auto-cura, la evolución de cartas y el Level-Up del Líder entre batallas ocurren **las tres, siempre**, en el mismo descanso.
+- **Level-Up entre batallas no se integra en el pool de Refuerzo.** La recomendación de §4 (mezclar evoluciones y Level-Up en un único "elige 1 de 3") fue descartada por el Director Creativo, que prefiere dos decisiones separadas y explícitas: qué carta evoluciona y qué habilidad del Líder sube.
+
+Ver `docs/open_questions.md` (ronda 3) para las preguntas nuevas derivadas de esta validación.
 
 ---
 
