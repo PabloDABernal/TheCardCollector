@@ -23,9 +23,11 @@ export const LEADER_SHIELD_MAX = 5;
  *   cuyo `AbilityCooldownDefinition.side` sea `'ENEMY'` — ver spec §0.5 (el Líder
  *   nunca es origen de un efecto ATTACK en esta historia; el motor lo valida y lanza
  *   si no se cumple).
- *   `arrollar`: si es `true`, el daño que exceda `leaderShield` disponible SÍ pasa a
- *   `leaderDamage` (GDD §2.8, keyword Arrollar). Si es `false`/ausente (default), el
- *   exceso se pierde — comportamiento por defecto explícito del GDD.
+ *   `arrollar`: si NO había ningún escudo activo en el momento del golpe
+ *   (`leaderShield === 0`), el daño pasa completo sin necesidad de esta keyword — no
+ *   hay nada que "arrollar". Si SÍ había escudo y no bastó para absorberlo todo, el
+ *   exceso solo pasa a `leaderDamage` cuando `arrollar` es `true`; si es `false`/ausente
+ *   (default), ese exceso se pierde (GDD §2.8, keyword Arrollar).
  * - `PLOT` — Trama (GDD §3.6, icono 📜). Magnitud FIJA `amount` (siempre >= 0),
  *   deliberadamente NO alimentada por el valor del Núcleo — ver spec §0.3 para la
  *   justificación completa de por qué esto NO reutiliza `AbilityUmbralDefinition`. La
