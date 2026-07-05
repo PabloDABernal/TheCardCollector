@@ -84,3 +84,14 @@ Formaliza la ronda 2 de `docs/open_questions.md` y el análisis previo en `docs/
 3. El jugador elige qué habilidad del Líder sube de nivel.
 
 Las tres ocurren siempre, en el mismo descanso, sin vías excluyentes entre ellas.
+
+## 2026-07-05 — Stack técnico (Director Creativo + Architect)
+
+Primer registro de stack técnico del proyecto. Hasta esta fecha no había motor/lenguaje fijado; a partir de aquí queda vinculante para Architect y Programmer.
+
+- **TypeScript + React** para el shell de la aplicación: menús, pantalla de inicio de run (elección de Líder/mazo/pool 3+3, sorteo cruzado), colección/deckbuilding en la habitación, pantalla de descanso entre combates, economía/sobres.
+- **Phaser** (sobre el mismo runtime TypeScript) para la escena de combate: tablero de juego, dados/Núcleos, cartas jugadas, animaciones, cooldowns visuales, secuaces, efectos.
+- **Empaquetado como PWA instalable en móvil** (manifest + service worker), adaptable a PC, testeable en navegador durante desarrollo. Reafirma la decisión de plataforma ya registrada el 2026-07-05 ("móvil primero, adaptable a PC, testeo en navegador").
+- **Prioridad explícita del Director Creativo: el "feel chulo" del combate por encima de la simplicidad de implementación.** Dados rodando, cartas volteando, golpes con impacto, screen shake, partículas, sonido — referencia forcetable.net / strawtable.net (ya citada en vision.md). Esto condiciona la arquitectura de la escena Phaser: debe dejar sitio de primera clase a tweens, partículas y gestión de "juice", no tratarlo como añadido posterior.
+- **Por qué este stack:** React da velocidad y ecosistema maduro para las pantallas de gestión/menú (no necesitan motor de juego); Phaser es el motor 2D más usado para dar "feel" de juego de cartas/dados en canvas con buen soporte táctil y de partículas; ambos corren en TypeScript, compartiendo lenguaje y permitiendo compartir la capa de dominio/reglas (Núcleos, cooldowns, Umbral, Trama, etc. del GDD) sin duplicarla ni acoplarla a ningún framework de UI. PWA cubre el requisito de instalable en móvil sin tiendas de apps nativas, ya decidido en vision.md.
+- Detalle de estructura de módulos, puente React↔Phaser y enfoque de "juice": ver `docs/architecture_stack.md`.
