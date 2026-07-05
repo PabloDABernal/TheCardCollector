@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { SeededRandomSource, createId, isOk, isErr, type AbilityId, type CoreCostRequirement, type NucleoColor } from '@collector/domain-shared';
 import { CombatEngine } from './combat-engine';
 import type { CombatCommandError } from './types/errors';
+import type { NucleoInstance } from './types/nucleo';
 
 const ABILITY_ANY: AbilityId = createId<'AbilityId'>('AbilityId', 'ability-any');
 
@@ -30,6 +31,23 @@ describe('CombatEngine — ciclo de turnos', () => {
       initialTurnOwner: 'ENEMY',
     });
     expect(engine.getSnapshot().turn.turnOwner).toBe('ENEMY');
+  });
+
+  it('getSnapshot() devuelve una copia defensiva: mutar el array externo no corrompe el estado interno', () => {
+    const engine = new CombatEngine({ randomSource: new SeededRandomSource(1), abilityCoreCosts: abilityCosts(), poolSize: 3 });
+
+    const snapshot = engine.getSnapshot();
+    expect(snapshot.nucleoPool).toHaveLength(3);
+
+    // `nucleoPool` está tipado `readonly`, pero un consumidor externo puede saltarse
+    // esa barrera de compilación (cast, JS puro, etc.) — esto reproduce ese caso.
+    (snapshot.nucleoPool as NucleoInstance[]).push({
+      id: createId<'NucleoInstanceId'>('NucleoInstanceId', 'ghost'),
+      color: 'CAOS',
+      value: 4,
+    });
+
+    expect(engine.getSnapshot().nucleoPool).toHaveLength(3);
   });
 });
 

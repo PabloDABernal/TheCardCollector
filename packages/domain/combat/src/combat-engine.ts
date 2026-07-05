@@ -112,7 +112,7 @@ export class CombatEngine {
       this.nucleoPool = this.rollNewPool();
       const refilled: CombatEvent = {
         type: 'NUCLEO_POOL_ROLLED',
-        pool: this.nucleoPool,
+        pool: [...this.nucleoPool],
         priorityTurnOwner: this.turnOwner, // ver §5.8 — por qué esto YA implementa la regla de elección
       };
       events.push(refilled);
@@ -144,7 +144,7 @@ export class CombatEngine {
   getSnapshot(): CombatStateSnapshot {
     return {
       turn: { turnOwner: this.turnOwner, turnNumber: this.turnNumber },
-      nucleoPool: this.nucleoPool,
+      nucleoPool: [...this.nucleoPool],
     };
   }
 }
