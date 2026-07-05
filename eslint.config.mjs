@@ -1,0 +1,46 @@
+// eslint.config.mjs — flat config raíz, única fuente de reglas de lint
+import boundaries from 'eslint-plugin-boundaries';
+import tseslint from 'typescript-eslint';
+
+export default tseslint.config(
+  {
+    ignores: ['**/dist/**', '**/coverage/**']
+  },
+  ...tseslint.configs.recommended,
+  {
+    plugins: { boundaries },
+    settings: {
+      'boundaries/elements': [
+        { type: 'domain-shared', pattern: 'packages/domain/shared/**' },
+        { type: 'domain-catalog', pattern: 'packages/domain/catalog/**' },
+        { type: 'domain-combat', pattern: 'packages/domain/combat/**' },
+        { type: 'data', pattern: 'packages/data/**' },
+        // entradas futuras (no crear aún en H1.1, dejar documentado el patrón):
+        { type: 'combat-scene', pattern: 'packages/combat-scene/**' },
+        { type: 'ui-shared', pattern: 'packages/ui-shared/**' },
+        { type: 'shell', pattern: 'apps/shell/**' }
+      ]
+    },
+    rules: {
+      'boundaries/element-types': ['error', {
+        default: 'disallow',
+        rules: [
+          { from: 'domain-shared', allow: [] },
+          { from: 'domain-catalog', allow: ['domain-shared', 'data'] },
+          { from: 'domain-combat', allow: ['domain-shared', 'domain-catalog'] },
+          { from: 'data', allow: [] },
+          { from: 'combat-scene', allow: ['domain-shared', 'domain-catalog', 'domain-combat'] },
+          { from: 'ui-shared', allow: [] },
+          { from: 'shell', allow: ['domain-shared', 'domain-catalog', 'domain-combat', 'combat-scene', 'ui-shared'] }
+        ]
+      }]
+    }
+  },
+  {
+    // override: el cinturón de seguridad de react/phaser solo aplica dentro de domain/data
+    files: ['packages/domain/**/*.ts', 'packages/data/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { paths: [{ name: 'react' }, { name: 'phaser' }] }]
+    }
+  }
+);

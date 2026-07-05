@@ -1,0 +1,8 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/domain/shared" },
+    { "path": "packages/domain/catalog" },
+    { "path": "packages/domain/combat" }
+  ]
+}

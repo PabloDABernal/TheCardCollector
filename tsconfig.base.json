@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "declaration": true,
+    "declarationMap": true,
+    "composite": true,
+    "noEmitOnError": true,
+    "baseUrl": ".",
+    "paths": {
+      "@collector/domain-shared": ["packages/domain/shared/src/index.ts"],
+      "@collector/domain-catalog": ["packages/domain/catalog/src/index.ts"],
+      "@collector/domain-combat": ["packages/domain/combat/src/index.ts"]
+    }
+  }
+}
