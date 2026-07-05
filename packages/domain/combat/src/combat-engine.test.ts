@@ -3,16 +3,41 @@ import { SeededRandomSource, createId, isOk, isErr, type AbilityId, type CoreCos
 import { CombatEngine } from './combat-engine';
 import type { CombatCommandError } from './types/errors';
 import type { NucleoInstance } from './types/nucleo';
+import type { AbilityCooldownDefinition } from './types/cooldown'; // H1.4
 
 const ABILITY_ANY: AbilityId = createId<'AbilityId'>('AbilityId', 'ability-any');
+// H1.4 — ver §5 de la spec: "Escenario B" activaba ABILITY_ANY como ENEMY y como
+// LEADER en el mismo test; en H1.4 toda habilidad tiene un único `side` dueño, así
+// que se introduce esta segunda constante solo para ese test.
+const ABILITY_ANY_ENEMY: AbilityId = createId<'AbilityId'>('AbilityId', 'ability-any-enemy');
 
 function abilityCosts(extra: [AbilityId, CoreCostRequirement][] = []) {
   return new Map<AbilityId, CoreCostRequirement>([[ABILITY_ANY, { kind: 'ANY' }], ...extra]);
 }
 
+// H1.4 — fixture pareja de abilityCosts(): toda instanciación de CombatEngine necesita
+// ahora también abilityCooldowns con las MISMAS claves (el constructor valida paridad,
+// ver combat-engine.ts). baseCooldown=1 + side='LEADER' como default: el motor aplica
+// el primer tick de inicio de turno ya en el constructor, así que una habilidad LEADER
+// con baseCooldown=1 queda lista (remaining=0) de inmediato si initialTurnOwner es
+// 'LEADER' (el default) — preserva el comportamiento de todos los tests de H1.3 que
+// activan como LEADER sin tocar sus aserciones.
+function abilityCooldowns(
+  extra: [AbilityId, AbilityCooldownDefinition][] = []
+): ReadonlyMap<AbilityId, AbilityCooldownDefinition> {
+  return new Map<AbilityId, AbilityCooldownDefinition>([
+    [ABILITY_ANY, { side: 'LEADER', baseCooldown: 1 }],
+    ...extra,
+  ]);
+}
+
 describe('CombatEngine — ciclo de turnos', () => {
   it('alterna turnOwner y turnNumber en cada END_TURN', () => {
-    const engine = new CombatEngine({ randomSource: new SeededRandomSource(1), abilityCoreCosts: abilityCosts() });
+    const engine = new CombatEngine({
+      randomSource: new SeededRandomSource(1),
+      abilityCoreCosts: abilityCosts(),
+      abilityCooldowns: abilityCooldowns(), // H1.4
+    });
     expect(engine.getSnapshot().turn).toEqual({ turnOwner: 'LEADER', turnNumber: 1 });
 
     const r1 = engine.dispatch({ type: 'END_TURN' });
@@ -28,19 +53,23 @@ describe('CombatEngine — ciclo de turnos', () => {
     const engine = new CombatEngine({
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: abilityCosts(),
+      abilityCooldowns: abilityCooldowns(), // H1.4
       initialTurnOwner: 'ENEMY',
     });
     expect(engine.getSnapshot().turn.turnOwner).toBe('ENEMY');
   });
 
   it('getSnapshot() devuelve una copia defensiva: mutar el array externo no corrompe el estado interno', () => {
-    const engine = new CombatEngine({ randomSource: new SeededRandomSource(1), abilityCoreCosts: abilityCosts(), poolSize: 3 });
+    const engine = new CombatEngine({
+      randomSource: new SeededRandomSource(1),
+      abilityCoreCosts: abilityCosts(),
+      abilityCooldowns: abilityCooldowns(), // H1.4
+      poolSize: 3,
+    });
 
     const snapshot = engine.getSnapshot();
     expect(snapshot.nucleoPool).toHaveLength(3);
 
-    // `nucleoPool` está tipado `readonly`, pero un consumidor externo puede saltarse
-    // esa barrera de compilación (cast, JS puro, etc.) — esto reproduce ese caso.
     (snapshot.nucleoPool as NucleoInstance[]).push({
       id: createId<'NucleoInstanceId'>('NucleoInstanceId', 'ghost'),
       color: 'CAOS',
@@ -53,7 +82,12 @@ describe('CombatEngine — ciclo de turnos', () => {
 
 describe('CombatEngine — gasto de Núcleo', () => {
   it('gasto válido: elimina la ficha del pool y emite ABILITY_ACTIVATED', () => {
-    const engine = new CombatEngine({ randomSource: new SeededRandomSource(5), abilityCoreCosts: abilityCosts(), poolSize: 6 });
+    const engine = new CombatEngine({
+      randomSource: new SeededRandomSource(5),
+      abilityCoreCosts: abilityCosts(),
+      abilityCooldowns: abilityCooldowns(), // H1.4
+      poolSize: 6,
+    });
     const before = engine.getSnapshot().nucleoPool;
     const target = before[0]!;
 
@@ -77,7 +111,12 @@ describe('CombatEngine — gasto de Núcleo', () => {
   });
 
   it('rechaza gastar un Núcleo inexistente', () => {
-    const engine = new CombatEngine({ randomSource: new SeededRandomSource(1), abilityCoreCosts: abilityCosts(), poolSize: 6 });
+    const engine = new CombatEngine({
+      randomSource: new SeededRandomSource(1),
+      abilityCoreCosts: abilityCosts(),
+      abilityCooldowns: abilityCooldowns(), // H1.4
+      poolSize: 6,
+    });
     const fakeId = createId<'NucleoInstanceId'>('NucleoInstanceId', 'no-existe');
 
     const result = engine.dispatch({
@@ -95,7 +134,12 @@ describe('CombatEngine — gasto de Núcleo', () => {
   });
 
   it('rechaza gastar dos veces el mismo Núcleo (ya gastado)', () => {
-    const engine = new CombatEngine({ randomSource: new SeededRandomSource(1), abilityCoreCosts: abilityCosts(), poolSize: 6 });
+    const engine = new CombatEngine({
+      randomSource: new SeededRandomSource(1),
+      abilityCoreCosts: abilityCosts(),
+      abilityCooldowns: abilityCooldowns(), // H1.4
+      poolSize: 6,
+    });
     const target = engine.getSnapshot().nucleoPool[0]!;
     const command = {
       type: 'ACTIVATE_ABILITY' as const,
@@ -109,27 +153,38 @@ describe('CombatEngine — gasto de Núcleo', () => {
     const second = engine.dispatch(command);
     expect(isErr(second)).toBe(true);
     if (isErr(second)) {
-      expect((second.error as CombatCommandError).code).toBe('NUCLEO_NOT_FOUND');
+      // H1.4: la 2ª activación ya está en cooldown, PERO el motor sigue rechazando
+      // primero por NUCLEO_NOT_FOUND si el nucleoInstanceId ya fue consumido — en este
+      // caso concreto, la validación de ABILITY_ON_COOLDOWN se dispara ANTES que la
+      // de NUCLEO_NOT_FOUND (ver orden en §3.4 de la spec), así que el código esperado
+      // cambia respecto a H1.3.
+      expect((second.error as CombatCommandError).code).toBe('ABILITY_ON_COOLDOWN');
     }
   });
 
   it('rechaza color que no satisface el requisito, sin mutar el pool', () => {
-    const engine = new CombatEngine({ randomSource: new SeededRandomSource(1), abilityCoreCosts: abilityCosts(), poolSize: 6 });
-    const before = engine.getSnapshot().nucleoPool;
-    const target = before[0]!;
+    const before0 = new CombatEngine({
+      randomSource: new SeededRandomSource(1),
+      abilityCoreCosts: abilityCosts(),
+      abilityCooldowns: abilityCooldowns(), // H1.4
+      poolSize: 6,
+    }).getSnapshot().nucleoPool;
+    const target = before0[0]!;
     const mismatchedColors = (['AGRESION', 'CONTROL', 'DEFENSA', 'RECURSO', 'CAOS'] as NucleoColor[]).filter(
       (c) => c !== target.color
     );
     const ABILITY_MISMATCH: AbilityId = createId<'AbilityId'>('AbilityId', 'ability-mismatch');
     const costs = abilityCosts([[ABILITY_MISMATCH, { kind: 'COLOR', colors: mismatchedColors }]]);
-    const engine2 = new CombatEngine({ randomSource: new SeededRandomSource(1), abilityCoreCosts: costs, poolSize: 6 });
+    const cds = abilityCooldowns([[ABILITY_MISMATCH, { side: 'LEADER', baseCooldown: 1 }]]); // H1.4
+    const engine2 = new CombatEngine({ randomSource: new SeededRandomSource(1), abilityCoreCosts: costs, abilityCooldowns: cds, poolSize: 6 });
+    const before = engine2.getSnapshot().nucleoPool;
 
     const result = engine2.dispatch({
       type: 'ACTIVATE_ABILITY',
       abilityId: ABILITY_MISMATCH,
       sourceId: 'leader',
       side: 'LEADER',
-      nucleoInstanceId: target.id,
+      nucleoInstanceId: before[0]!.id,
     });
 
     expect(isErr(result)).toBe(true);
@@ -140,7 +195,12 @@ describe('CombatEngine — gasto de Núcleo', () => {
   });
 
   it('rechaza abilityId no registrado en abilityCoreCosts', () => {
-    const engine = new CombatEngine({ randomSource: new SeededRandomSource(1), abilityCoreCosts: abilityCosts(), poolSize: 6 });
+    const engine = new CombatEngine({
+      randomSource: new SeededRandomSource(1),
+      abilityCoreCosts: abilityCosts(),
+      abilityCooldowns: abilityCooldowns(), // H1.4
+      poolSize: 6,
+    });
     const target = engine.getSnapshot().nucleoPool[0]!;
     const UNKNOWN: AbilityId = createId<'AbilityId'>('AbilityId', 'no-registrada');
 
@@ -159,7 +219,12 @@ describe('CombatEngine — gasto de Núcleo', () => {
   });
 
   it('rechaza activar una habilidad si `side` no coincide con el turnOwner actual', () => {
-    const engine = new CombatEngine({ randomSource: new SeededRandomSource(1), abilityCoreCosts: abilityCosts(), poolSize: 6 });
+    const engine = new CombatEngine({
+      randomSource: new SeededRandomSource(1),
+      abilityCoreCosts: abilityCosts(),
+      abilityCooldowns: abilityCooldowns(), // H1.4
+      poolSize: 6,
+    });
     const target = engine.getSnapshot().nucleoPool[0]!;
 
     const result = engine.dispatch({
@@ -180,7 +245,12 @@ describe('CombatEngine — gasto de Núcleo', () => {
 
 describe('CombatEngine — relanzado automático del pool', () => {
   it('al vaciarse el pool (poolSize 1), se relanza en el mismo dispatch y emite NUCLEO_POOL_ROLLED', () => {
-    const engine = new CombatEngine({ randomSource: new SeededRandomSource(9), abilityCoreCosts: abilityCosts(), poolSize: 1 });
+    const engine = new CombatEngine({
+      randomSource: new SeededRandomSource(9),
+      abilityCoreCosts: abilityCosts(),
+      abilityCooldowns: abilityCooldowns(), // H1.4
+      poolSize: 1,
+    });
     const firstNucleo = engine.getSnapshot().nucleoPool[0]!;
 
     const result = engine.dispatch({
@@ -210,16 +280,29 @@ describe('CombatEngine — relanzado automático del pool', () => {
 
 describe('CombatEngine — regla "elige primero quien tenga turno tras el vaciado" (2 escenarios de vaciado)', () => {
   it('Escenario A: el vaciado ocurre y NO se ha llamado END_TURN → el mismo lado sigue eligiendo, el otro lado no puede', () => {
-    const engine = new CombatEngine({ randomSource: new SeededRandomSource(3), abilityCoreCosts: abilityCosts(), poolSize: 1 });
+    // H1.4: ABILITY_ANY queda en cooldown (baseCooldown=1) tras su primera activación
+    // — para que LEADER pueda seguir gastando una 2ª vez en el MISMO turno (que es el
+    // propósito original de este test: probar la regla de elección de Núcleo, no CD)
+    // hace falta una segunda habilidad LEADER distinta, ya lista, con su propio
+    // abilityId. Se registra LEADER_ANY_2 con el mismo coste 'ANY' para no alterar
+    // el propósito del test.
+    const LEADER_ANY_2: AbilityId = createId<'AbilityId'>('AbilityId', 'leader-any-2');
+    const engine = new CombatEngine({
+      randomSource: new SeededRandomSource(3),
+      abilityCoreCosts: abilityCosts([[LEADER_ANY_2, { kind: 'ANY' }]]),
+      abilityCooldowns: abilityCooldowns([[LEADER_ANY_2, { side: 'LEADER', baseCooldown: 1 }]]), // H1.4
+      poolSize: 1,
+    });
 
-    // Primer gasto: vacía el pool de 1 ficha y dispara el relanzado (misma turno de LEADER).
+    // Primer gasto (ABILITY_ANY): vacía el pool de 1 ficha y dispara el relanzado (mismo turno de LEADER).
     const nucleo1 = engine.getSnapshot().nucleoPool[0]!;
     const r1 = engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ABILITY_ANY, sourceId: 'leader', side: 'LEADER', nucleoInstanceId: nucleo1.id });
     expect(isOk(r1)).toBe(true);
 
-    // LEADER sigue teniendo el turno: puede gastar de inmediato del pool recién relanzado.
+    // LEADER sigue teniendo el turno: puede gastar de inmediato del pool recién
+    // relanzado, usando su SEGUNDA habilidad (ABILITY_ANY ya está en cooldown).
     const nucleo2 = engine.getSnapshot().nucleoPool[0]!;
-    const r2 = engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ABILITY_ANY, sourceId: 'leader', side: 'LEADER', nucleoInstanceId: nucleo2.id });
+    const r2 = engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: LEADER_ANY_2, sourceId: 'leader', side: 'LEADER', nucleoInstanceId: nucleo2.id });
     expect(isOk(r2)).toBe(true);
 
     // ENEMY intenta colarse antes de que LEADER llame END_TURN: rechazado.
@@ -234,14 +317,15 @@ describe('CombatEngine — regla "elige primero quien tenga turno tras el vaciad
   it('Escenario B: el vaciado ocurre en el turno de ENEMY; tras END_TURN, LEADER (el turno siguiente) elige primero del nuevo pool', () => {
     const engine = new CombatEngine({
       randomSource: new SeededRandomSource(11),
-      abilityCoreCosts: abilityCosts(),
+      abilityCoreCosts: abilityCosts([[ABILITY_ANY_ENEMY, { kind: 'ANY' }]]), // H1.4
+      abilityCooldowns: abilityCooldowns([[ABILITY_ANY_ENEMY, { side: 'ENEMY', baseCooldown: 1 }]]), // H1.4
       poolSize: 1,
       initialTurnOwner: 'ENEMY',
     });
 
     // ENEMY vacía el único Núcleo del pool → relanzado inmediato, sigue siendo turno de ENEMY.
     const nucleoEnemy = engine.getSnapshot().nucleoPool[0]!;
-    const rEnemy = engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ABILITY_ANY, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleoEnemy.id });
+    const rEnemy = engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ABILITY_ANY_ENEMY, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleoEnemy.id }); // H1.4
     expect(isOk(rEnemy)).toBe(true);
     if (isOk(rEnemy)) {
       const refillEvent = rEnemy.value.find((e) => e.type === 'NUCLEO_POOL_ROLLED');
@@ -253,16 +337,19 @@ describe('CombatEngine — regla "elige primero quien tenga turno tras el vaciad
     expect(isOk(rEndTurn)).toBe(true);
     expect(engine.getSnapshot().turn.turnOwner).toBe('LEADER');
 
-    // ENEMY intenta gastar tras haber terminado su turno: rechazado.
+    // ENEMY intenta gastar tras haber terminado su turno: rechazado por NOT_YOUR_TURN
+    // (se dispara antes que cualquier chequeo de CD).
     const staleNucleo = engine.getSnapshot().nucleoPool[0]!;
-    const rEnemyLate = engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ABILITY_ANY, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: staleNucleo.id });
+    const rEnemyLate = engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ABILITY_ANY_ENEMY, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: staleNucleo.id }); // H1.4
     expect(isErr(rEnemyLate)).toBe(true);
     if (isErr(rEnemyLate)) {
       expect((rEnemyLate.error as CombatCommandError).code).toBe('NOT_YOUR_TURN');
     }
 
-    // LEADER (el turno inmediatamente después del vaciado que ocurrió en el turno de ENEMY)
-    // sí puede gastar del pool ya relanzado.
+    // LEADER (el turno inmediatamente después del vaciado que ocurrió en el turno de
+    // ENEMY) sí puede gastar del pool ya relanzado. ABILITY_ANY (side LEADER,
+    // baseCooldown 1) quedó lista justo al ejecutarse el END_TURN anterior (tick de
+    // inicio de turno de LEADER).
     const rLeader = engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ABILITY_ANY, sourceId: 'leader', side: 'LEADER', nucleoInstanceId: staleNucleo.id });
     expect(isOk(rLeader)).toBe(true);
   });

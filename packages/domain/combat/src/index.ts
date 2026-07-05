@@ -5,5 +5,6 @@ export * from './types/commands';
 export * from './types/events';
 export * from './types/errors';
 export * from './types/config';
+export * from './types/cooldown'; // NUEVO — H1.4
 export * from './nucleo-pool';
 export * from './combat-engine';

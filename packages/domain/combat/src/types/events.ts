@@ -1,6 +1,7 @@
 import type { AbilityId } from '@collector/domain-shared';
 import type { NucleoInstance } from './nucleo';
 import type { CombatSide } from './turn';
+import type { AbilityCooldownSnapshot } from './cooldown';
 
 /**
  * Slice de H1.3 del union completo esbozado en architecture_stack.md §2.2. Ese
@@ -32,4 +33,19 @@ export type CombatEvent =
       readonly previousTurnOwner: CombatSide;
       readonly nextTurnOwner: CombatSide;
       readonly turnNumber: number;
+    }
+  | {
+      readonly type: 'COOLDOWNS_TICKED';
+      /**
+       * El lado cuyo inicio de turno disparó este descuento — SOLO las habilidades de
+       * este lado bajan CD (GDD §2.2 paso 2, "cooldowns propios"; ver §0.2 de esta spec
+       * para la justificación completa frente a la lectura alternativa descartada,
+       * "todas las habilidades de ambos lados en cada END_TURN").
+       */
+      readonly side: CombatSide;
+      /**
+       * Estado de CD de las habilidades de `side`, ya post-tick — subconjunto de
+       * `CombatStateSnapshot.cooldowns` filtrado por `side`.
+       */
+      readonly cooldowns: readonly AbilityCooldownSnapshot[];
     };
