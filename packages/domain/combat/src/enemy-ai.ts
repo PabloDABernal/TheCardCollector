@@ -3,6 +3,7 @@ import { satisfiesCoreCost } from '@collector/domain-shared';
 import type { NucleoInstance } from './types/nucleo';
 import type { AbilityCooldownDefinition } from './types/cooldown';
 import { ABILITY_BASE_COOLDOWN_MIN } from './types/cooldown';
+import { UMBRAL_BONUS_THRESHOLD } from './types/umbral';
 import type {
   DramaturgiaCardIcon,
   EnemyAbilityBranch,
@@ -108,7 +109,7 @@ export function decideEnemyNucleoToSpend(
     );
   }
 
-  const deny = valid.filter((n) => playerColors.includes(n.color) && n.value >= 3);
+  const deny = valid.filter((n) => playerColors.includes(n.color) && n.value >= UMBRAL_BONUS_THRESHOLD);
   if (deny.length > 0) {
     const maxValue = Math.max(...deny.map((n) => n.value));
     const top = deny.filter((n) => n.value === maxValue);
