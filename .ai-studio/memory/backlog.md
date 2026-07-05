@@ -68,17 +68,18 @@ Motor de reglas puro (sin Phaser ni React) que implementa la lógica del GDD (N�
 
 ---
 
-### H1.5: Umbral (fórmula alimentada por valor de Núcleo 1-4)
+### H1.5: Umbral (fórmula alimentada por valor de Núcleo 1-4, incluye debuff a 0)
 
-**Descripción:** implementar keyword Umbral (GDD §12). El valor del Núcleo gastado (1-4) se usa en fórmulas de daño/efecto (Ataque +X, Ataque ×X, Trama X, etc.). Si el valor es ≥3, se activa un efecto adicional (bonus Umbral). Nunca condiciona si la habilidad es pagable (eso lo decide solo el color/tipo).
+**Descripción:** implementar keyword Umbral (GDD §12). El valor del Núcleo gastado (1-4, pero modificable a 0 por debuff — ver decisions.md "Piso del valor de Núcleo") se usa en fórmulas de daño/efecto (Ataque +X, Ataque ×X, Trama X, etc.). Si el valor es ≥3, se activa un efecto adicional (bonus Umbral). Nunca condiciona si la habilidad es pagable (eso lo decide solo el color/tipo) — un Núcleo a 0 sigue siendo válido para pagar el coste, solo resuelve el efecto numérico en 0.
 
 **Criterio de aceptación:**
 - Keyword Umbral se resuelve correctamente en habilidades (Ataque +valor, Ataque ×valor, etc.).
 - Bonus Umbral (≥3) se activa correctamente.
 - Validación: Núcleo valor 1 no bloquea una habilidad, solo reduce su efecto.
-- Tests parametrizados con valores 1-4 muestran escalado correcto.
+- Núcleo modificado a 0: la habilidad se ejecuta (consume Núcleo y acción) pero su efecto numérico resuelve a 0; Umbral no se activa (0 < 3).
+- Tests parametrizados con valores 0-4 muestran escalado correcto, incluyendo el caso 0.
 
-**Referencia:** GDD §2.4, §12 (keywords), decisions.md "Costes de habilidad solo por color/genérico".
+**Referencia:** GDD §2.4, §12 (keywords), decisions.md "Costes de habilidad solo por color/genérico" y "Piso del valor de Núcleo: permitir 0 como debuff extremo".
 
 ---
 
@@ -140,28 +141,30 @@ Motor de reglas puro (sin Phaser ni React) que implementa la lógica del GDD (N�
 
 ### H1.10: Contenido de juguete — Enemigos (2)
 
-**Descripción:** crear 2 Enemigos de prueba en JSON (`packages/data/enemies/`) con definiciones de habilidades Ataque/Trama separadas, al menos 1 fase, y un deck de Dramaturgia mínimo que valide la IA.
+**Descripción:** crear 2 Enemigos de prueba en JSON (`packages/data/enemies/`) con definiciones de habilidades Ataque/Trama separadas, **2 fases cada uno** (estándar del MVP, ver decisions.md sobre trigger de Level-Up por cambio de fase), y un deck de Dramaturgia mínimo que valide la IA.
 
 **Criterio de aceptación:**
 - 2 `EnemyDefinition` válidas en formato JSON.
 - Cada una tiene habilidades Ataque ⚔️ y Trama 📜 separadas.
+- Cada una define 2 fases con su condición de cambio de fase (evento `PHASE_CHANGED` consumible por H1.17).
 - CD1 doble: 1 Ataque básico y 1 Trama básico, ambos ⚫.
 - Dramaturgia mínima cargable y ejecutable en IA.
 
-**Referencia:** GDD §5.2, GDD §3.4-3.5, `docs/architecture_stack.md` §5.
+**Referencia:** GDD §5.2, GDD §3.4-3.5, `docs/architecture_stack.md` §5, decisions.md "checkpoint de cambio de fase".
 
 ---
 
 ### H1.11: Contenido de juguete — Escenarios (2)
 
-**Descripción:** crear 2 Escenarios de prueba en JSON (`packages/data/scenarios/`) con definiciones de Trama (contador, umbrales de efectos), deck de Dramaturgia mínimo (cartas de Escenario + comunes).
+**Descripción:** crear 2 Escenarios de prueba en JSON (`packages/data/scenarios/`) con definiciones de Trama (contador, umbrales de efectos), **2 fases cada uno** (ver decisions.md sobre trigger de Level-Up por cambio de fase), deck de Dramaturgia mínimo (cartas de Escenario + comunes).
 
 **Criterio de aceptación:**
 - 2 `ScenarioDefinition` válidas en formato JSON.
 - Cada una define Trama con umbrales escalonados (ej. +1 a 5 efectos de escalada).
+- Cada una define 2 fases con su condición de cambio de fase (evento `PHASE_CHANGED` consumible por H1.17).
 - Dramaturgia cargable y jugable con combate (junto a Enemigos).
 
-**Referencia:** GDD §5.1, GDD §3.6, `docs/architecture_stack.md` §5.
+**Referencia:** GDD §5.1, GDD §3.6, `docs/architecture_stack.md` §5, decisions.md "checkpoint de cambio de fase".
 
 ---
 
@@ -234,32 +237,35 @@ Motor de reglas puro (sin Phaser ni React) que implementa la lógica del GDD (N�
 
 ---
 
-### H1.17: Level-Up del Líder (contador único por run)
+### H1.17: Level-Up del Líder (contador único por run, trigger de cambio de fase)
 
-**Descripción:** implementar que Líder gana nivel-ups por triggers dentro del combate (según GDD §6.1.bis, no especificado aún en GDD v2 pero citado) o automáticamente en descanso (H1.18 futuro). Un único contador por run con tope de 2 subidas (3 niveles totales: 1 base + 2).
+**Descripción:** implementar que el Líder gana un Level-Up dentro de combate cada vez que el Enemigo o el Escenario activo cambia de fase (checkpoint de fase, no de vida/Trama — ver decisions.md). El contenido MVP tiene típicamente 2 fases por Enemigo/Escenario; el motor no debe asumir un número fijo de fases, debe leerlo de `EnemyDefinition`/`ScenarioDefinition` para soportar contenido futuro con más fases. Comparte contador único con los Level-Up ganados en descanso (H1.18/GDD §7.3). Tope de 2 subidas (3 niveles totales: 1 base + 2).
 
 **Criterio de aceptación:**
 - `LeaderState` contiene `level` (1-3) y `levelUpsSpent` (0-2).
-- Level-Up eleva `level`, `levelUpsSpent` aumenta.
-- Al alcanzar nivel 3, no se puede subir más (validación).
+- Evento de cambio de fase de Enemigo o Escenario (`PHASE_CHANGED`) dispara un intento de Level-Up si `levelUpsSpent < 2`.
+- Si ya se alcanzó el tope (2 subidas / nivel 3), un cambio de fase adicional no genera Level-Up ni error — simplemente no hace nada.
+- El número de fases es un dato de `EnemyDefinition`/`ScenarioDefinition`, nunca una constante hardcodeada en el motor.
 - El efecto del Level-Up (parámetros) se resuelve desde `LeaderDefinition.levelUpOptions`.
 
-**Referencia:** GDD §4.3, GDD §7.3, decisions.md "Level-Up del Líder: un único contador por run".
+**Referencia:** GDD §4.3, GDD §7.3, decisions.md "Level-Up del Líder: un único contador por run" y "checkpoint de cambio de fase del Enemigo o del Escenario".
 
 ---
 
 ### H1.18: Sistema básico de juego de combate (turn loop integrado)
 
-**Descripción:** integrar todos los sistemas anteriores en un loop de combate funcional: inicializar combate (Líder, Enemigo, Escenario, Dramaturgia), turnos alternos, despacho de acciones, resolución de eventos, chequeo de condición de victoria/derrota.
+**Descripción:** integrar todos los sistemas anteriores en un loop de combate funcional: inicializar combate (Líder con 1 de Energía inicial — ver decisions.md, Enemigo, Escenario, Dramaturgia), turnos alternos, despacho de acciones, resolución de eventos, chequeo de condición de victoria/derrota. Recordar que por norma las habilidades no cuestan Energía (solo bajar cartas de mano la paga), salvo excepción explícita en una definición concreta.
 
 **Criterio de aceptación:**
 - `CombatEngine.dispatch(command)` procesa acciones del jugador correctamente.
+- El Líder inicia el combate con 1 de Energía (máximo 5).
+- Activar una habilidad (Líder/Aliado/Enemigo) no consume Energía salvo que la propia definición lo declare explícitamente; bajar una carta de mano sí la consume.
 - Turno enemigo (IA) ocurre automáticamente tras `END_TURN` del jugador.
 - Condiciones de derrota: vida Líder ≤0 o Trama ≥ umbral final.
 - Condición de victoria: vida Enemigo ≤0.
 - `CombatStateSnapshot` refleja estado después de cada comando.
 
-**Referencia:** `docs/architecture_stack.md` §2.2-2.3.
+**Referencia:** `docs/architecture_stack.md` §2.2-2.3, decisions.md "Energía inicial del Líder: 1" y "Coste de Energía de las habilidades".
 
 ---
 
