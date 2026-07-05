@@ -1,13 +1,17 @@
 # Preguntas abiertas — pendientes de respuesta del Director Creativo
 
-Estado: **ronda 1 cerrada el 2026-07-05.** Las respuestas están formalizadas en `.ai-studio/memory/decisions.md`. Abajo queda la ronda 2 con lo que se derivó de esas decisiones.
+Estado: **rondas 1, 2 y 3 cerradas el 2026-07-05.** Las respuestas están formalizadas en `.ai-studio/memory/decisions.md`. **No hay ronda abierta.**
 
-## Ronda 2 — abiertas
+## Ronda 3 — resueltas (2026-07-05, ver decisions.md)
 
-1. **¿La vida del Líder persiste entre los 3 combates de una run?** Derivada necesaria: si la vida se restaurara sola entre batallas, la vía de Reparación no tendría función. Propuesta sobre la mesa: sí persiste (y Reparación cura una cantidad fija o un %). Pendiente de confirmar, junto con la magnitud de la cura.
-2. **Refuerzo: ¿de dónde salen las 3 cartas ofrecidas?** ¿De toda la colección del jugador, filtradas por compatibilidad con el Líder, o incluyen cartas que aún no posee (como "préstamo" de descubrimiento)? Propuesta: solo colección propia, para que coleccionar alimente las runs.
-3. **¿Las cartas de Refuerzo temporales pueden superar el límite de 30 del mazo o sustituyen a una carta?** Propuesta: se añaden por encima del límite (mazo de 31-32), más simple y siempre se siente como ganancia.
-4. **Level-Up del Líder ganado en batalla: ¿persiste entre los 3 combates de la run?** El GDD v1 (§6.3) dice que persiste "en campaña"; falta confirmar que la run del modo principal cuenta como tal. Propuesta: sí persiste dentro de la run, se resetea al terminarla.
+1. **Level-Up del Líder:** un único contador/tope por run, se gane el nivel dentro del combate o entre batallas.
+2. **Agotamiento del pool de evoluciones:** caso descartado por imposible (mazo de 30, máximo 2 descansos por run); no se diseña regla especial.
+
+## Ronda 2 — resueltas (2026-07-05, ver decisions.md)
+
+1. **Vida del Líder:** persiste entre los 3 combates de la run, con auto-recuperación del 50% de la vida máxima entre cada combate, siempre, para todos (sin elección) — Lectura A, decisión del Director Creativo en contra de la recomendación del Game Designer.
+2-3. **Refuerzo como "carta suelta de la colección":** quedan sin objeto. El concepto de Refuerzo original (ofrecer cartas de la colección) fue sustituido por la evolución de cartas del propio mazo de la run (ver decisions.md, sección "Descanso entre combates y evolución de la baraja"); estas preguntas ya no aplican al diseño vigente.
+4. **Level-Up del Líder ganado en batalla, persistencia:** confirmado que persiste dentro de la run y se resetea al terminarla. Además se añade Level-Up entre batallas como decisión propia del descanso, no excluyente con la evolución de cartas (de aquí se deriva la pregunta 1 de la ronda 3).
 
 ## Ronda 1 — resueltas (2026-07-05, ver decisions.md)
 
