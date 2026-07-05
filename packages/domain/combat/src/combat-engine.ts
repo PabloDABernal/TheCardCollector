@@ -23,6 +23,7 @@ import { ABILITY_BASE_COOLDOWN_MIN } from './types/cooldown';
 import type { AbilityEffectDefinition } from './types/ability-effect'; // NUEVO H1.6
 import { LEADER_SHIELD_MAX } from './types/ability-effect'; // NUEVO H1.6
 import { resolveAbilityUmbral } from './umbral'; // NUEVO H1.6 — conecta H1.5 con mutación real (spec §0.2)
+import type { UmbralFormula } from './types/umbral';
 import { rollPool, DEFAULT_NUCLEO_POOL_SIZE } from './nucleo-pool';
 
 export class CombatEngine {
@@ -130,6 +131,11 @@ export class CombatEngine {
    *  2. Toda entrada `kind: 'ATTACK'` DEBE pertenecer a una habilidad cuyo
    *     `abilityCooldowns[...].side` sea `'ENEMY'` — ver spec §0.5 (el Líder nunca es
    *     origen de un efecto ATTACK en esta historia; no existe `enemyHealth`).
+   *  3. Ningún `amount` de `ADD`/`MULTIPLY` (en `ATTACK.formula` o `PLOT.amount`) puede
+   *     ser negativo — "modificadores negativos" son una capa futura fuera de alcance
+   *     (GDD §12, ver `types/umbral.ts`), y un `amount` negativo rompería el invariante
+   *     `leaderShield ∈ [0, LEADER_SHIELD_MAX]`/`leaderDamage >= 0` en runtime (hallado
+   *     por QA durante H1.6).
    */
   private validateAbilityEffectsConfig(): void {
     const costKeys = new Set(this.abilityCoreCosts.keys());
@@ -146,7 +152,24 @@ export class CombatEngine {
             `CombatEngine: abilityEffects["${String(abilityId)}"] es de tipo ATTACK pero su dueño (abilityCooldowns.side) es "${def.side}" — H1.6 solo modela daño Enemigo→Líder (GDD §3.7), ver spec H1.6 §0.5`
           );
         }
+        this.validateUmbralFormulaNonNegative(abilityId, effect.formula.baseFormula);
+        if (effect.formula.bonusFormula) {
+          this.validateUmbralFormulaNonNegative(abilityId, effect.formula.bonusFormula);
+        }
+      } else if (effect.amount < 0) {
+        throw new Error(
+          `CombatEngine: abilityEffects["${String(abilityId)}"] (PLOT) tiene amount negativo (${effect.amount}) — modificadores negativos son una capa futura fuera de alcance (GDD §12)`
+        );
       }
+    }
+  }
+
+  /** Ver `validateAbilityEffectsConfig`, invariante 3. */
+  private validateUmbralFormulaNonNegative(abilityId: AbilityId, formula: UmbralFormula): void {
+    if (formula.kind !== 'VALUE' && formula.amount < 0) {
+      throw new Error(
+        `CombatEngine: abilityEffects["${String(abilityId)}"] tiene una fórmula ${formula.kind} con amount negativo (${formula.amount}) — modificadores negativos son una capa futura fuera de alcance (GDD §12)`
+      );
     }
   }
 

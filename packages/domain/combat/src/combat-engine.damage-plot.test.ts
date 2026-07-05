@@ -370,4 +370,37 @@ describe('CombatEngine — H1.6: validación de configuración (fallos rápidos 
       abilityCooldowns: cooldowns([]),
     })).not.toThrow();
   });
+
+  it('lanza si un efecto PLOT tiene amount negativo (hallado por QA: rompería el piso 0 de scenarioPlot)', () => {
+    const NEGATIVE_PLOT: AbilityId = createId<'AbilityId'>('AbilityId', 'negative-plot');
+    expect(() => new CombatEngine({
+      randomSource: new SeededRandomSource(1),
+      abilityCoreCosts: costs([NEGATIVE_PLOT]),
+      abilityCooldowns: cooldowns([[NEGATIVE_PLOT, { side: 'ENEMY', baseCooldown: 1 }]]),
+      abilityEffects: effects([[NEGATIVE_PLOT, { kind: 'PLOT', amount: -1 }]]),
+    })).toThrow();
+  });
+
+  it('lanza si un efecto ATTACK tiene baseFormula ADD/MULTIPLY con amount negativo (hallado por QA: rompería leaderShield >= 0)', () => {
+    const NEGATIVE_ATTACK: AbilityId = createId<'AbilityId'>('AbilityId', 'negative-attack');
+    expect(() => new CombatEngine({
+      randomSource: new SeededRandomSource(1),
+      abilityCoreCosts: costs([NEGATIVE_ATTACK]),
+      abilityCooldowns: cooldowns([[NEGATIVE_ATTACK, { side: 'ENEMY', baseCooldown: 1 }]]),
+      abilityEffects: effects([[NEGATIVE_ATTACK, { kind: 'ATTACK', formula: { baseFormula: { kind: 'ADD', amount: -10 } } }]]),
+    })).toThrow();
+  });
+
+  it('lanza si un efecto ATTACK tiene bonusFormula con amount negativo', () => {
+    const NEGATIVE_BONUS: AbilityId = createId<'AbilityId'>('AbilityId', 'negative-bonus');
+    expect(() => new CombatEngine({
+      randomSource: new SeededRandomSource(1),
+      abilityCoreCosts: costs([NEGATIVE_BONUS]),
+      abilityCooldowns: cooldowns([[NEGATIVE_BONUS, { side: 'ENEMY', baseCooldown: 1 }]]),
+      abilityEffects: effects([[NEGATIVE_BONUS, {
+        kind: 'ATTACK',
+        formula: { baseFormula: { kind: 'VALUE' }, bonusFormula: { kind: 'MULTIPLY', amount: -2 } },
+      }]]),
+    })).toThrow();
+  });
 });
