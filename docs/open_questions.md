@@ -1,11 +1,11 @@
 # Preguntas abiertas — pendientes de respuesta del Director Creativo
 
-Estado: **ronda 1 cerrada el 2026-07-05.** **Ronda 2 cerrada el 2026-07-05.** Las respuestas de ambas están formalizadas en `.ai-studio/memory/decisions.md`. Abajo queda la ronda 3 con lo que se derivó de esas decisiones.
+Estado: **rondas 1, 2 y 3 cerradas el 2026-07-05.** Las respuestas están formalizadas en `.ai-studio/memory/decisions.md`. **No hay ronda abierta.**
 
-## Ronda 3 — abiertas
+## Ronda 3 — resueltas (2026-07-05, ver decisions.md)
 
-1. **Level-Up del Líder entre batallas: ¿comparte el mismo tope/contador que el Level-Up ganado en combate (máx. 3 niveles totales por Líder por run, GDD §6.3), o es un carril aparte con su propio tope?** Bloquea tanto el balance de escalada total en N2/N3 como el diseño de la UI que debe mostrar el progreso del Líder.
-2. **Si en un descanso ya no quedan cartas elegibles para evolucionar (todo el mazo ya tiene su evolución del tope de 1 por carta), ¿qué ofrece el pool de "elige 1 de 3" de evolución?** ¿Se reduce a menos de 3 opciones, se sustituye por otra recompensa (Créditos, cura extra), o se permite reevolucionar una carta ya evolucionada? Bloquea cómo se filtra y rellena el pool en runs avanzadas o con mazos pequeños.
+1. **Level-Up del Líder:** un único contador/tope por run, se gane el nivel dentro del combate o entre batallas.
+2. **Agotamiento del pool de evoluciones:** caso descartado por imposible (mazo de 30, máximo 2 descansos por run); no se diseña regla especial.
 
 ## Ronda 2 — resueltas (2026-07-05, ver decisions.md)
 

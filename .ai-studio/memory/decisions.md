@@ -74,6 +74,10 @@ Formaliza la ronda 2 de `docs/open_questions.md` y el análisis previo en `docs/
 - **Qué:** entre combates, el Líder también sube de nivel y el jugador elige qué habilidad del Líder mejorar — el mismo gesto de "elige 1 de 3" que ya existe para el Level-Up dentro de combate (GDD §6.3), pero como una decisión propia del descanso, independiente del pool de evolución de cartas.
 - **Por qué:** el Director Creativo decide explícitamente que evolución de carta y Level-Up del Líder **no son excluyentes** — ambas ocurren en el mismo descanso, cada una como su propia elección. Esto descarta la propuesta previa del Game Designer de mezclar ambas en un único pool de "elige 1 de 3" para no saturar la pantalla; el Director prefiere dos decisiones separadas y explícitas.
 
+### Cierres de la ronda 3 (2026-07-05, Director Creativo)
+- **Level-Up del Líder: un único contador por run.** Los niveles ganados dentro del combate y los ganados entre batallas comparten el mismo contador y tope de la run. *Por qué:* un solo sistema que leer y balancear; evita explicar dos carriles de progresión del Líder.
+- **Agotamiento del pool de evoluciones: caso descartado por imposible.** Con un mazo de 30 cartas y un máximo de 2 descansos por run, nunca se agotan las cartas elegibles. No se diseña compensación ni regla especial; no es un caso a contemplar.
+
 ### Estructura final de la pantalla de descanso (resumen)
 1. Auto-cura del 50% de vida máxima — automática, sin elección.
 2. El jugador elige 1 de 3 evoluciones de carta.
