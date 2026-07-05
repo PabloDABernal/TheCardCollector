@@ -1,6 +1,7 @@
 import type { RandomSource, AbilityId, CoreCostRequirement } from '@collector/domain-shared';
 import type { CombatSide } from './turn';
 import type { AbilityCooldownDefinition } from './cooldown';
+import type { AbilityEffectDefinition } from './ability-effect';
 
 export interface CombatEngineConfig {
   readonly randomSource: RandomSource;
@@ -27,4 +28,25 @@ export interface CombatEngineConfig {
 
   /** Por defecto 'LEADER' (GDD §2.2 describe el turno del jugador primero). */
   readonly initialTurnOwner?: CombatSide;
+
+  /**
+   * NUEVO en H1.6. Mapa OPCIONAL (a diferencia de `abilityCoreCosts`/`abilityCooldowns`,
+   * que son obligatorios) — no toda habilidad tiene todavía un efecto numérico
+   * modelado; una habilidad ausente de este mapa simplemente no muta
+   * `leaderDamage`/`leaderShield`/`scenarioPlot` al activarse (comportamiento idéntico
+   * a H1.3-H1.5). Si se omite por completo, equivale a un `Map` vacío. Toda clave
+   * presente aquí DEBE existir también en `abilityCoreCosts`/`abilityCooldowns` — el
+   * constructor lanza si no (ver combat-engine.ts, `validateAbilityEffectsConfig`).
+   * Ver spec H1.6 §0.2.
+   */
+  readonly abilityEffects?: ReadonlyMap<AbilityId, AbilityEffectDefinition>;
+
+  /**
+   * NUEVO en H1.6. Valor inicial de `leaderShield` (GDD §2.8) al construir el motor.
+   * Entero en `[0, LEADER_SHIELD_MAX]`; el constructor lanza si está fuera de rango o
+   * no es entero. Por defecto `0` si se omite. Es el único mecanismo de esta historia
+   * para poblar Escudo — no existe todavía ninguna habilidad/carta "Defensa X" que lo
+   * genere en runtime (contenido futuro, no bloqueante — ver spec §0.1).
+   */
+  readonly initialLeaderShield?: number;
 }

@@ -48,4 +48,45 @@ export type CombatEvent =
        * `CombatStateSnapshot.cooldowns` filtrado por `side`.
        */
       readonly cooldowns: readonly AbilityCooldownSnapshot[];
+    }
+  | {
+      /**
+       * NUEVO en H1.6. Emitido cuando una habilidad `ATTACK` (§2.1) se activa vía
+       * `ACTIVATE_ABILITY` con una entrada en `abilityEffects`. Emitido SIEMPRE
+       * inmediatamente después del `ABILITY_ACTIVATED` correspondiente, en el mismo
+       * `dispatch()` (antes de un eventual `NUCLEO_POOL_ROLLED` si el gasto vació el
+       * pool — ver §3.3).
+       */
+      readonly type: 'LEADER_DAMAGED';
+      readonly abilityId: AbilityId;
+      readonly sourceId: string;
+      readonly side: CombatSide;
+      readonly nucleoSpent: NucleoInstance;
+      /** `baseResolvedValue` de `resolveAbilityUmbral` — el daño ANTES de aplicar Escudo. */
+      readonly rawAmount: number;
+      /** Fichas de `leaderShield` consumidas por este golpe (`min(shieldAntes, rawAmount)`). */
+      readonly absorbedByShield: number;
+      /** Daño que realmente se sumó a `leaderDamage` (0 salvo Arrollar con exceso, ver §3.2). */
+      readonly appliedDamage: number;
+      readonly leaderShieldAfter: number;
+      readonly leaderDamageAfter: number;
+    }
+  | {
+      /**
+       * NUEVO en H1.6. Emitido cuando una habilidad `PLOT` (§2.1) se activa vía
+       * `ACTIVATE_ABILITY` con una entrada en `abilityEffects`. Mismo orden relativo
+       * que `LEADER_DAMAGED` (justo después de `ABILITY_ACTIVATED`).
+       */
+      readonly type: 'SCENARIO_PLOT_CHANGED';
+      readonly abilityId: AbilityId;
+      readonly sourceId: string;
+      readonly side: CombatSide;
+      /** `'INCREASE'` si `side === 'ENEMY'`, `'DECREASE'` si `side === 'LEADER'` (GDD §12). */
+      readonly direction: 'INCREASE' | 'DECREASE';
+      /** `AbilityEffectDefinition['amount']` de la habilidad — siempre positivo. */
+      readonly rawAmount: number;
+      /** `rawAmount` con signo aplicado, ANTES del piso en 0 (puede ser negativo). */
+      readonly appliedDelta: number;
+      /** Valor de `scenarioPlot` tras aplicar `appliedDelta` y saturar en 0. */
+      readonly scenarioPlotAfter: number;
     };
