@@ -1,26 +1,24 @@
 # Preguntas abiertas — pendientes de respuesta del Director Creativo
 
-Estado: conversación de validación en curso (Director + Game Designer). Nada de esto está aún en `.ai-studio/memory/` — se formaliza tras cerrar estas preguntas.
+Estado: **ronda 1 cerrada el 2026-07-05.** Las respuestas están formalizadas en `.ai-studio/memory/decisions.md`. Abajo queda la ronda 2 con lo que se derivó de esas decisiones.
 
-## Estructura de run
-1. Tras elegir 3 Enemigos + 3 Escenarios, el emparejamiento y orden se sortea al 100%. ¿Es la tensión deseada, o el jugador debería controlar alguna variable (orden sí/cruce no, o reservar un combo para N3)?
-2. ¿El sorteo puede cruzar universos (Enemigo Star Wars vs Escenario One Piece) o cada universo va por separado? Afecta tamaño real de la matriz de completitud (~24 celdas si no cruza, ~48 si cruza).
-3. ¿Cuándo se elige el Líder? ¿Junto con los 3+3, antes del sorteo?
+## Ronda 2 — abiertas
 
-## Derrota a mitad de run
-4. Si pierdes un combate a mitad de run, ¿qué pasa? Tres opciones sobre la mesa (sin decidir):
-   - A) Fin de run inmediato (roguelite puro, máxima tensión)
-   - B) Reintentas solo ese combate (más amable, diluye peso de mejoras entre combates)
-   - C) Sigues con penalización, la celda no cuenta completada (término medio)
+1. **¿La vida del Líder persiste entre los 3 combates de una run?** Derivada necesaria: si la vida se restaurara sola entre batallas, la vía de Reparación no tendría función. Propuesta sobre la mesa: sí persiste (y Reparación cura una cantidad fija o un %). Pendiente de confirmar, junto con la magnitud de la cura.
+2. **Refuerzo: ¿de dónde salen las 3 cartas ofrecidas?** ¿De toda la colección del jugador, filtradas por compatibilidad con el Líder, o incluyen cartas que aún no posee (como "préstamo" de descubrimiento)? Propuesta: solo colección propia, para que coleccionar alimente las runs.
+3. **¿Las cartas de Refuerzo temporales pueden superar el límite de 30 del mazo o sustituyen a una carta?** Propuesta: se añaden por encima del límite (mazo de 31-32), más simple y siempre se siente como ganancia.
+4. **Level-Up del Líder ganado en batalla: ¿persiste entre los 3 combates de la run?** El GDD v1 (§6.3) dice que persiste "en campaña"; falta confirmar que la run del modo principal cuenta como tal. Propuesta: sí persiste dentro de la run, se resetea al terminarla.
 
-## Meta-progresión / matriz de completitud
-5. El GDD original (5.2) decía "ganar N1 desbloquea N2 permanentemente por Enemigo" — contradice el sorteo aleatorio de niveles dentro de una run. ¿Los niveles de dificultad se desbloquean de forma permanente en la colección, o el nivel es solo etiqueta de la run actual, sin desbloqueo previo?
-6. Si el sorteo repite una celda ya completada de la matriz, ¿das algo extra (insignia/cosmético) o solo Créditos base?
+## Ronda 1 — resueltas (2026-07-05, ver decisions.md)
 
-## Mejoras entre combates (dentro de una run)
-7. Sugerencias de Game Designer sobre la mesa: elegir 1 de 3 cartas de tu colección para meter temporalmente en el mazo de esa run / alivio-reparación (no poder puro) / "espiar" info del siguiente rival. Evitar comprar poder con Créditos a mitad de run. ¿Cuáles encajan, cuáles no?
+1-3. **Estructura de run:** el sorteo cruza (universos incluidos), el jugador asigna los cruces a N1/N2/N3. Líder y mazo se eligen antes del sorteo, junto con el pool de 3+3.
+4. **Derrota a mitad de run:** fin de run inmediato (roguelite puro). Se conservan recompensas de objetivos cumplidos.
+5. **Niveles:** nivel = slot de la run, sin desbloqueo permanente. La matriz es registro de logros, no puerta.
+6. **Celdas repetidas:** Créditos base siempre; la primera completitud da bonus fijo.
+7. **Mejoras entre combates:** elige 1 entre Refuerzo (1 de 3 cartas de tu colección, temporal) o Reparación (curar al Líder). Sin espionaje, sin Créditos a mitad de run.
 
 ## Correcciones ya validadas (para referencia, no repreguntar)
+
 - Costes de habilidad: solo color/genérico, nunca número mínimo. Notación ⚫3/🔴3 del GDD v1 queda obsoleta.
 - Núcleo (1-4) alimenta la fórmula vía Umbral, no la condición de pago.
 - Cooldown baja 1 por vuelta completa (cuando te vuelve a tocar), no por acción individual.
@@ -30,5 +28,5 @@ Estado: conversación de validación en curso (Director + Game Designer). Nada d
 - Plataforma: móvil primero, adaptable PC, testeo en navegador. Referencia de feel: forcetable.net, strawtable.net.
 - MVP: 8 Líderes, 4 Enemigos, 4 Escenarios, 2 universos independientes (ej. Star Wars, One Piece).
 - Just for fun, sin monetización, sin restricción de licencias reales.
-- Run: eliges 3 Enemigos + 3 Escenarios, se sortea orden/emparejamiento en 3 niveles (N1-N3). Entre combates mejoras cartas. Dentro de cada combate, fases de Enemigo + etapas de Escenario (estilo Marvel Champions).
-- Matriz de completitud Enemigo×Escenario×Nivel persiste entre runs. Completar todos los niveles de un Enemigo+Escenario da Créditos. Créditos compran sobres entre runs.
+- Run: eliges 3 Enemigos + 3 Escenarios, se sortea el emparejamiento en 3 niveles (N1-N3). Entre combates mejoras. Dentro de cada combate, fases de Enemigo + etapas de Escenario (estilo Marvel Champions).
+- Matriz de completitud Enemigo×Escenario×Nivel persiste entre runs. Créditos compran sobres entre runs.
