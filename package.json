@@ -2,7 +2,10 @@
   "name": "the-collector",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20.0.0", "npm": ">=10.0.0" },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
   "workspaces": [
     "packages/domain/*",
     "packages/data"
@@ -12,16 +15,18 @@
     "build:clean": "tsc -b --clean",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
-    "vitest": "^2.0.0",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^2.1.9",
     "eslint": "^9.0.0",
-    "typescript-eslint": "^8.0.0",
     "eslint-plugin-boundaries": "^4.0.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
     "vite-tsconfig-paths": "^6.0.0",
-    "@types/node": "^20.0.0"
+    "vitest": "^2.0.0"
   }
 }
