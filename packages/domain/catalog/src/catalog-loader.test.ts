@@ -27,6 +27,7 @@ function leaderRaw(overrides: Record<string, unknown> = {}): Record<string, unkn
     ],
     cardPoolIds: ['card-1'],
     levelUpOptions: [],
+    maxHealth: 30,
     ...overrides,
   };
 }

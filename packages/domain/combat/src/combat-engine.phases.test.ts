@@ -38,7 +38,7 @@ describe('CombatEngine — H1.17: PHASE_CHANGED por TURN_COUNT_AT_LEAST (Enemigo
       { phaseNumber: 1, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 2 } },
       { phaseNumber: 2, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 9999 } },
     ];
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -73,7 +73,7 @@ describe('CombatEngine — H1.17: PHASE_CHANGED por SCENARIO_PLOT_AT_LEAST (Esce
       { phaseNumber: 1, changeCondition: { kind: 'SCENARIO_PLOT_AT_LEAST', amount: 3 } },
       { phaseNumber: 2, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 9999 } },
     ];
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(2),
       abilityCoreCosts: costs([ENEMY_PLOT]),
       abilityCooldowns: cooldowns([[ENEMY_PLOT, { side: 'ENEMY', baseCooldown: 1 }]]),
@@ -113,7 +113,7 @@ describe('CombatEngine — H1.17: HEALTH_BELOW_PERCENT vía initialEnemyDamage (
       { phaseNumber: 1, changeCondition: { kind: 'HEALTH_BELOW_PERCENT', percent: 50 } },
       { phaseNumber: 2, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 9999 } },
     ];
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(3),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -142,7 +142,7 @@ describe('CombatEngine — H1.17: tope de 2 Level-Ups alcanzado — "no hace nad
       { phaseNumber: 1, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 2 } },
       { phaseNumber: 2, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 9999 } },
     ];
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(4),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -174,7 +174,7 @@ describe('CombatEngine — H1.17: Enemigo y Escenario cambian de fase en el mism
       { phaseNumber: 1, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 2 } },
       { phaseNumber: 2, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 9999 } },
     ];
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(5),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -203,7 +203,7 @@ describe('CombatEngine — H1.17: Enemigo y Escenario cambian de fase en el mism
 
 describe('CombatEngine — H1.17: sin fases configuradas (compatibilidad hacia atrás)', () => {
   it('enemyPhases/scenarioPhases omitidos: ningún PHASE_CHANGED/LEADER_LEVELED_UP, leaderState en su valor inicial', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(6),
       abilityCoreCosts: costs([ENEMY_PLOT]),
       abilityCooldowns: cooldowns([[ENEMY_PLOT, { side: 'ENEMY', baseCooldown: 1 }]]),
@@ -243,7 +243,7 @@ describe('CombatEngine — H1.17: Contratiempo NO revierte una fase ya cambiada 
       { phaseNumber: 1, changeCondition: { kind: 'SCENARIO_PLOT_AT_LEAST', amount: 3 } },
       { phaseNumber: 2, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 9999 } },
     ];
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(7),
       abilityCoreCosts: costs([ENEMY_PLOT]),
       abilityCooldowns: cooldowns([[ENEMY_PLOT, { side: 'ENEMY', baseCooldown: 1 }]]),
@@ -283,7 +283,7 @@ describe('CombatEngine — H1.17: cascada de 3+ fases en el mismo dispatch() (ge
       { phaseNumber: 2, changeCondition: { kind: 'SCENARIO_PLOT_AT_LEAST', amount: 5 } },
       { phaseNumber: 3, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 9999 } },
     ];
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(8),
       abilityCoreCosts: costs([ENEMY_PLOT]),
       abilityCooldowns: cooldowns([[ENEMY_PLOT, { side: 'ENEMY', baseCooldown: 1 }]]),
@@ -320,8 +320,15 @@ describe('CombatEngine — H1.17: cascada de 3+ fases en el mismo dispatch() (ge
 });
 
 describe('CombatEngine — H1.17: validación de configuración (fallos rápidos del constructor)', () => {
-  it('lanza si enemyPhases incluye HEALTH_BELOW_PERCENT sin enemyMaxHealth', () => {
+  it('lanza si enemyMaxHealth está ausente (H1.18 §0.3: pasó de opcional-condicional a obligatorio siempre)', () => {
+    // NUEVO H1.18 — reemplaza el test de H1.17 "sin enemyMaxHealth" condicionado a
+    // HEALTH_BELOW_PERCENT: la validación `needsMaxHealth` se elimina (spec §0.3) y
+    // `enemyMaxHealth` pasa a ser SIEMPRE obligatorio (necesario para la condición de
+    // victoria) — se usa un cast para forzar en runtime la ausencia del campo que TS ya
+    // no permite omitir.
     expect(() => new CombatEngine({
+      leaderMaxHealth: 100,
+      scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -329,11 +336,12 @@ describe('CombatEngine — H1.17: validación de configuración (fallos rápidos
         { phaseNumber: 1, changeCondition: { kind: 'HEALTH_BELOW_PERCENT', percent: 50 } },
         { phaseNumber: 2, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 9999 } },
       ],
-    })).toThrow();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)).toThrow();
   });
 
   it('lanza si scenarioPhases incluye HEALTH_BELOW_PERCENT (el Escenario no tiene vida)', () => {
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -345,7 +353,7 @@ describe('CombatEngine — H1.17: validación de configuración (fallos rápidos
   });
 
   it('lanza si phaseNumber no es secuencial (huecos)', () => {
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -357,7 +365,7 @@ describe('CombatEngine — H1.17: validación de configuración (fallos rápidos
   });
 
   it('lanza si initialLeaderLevelUpsSpent excede LEADER_LEVEL_UPS_MAX (2)', () => {
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -366,7 +374,7 @@ describe('CombatEngine — H1.17: validación de configuración (fallos rápidos
   });
 
   it('lanza si initialEnemyDamage excede enemyMaxHealth', () => {
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),

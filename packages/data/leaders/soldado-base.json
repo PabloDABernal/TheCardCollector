@@ -35,6 +35,7 @@
     "card-soldado-base-07", "card-soldado-base-08", "card-soldado-base-09",
     "card-soldado-base-10"
   ],
+  "maxHealth": 30,
   "levelUpOptions": [
     {
       "id": "lvlup-soldado-base-01",

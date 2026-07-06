@@ -35,5 +35,12 @@ export interface LeaderDefinition {
    *  (§4.1). */
   readonly cardPoolIds: readonly CardId[];
   readonly levelUpOptions: readonly LevelUpOption[];
+  /**
+   * NUEVO H1.18. Vida máxima del Líder (ver spec H1.18 §0.3) — mismo criterio de
+   * validación que `EnemyDefinition.maxHealth` (entero > 0, <= 100, GDD §3.4). Alimenta
+   * `CombatEngineConfig.leaderMaxHealth`, resuelto externamente, para la condición de
+   * derrota (`leaderDamage >= maxHealth`).
+   */
+  readonly maxHealth: number;
   readonly universeSkin?: string;
 }

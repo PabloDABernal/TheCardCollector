@@ -7,6 +7,7 @@ import type { AllyInPlay } from './ally';
 import type { MinionInPlay } from './minion';
 import type { CardInstanceId } from '@collector/domain-shared';
 import type { LeaderState } from './leader-state'; // NUEVO H1.17
+import type { CombatOutcome, DefeatReason } from './combat-status'; // NUEVO H1.18
 
 /**
  * Slice de H1.3 de `CombatStateSnapshot` (architecture_stack.md §2.2). Historias
@@ -93,4 +94,11 @@ export interface CombatStateSnapshot {
    *  spec §0.3): ningún comando de esta historia lo muta. Solo alimenta la evaluación
    *  de `HEALTH_BELOW_PERCENT`. */
   readonly enemyDamage: number;
+
+  /** NUEVO H1.18. Ver spec §0.6. `'IN_PROGRESS'` hasta que se cumple una condición de
+   *  victoria o derrota; a partir de ahí, permanece fijo (nunca vuelve a `'IN_PROGRESS'`). */
+  readonly status: 'IN_PROGRESS' | CombatOutcome;
+
+  /** NUEVO H1.18. Presente solo si `status === 'DEFEAT'`. */
+  readonly defeatReason?: DefeatReason;
 }

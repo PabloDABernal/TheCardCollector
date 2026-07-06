@@ -77,4 +77,18 @@ export type CombatCommand =
        * independiente de `ENEMY_BASE_ACTIONS_PER_TURN`).
        */
       readonly type: 'RESOLVE_MINION_ACTION';
+    }
+  | {
+      /**
+       * NUEVO H1.18. Baja una carta EVENTO/EQUIPO de `cardPoolIds` (sin concepto de
+       * mano/mazo — ver spec H1.18 §0.1 punto 3). Exclusivo del Líder (mismo motivo que
+       * PLAY_CONTRATIEMPO/PLAY_ALLY). `nucleoInstanceId` es OBLIGATORIO si y solo si
+       * `PlayableCardDefinition.effect.kind === 'ATTACK_ENEMY'` (ver spec §0.1.1) —
+       * el constructor de comando no lo puede forzar por tipos (depende de config en
+       * runtime), se valida en `handlePlayCard`.
+       */
+      readonly type: 'PLAY_CARD';
+      readonly cardId: CardId;
+      readonly sourceId: string;
+      readonly nucleoInstanceId?: NucleoInstanceId;
     };

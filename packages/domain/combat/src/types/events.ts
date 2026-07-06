@@ -4,6 +4,8 @@ import type { CombatSide } from './turn';
 import type { AbilityCooldownSnapshot } from './cooldown';
 import type { ContratiempoUndoScope, UndoableEnemyActionLogEntry } from './contratiempo';
 import type { MinionDefinitionId } from './minion';
+import type { DramaturgiaCardIcon } from './enemy-ai'; // NUEVO H1.18
+import type { CombatOutcome, DefeatReason } from './combat-status'; // NUEVO H1.18
 
 /**
  * Slice de H1.3 del union completo esbozado en architecture_stack.md §2.2. Ese
@@ -87,7 +89,12 @@ export type CombatEvent =
        * que `LEADER_DAMAGED` (justo después de `ABILITY_ACTIVATED`).
        */
       readonly type: 'SCENARIO_PLOT_CHANGED';
-      readonly abilityId: AbilityId;
+      /** NUEVO H1.18: ausente cuando el cambio de Trama viene de una carta jugada
+       *  (`PLAY_CARD` con `PlayableCardEffectDefinition.kind === 'PLOT'`, sin habilidad
+       *  de catálogo detrás — ver spec H1.18 §3.5, nota de implementación) — mismo
+       *  criterio ya usado por `LEADER_DAMAGED.abilityId` (H1.16). Presente siempre que
+       *  este evento provenga de `ACTIVATE_ABILITY`, exactamente como hasta H1.17. */
+      readonly abilityId?: AbilityId;
       readonly sourceId: string;
       readonly side: CombatSide;
       /** `'INCREASE'` si `side === 'ENEMY'`, `'DECREASE'` si `side === 'LEADER'` (GDD §12). */
@@ -235,4 +242,52 @@ export type CombatEvent =
       readonly triggeredBy: 'ENEMY' | 'SCENARIO';
       readonly levelAfter: number;
       readonly levelUpsSpentAfter: number;
+    }
+  | {
+      /** NUEVO H1.18. Único evento "envoltorio" de un PLAY_CARD exitoso — igual rol que
+       *  ABILITY_ACTIVATED para ACTIVATE_ABILITY. El efecto concreto (si lo hay) se emite
+       *  inmediatamente después como ENEMY_DAMAGED | SCENARIO_PLOT_CHANGED | LEADER_SHIELD_GAINED. */
+      readonly type: 'CARD_PLAYED';
+      readonly cardId: CardId;
+      readonly sourceId: string;
+      readonly leaderEnergyAfter: number;
+    }
+  | {
+      /** NUEVO H1.18. Análogo a LEADER_DAMAGED/ALLY_DAMAGED pero en la dirección
+       *  Líder→Enemigo (§0.1/§0.2: siempre objetivo directo, nunca Secuaz). */
+      readonly type: 'ENEMY_DAMAGED';
+      readonly cardId: CardId;
+      readonly sourceId: string;
+      readonly nucleoSpent: NucleoInstance;
+      readonly rawAmount: number;
+      readonly bonusActivated: boolean;
+      readonly bonusResolvedValue?: number;
+      readonly enemyDamageAfter: number;
+    }
+  | {
+      /** NUEVO H1.18. Keyword DEFENSA_X de carta (cierra deuda de H1.6 §0.1). */
+      readonly type: 'LEADER_SHIELD_GAINED';
+      readonly cardId: CardId;
+      readonly sourceId: string;
+      readonly rawAmount: number;
+      readonly leaderShieldBefore: number;
+      readonly leaderShieldAfter: number;
+    }
+  | {
+      /** NUEVO H1.18. Robo automático de Dramaturgia al abrir el turno de Enemigo con IA
+       *  activada (§0.5). */
+      readonly type: 'DRAMATURGIA_CARD_DRAWN';
+      readonly icon: DramaturgiaCardIcon;
+    }
+  | {
+      /** NUEVO H1.18. Precede a un DRAMATURGIA_CARD_DRAWN cuando la pila de robo estaba
+       *  vacía (§0.5.3). */
+      readonly type: 'DRAMATURGIA_DECK_RESHUFFLED';
+      readonly deckSize: number;
+    }
+  | {
+      /** NUEVO H1.18. Único evento de un combate que alcanza estado terminal (§0.6). */
+      readonly type: 'COMBAT_ENDED';
+      readonly outcome: CombatOutcome;
+      readonly defeatReason?: DefeatReason;
     };

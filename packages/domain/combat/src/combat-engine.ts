@@ -35,9 +35,18 @@ import type {
 } from './types/contratiempo'; // NUEVO H1.14
 import type { AllyCardDefinition, AllyInPlay } from './types/ally'; // NUEVO H1.15
 import type { MinionDefinition, MinionDefinitionId, MinionInPlay } from './types/minion'; // NUEVO H1.16
-import { poolHasValidNucleo, decideEnemyNucleoToSpend, derivePlayerColorsFromLeaderAbilities } from './enemy-ai'; // NUEVO H1.16, reusa H1.7
+import {
+  poolHasValidNucleo,
+  decideEnemyNucleoToSpend,
+  derivePlayerColorsFromLeaderAbilities,
+  decideEnemyAbility, // NUEVO H1.18
+  validateEnemyAbilityAiProfiles, // NUEVO H1.18
+} from './enemy-ai'; // NUEVO H1.16, reusa H1.7
+import type { EnemyAbilityAiProfile, EnemyAbilityCandidate, DramaturgiaCardIcon } from './types/enemy-ai'; // NUEVO H1.18, reusa H1.7
 import type { PhaseDefinition, PhaseChangeCondition } from '@collector/domain-catalog'; // NUEVO H1.17 — ver spec H1.17 §0.1
 import { LEADER_LEVEL_BASE, LEADER_LEVEL_UPS_MAX } from './types/leader-state'; // NUEVO H1.17
+import type { PlayableCardDefinition, PlayableCardEffectDefinition } from './types/playable-card'; // NUEVO H1.18
+import type { CombatOutcome, DefeatReason } from './types/combat-status'; // NUEVO H1.18
 
 /**
  * NUEVO H1.16 — fuente mínima común para armar `LEADER_DAMAGED`/`ALLY_DAMAGED`/
@@ -101,13 +110,27 @@ export class CombatEngine {
   // NUEVO H1.17 — ver spec H1.17 §0.1/§0.3.
   private readonly enemyPhases: readonly PhaseDefinition[];
   private readonly scenarioPhases: readonly PhaseDefinition[];
-  private readonly enemyMaxHealth: number | undefined;
+  private readonly enemyMaxHealth: number; // NUEVO H1.18 — pasa de opcional a obligatorio, ver spec §0.3
   private enemyPhaseIndex: number; // 0-based, índice dentro de enemyPhases
   private scenarioPhaseIndex: number; // 0-based, índice dentro de scenarioPhases
   private enemyDamage: number; // "dato en reposo", ver §0.3
 
   // NUEVO H1.17 — ver spec §0.6. `level` se deriva de este único contador.
   private leaderLevelUpsSpent: number;
+
+  // NUEVO H1.18 — ver spec H1.18 §0.1/§0.3.
+  private readonly playableCards: ReadonlyMap<CardId, PlayableCardDefinition>;
+  private readonly leaderMaxHealth: number;
+  private readonly scenarioPlotDefeatThreshold: number;
+
+  // NUEVO H1.18 — ver spec H1.18 §0.5/§0.6.
+  private readonly enemyAbilityAiProfiles: ReadonlyMap<AbilityId, EnemyAbilityAiProfile>;
+  private readonly enemyAiEnabled: boolean;
+  private dramaturgiaDrawPile: DramaturgiaCardIcon[];
+  private dramaturgiaDiscardPile: DramaturgiaCardIcon[];
+
+  private combatStatus: 'IN_PROGRESS' | CombatOutcome;
+  private defeatReason: DefeatReason | undefined;
 
   constructor(config: CombatEngineConfig) {
     this.randomSource = config.randomSource;
@@ -167,6 +190,7 @@ export class CombatEngine {
     this.enemyPhases = config.enemyPhases ?? [];
     this.scenarioPhases = config.scenarioPhases ?? [];
     this.enemyMaxHealth = config.enemyMaxHealth;
+    this.validateEnemyMaxHealth(); // NUEVO H1.18 — ver spec §0.3, ahora incondicional
     this.validateEnemyPhasesConfig();
     this.validateScenarioPhasesConfig();
     this.enemyPhaseIndex = 0;
@@ -201,6 +225,28 @@ export class CombatEngine {
     // sin subscriptores todavía) — solo se refleja en getSnapshot(), igual que la
     // tirada inicial del pool (ver H1.3 §5.3).
     this.tickCooldownsForSide(this.turnOwner);
+
+    // NUEVO H1.18 — ver spec §0.1/§0.3/§0.5/§0.6. Orden respecto a los campos de
+    // H1.14/H1.15/H1.16/H1.17 irrelevante, sin dependencias cruzadas entre sí.
+    this.playableCards = config.playableCards ?? new Map();
+    this.validatePlayableCardsConfig();
+
+    this.leaderMaxHealth = config.leaderMaxHealth;
+    this.validateLeaderMaxHealth();
+
+    this.scenarioPlotDefeatThreshold = config.scenarioPlotDefeatThreshold;
+    this.validateScenarioPlotDefeatThreshold();
+
+    this.enemyAbilityAiProfiles = config.enemyAbilityAiProfiles ?? new Map();
+    const dramaturgiaDeckRaw = config.dramaturgiaDeck ?? [];
+    this.enemyAiEnabled = this.enemyAbilityAiProfiles.size > 0 || dramaturgiaDeckRaw.length > 0;
+    this.validateEnemyAiConfig(dramaturgiaDeckRaw);
+
+    this.dramaturgiaDrawPile = this.enemyAiEnabled ? this.shuffle([...dramaturgiaDeckRaw]) : [];
+    this.dramaturgiaDiscardPile = [];
+
+    this.combatStatus = 'IN_PROGRESS';
+    this.defeatReason = undefined;
   }
 
   /**
@@ -268,9 +314,9 @@ export class CombatEngine {
             `CombatEngine: abilityEffects["${String(abilityId)}"] es de tipo ATTACK pero su dueño (abilityCooldowns.side) es "${def.side}" — H1.6 solo modela daño Enemigo→Líder (GDD §3.7), ver spec H1.6 §0.5`
           );
         }
-        this.validateUmbralFormulaNonNegative(abilityId, effect.formula.baseFormula);
+        this.validateUmbralFormulaNonNegative(`abilityEffects["${String(abilityId)}"]`, effect.formula.baseFormula);
         if (effect.formula.bonusFormula) {
-          this.validateUmbralFormulaNonNegative(abilityId, effect.formula.bonusFormula);
+          this.validateUmbralFormulaNonNegative(`abilityEffects["${String(abilityId)}"]`, effect.formula.bonusFormula);
         }
       } else if (effect.amount < 0) {
         throw new Error(
@@ -280,11 +326,13 @@ export class CombatEngine {
     }
   }
 
-  /** Ver `validateAbilityEffectsConfig`, invariante 3. */
-  private validateUmbralFormulaNonNegative(abilityId: AbilityId, formula: UmbralFormula): void {
+  /** Ver `validateAbilityEffectsConfig`, invariante 3. NUEVO H1.18: `label` generalizado
+   *  (antes tomaba un `AbilityId` directamente) para que `validatePlayableCardsConfig`
+   *  reutilice la misma función con un label de `playableCards["..."]`. */
+  private validateUmbralFormulaNonNegative(label: string, formula: UmbralFormula): void {
     if (formula.kind !== 'VALUE' && formula.amount < 0) {
       throw new Error(
-        `CombatEngine: abilityEffects["${String(abilityId)}"] tiene una fórmula ${formula.kind} con amount negativo (${formula.amount}) — modificadores negativos son una capa futura fuera de alcance (GDD §12)`
+        `CombatEngine: ${label} tiene una fórmula ${formula.kind} con amount negativo (${formula.amount}) — modificadores negativos son una capa futura fuera de alcance (GDD §12)`
       );
     }
   }
@@ -417,21 +465,76 @@ export class CombatEngine {
       );
     }
 
-    const needsMaxHealth = this.enemyPhases.some(
-      (p) => p.changeCondition.kind === 'HEALTH_BELOW_PERCENT'
-    );
-    if (needsMaxHealth && this.enemyMaxHealth === undefined) {
-      throw new Error(
-        'CombatEngine: enemyMaxHealth es obligatorio cuando enemyPhases incluye HEALTH_BELOW_PERCENT'
-      );
-    }
-    if (
-      this.enemyMaxHealth !== undefined &&
-      (!Number.isInteger(this.enemyMaxHealth) || this.enemyMaxHealth <= 0 || this.enemyMaxHealth > 100)
-    ) {
+  }
+
+  /**
+   * NUEVO H1.18. `enemyMaxHealth` pasa de opcional-condicional (H1.17,
+   * `needsMaxHealth`) a OBLIGATORIO siempre — la condición de victoria (§0.3/§0.6) lo
+   * necesita en todo momento, no solo cuando `enemyPhases` incluye
+   * `HEALTH_BELOW_PERCENT`. Mismo rango que antes: entero en (0, 100] (GDD §3.4).
+   */
+  private validateEnemyMaxHealth(): void {
+    if (!Number.isInteger(this.enemyMaxHealth) || this.enemyMaxHealth <= 0 || this.enemyMaxHealth > 100) {
       throw new Error(
         `CombatEngine: enemyMaxHealth debe ser un entero en (0, 100] (GDD §3.4, "ningún enemigo supera 100HP"), recibido ${this.enemyMaxHealth}`
       );
+    }
+  }
+
+  /** NUEVO H1.18 — mismo criterio que `validateEnemyMaxHealth` (ver spec §0.3). */
+  private validateLeaderMaxHealth(): void {
+    if (!Number.isInteger(this.leaderMaxHealth) || this.leaderMaxHealth <= 0 || this.leaderMaxHealth > 100) {
+      throw new Error(
+        `CombatEngine: leaderMaxHealth debe ser un entero en (0, 100] (GDD §3.4, mismo tope que enemyMaxHealth), recibido ${this.leaderMaxHealth}`
+      );
+    }
+  }
+
+  /** NUEVO H1.18 — ver spec §0.4. */
+  private validateScenarioPlotDefeatThreshold(): void {
+    if (!Number.isInteger(this.scenarioPlotDefeatThreshold) || this.scenarioPlotDefeatThreshold <= 0) {
+      throw new Error(
+        `CombatEngine: scenarioPlotDefeatThreshold debe ser un entero > 0, recibido ${this.scenarioPlotDefeatThreshold}`
+      );
+    }
+  }
+
+  /**
+   * NUEVO H1.18. Invariantes de `playableCards` — mismo estilo que
+   * `validateContratiempoCardsConfig`/`validateAllyCardsConfig`. Ver spec §3.2.
+   */
+  private validatePlayableCardsConfig(): void {
+    for (const [cardId, def] of this.playableCards) {
+      if (!Number.isInteger(def.energyCost) || def.energyCost < 0) {
+        throw new Error(
+          `CombatEngine: playableCards["${String(cardId)}"].energyCost debe ser un entero >= 0, recibido ${def.energyCost}`
+        );
+      }
+      if (def.effect?.kind === 'ATTACK_ENEMY') {
+        this.validateUmbralFormulaNonNegative(`playableCards["${String(cardId)}"]`, def.effect.formula.baseFormula);
+        if (def.effect.formula.bonusFormula) {
+          this.validateUmbralFormulaNonNegative(`playableCards["${String(cardId)}"]`, def.effect.formula.bonusFormula);
+        }
+      } else if ((def.effect?.kind === 'PLOT' || def.effect?.kind === 'SHIELD') && def.effect.amount < 0) {
+        throw new Error(
+          `CombatEngine: playableCards["${String(cardId)}"] (${def.effect.kind}) tiene amount negativo (${def.effect.amount})`
+        );
+      }
+    }
+  }
+
+  /**
+   * NUEVO H1.18. Ver spec §0.5 — "IA a medias" es un error de configuración: o ambos
+   * campos están poblados, o ninguno.
+   */
+  private validateEnemyAiConfig(dramaturgiaDeckRaw: readonly DramaturgiaCardIcon[]): void {
+    if ((this.enemyAbilityAiProfiles.size > 0) !== (dramaturgiaDeckRaw.length > 0)) {
+      throw new Error(
+        'CombatEngine: enemyAbilityAiProfiles y dramaturgiaDeck deben proveerse juntos o ninguno (spec H1.18 §0.5) — IA a medias no es un estado válido'
+      );
+    }
+    if (this.enemyAbilityAiProfiles.size > 0) {
+      validateEnemyAbilityAiProfiles(this.enemyAbilityAiProfiles, this.abilityCooldowns);
     }
   }
 
@@ -495,6 +598,19 @@ export class CombatEngine {
 
   private rollNewPool(): NucleoInstance[] {
     return rollPool(this.poolSize, this.randomSource, () => this.nextNucleoId());
+  }
+
+  /** NUEVO H1.18 — Fisher-Yates in-place con `RandomSource` (determinista con
+   *  `SeededRandomSource` en tests, ver spec §3.3). Usado para barajar el mazo de
+   *  Dramaturgia (constructor + reciclado, §0.5.3). */
+  private shuffle<T>(items: T[]): T[] {
+    for (let i = items.length - 1; i > 0; i--) {
+      const j = this.randomSource.nextInt(0, i + 1);
+      const tmp = items[i] as T;
+      items[i] = items[j] as T;
+      items[j] = tmp;
+    }
+    return items;
   }
 
   /**
@@ -766,6 +882,43 @@ export class CombatEngine {
   }
 
   /**
+   * NUEVO H1.18. Punto único de evaluación de estado terminal (ver spec §0.6),
+   * llamado como ÚLTIMO paso (después de `evaluateAndApplyPhaseChanges`) en todo
+   * handler que pueda mutar `leaderDamage`/`scenarioPlot`/`enemyDamage`. No re-evalúa
+   * ni re-emite si el combate ya terminó. Orden de precedencia (derrota antes que
+   * victoria) es arbitrario pero determinista — ver spec §0.6.
+   */
+  private evaluateAndApplyCombatEnd(events: CombatEvent[]): void {
+    if (this.combatStatus !== 'IN_PROGRESS') return;
+
+    let outcome: CombatOutcome;
+    let defeatReason: DefeatReason | undefined;
+
+    if (this.leaderDamage >= this.leaderMaxHealth) {
+      outcome = 'DEFEAT';
+      defeatReason = 'LEADER_HEALTH';
+    } else if (this.scenarioPlot >= this.scenarioPlotDefeatThreshold) {
+      outcome = 'DEFEAT';
+      defeatReason = 'SCENARIO_PLOT';
+    } else if (this.enemyDamage >= this.enemyMaxHealth) {
+      outcome = 'VICTORY';
+    } else {
+      return; // sigue en curso, no emite nada
+    }
+
+    this.combatStatus = outcome;
+    this.defeatReason = defeatReason;
+
+    const event: CombatEvent = {
+      type: 'COMBAT_ENDED',
+      outcome,
+      ...(defeatReason !== undefined ? { defeatReason } : {}),
+    };
+    events.push(event);
+    this.eventBus.emit(event);
+  }
+
+  /**
    * NUEVO H1.16 (extraído de `handleActivateAbility`, ver spec §4.4 punto 2 —
    * "reutilizar, no duplicar"). Ejecuta el núcleo compartido de una activación de
    * habilidad YA VALIDADA por el caller: gasta el `nucleo` indicado (ya elegido),
@@ -850,6 +1003,13 @@ export class CombatEngine {
   }
 
   dispatch(command: CombatCommand): CombatCommandResult {
+    // NUEVO H1.18 — ver spec §0.6. Rechaza cualquier comando una vez el combate llegó a
+    // un estado terminal (VICTORY/DEFEAT) — primera línea, antes de cualquier otra
+    // validación de comando.
+    if (this.combatStatus !== 'IN_PROGRESS') {
+      return err({ code: 'COMBAT_ALREADY_ENDED', status: this.combatStatus });
+    }
+
     switch (command.type) {
       case 'ACTIVATE_ABILITY':
         return this.handleActivateAbility(command);
@@ -865,6 +1025,8 @@ export class CombatEngine {
         return this.handleSummonMinion(command);
       case 'RESOLVE_MINION_ACTION':
         return this.handleResolveMinionAction(command);
+      case 'PLAY_CARD':
+        return this.handlePlayCard(command);
     }
   }
 
@@ -974,6 +1136,7 @@ export class CombatEngine {
 
     // NUEVO H1.17 — ver spec §0.3, punto de evaluación 2.
     this.evaluateAndApplyPhaseChanges(events);
+    this.evaluateAndApplyCombatEnd(events); // NUEVO H1.18
 
     return ok(events);
   }
@@ -1111,6 +1274,24 @@ export class CombatEngine {
 
     // NUEVO H1.17 — ver spec §0.3, punto de evaluación 1.
     this.evaluateAndApplyPhaseChanges(events);
+    this.evaluateAndApplyCombatEnd(events); // NUEVO H1.18
+
+    // NUEVO H1.18 — turno de IA automático (§0.5/§0.5.1/§0.5.2). Solo si la IA está
+    // habilitada (enemyAbilityAiProfiles + dramaturgiaDeck ambos poblados) Y el turno
+    // que ACABA de abrir es el del Enemigo (nunca se dispara para el cierre LEADER de
+    // la propia recursión, ver guarda anti-recursión infinita §0.5.2). `enemyAiEnabled`
+    // en el propio guard exterior (no solo dentro de `runAutomaticEnemyTurn`) es lo que
+    // preserva EXACTAMENTE el comportamiento de H1.3-H1.17 cuando la IA no está
+    // configurada — sin él, `handleEndTurn` recursaría igual (turnOwner seguiría siendo
+    // ENEMY tras un `runAutomaticEnemyTurn` no-op) y devolvería el turno al Líder
+    // incondicionalmente, rompiendo los ~200 tests que simulan el turno de Enemigo a mano.
+    if (this.enemyAiEnabled && this.turnOwner === 'ENEMY' && this.combatStatus === 'IN_PROGRESS') {
+      this.runAutomaticEnemyTurn(events);
+      if (this.combatStatus === 'IN_PROGRESS') {
+        const closingResult = this.handleEndTurn(); // recursión — flip ENEMY → LEADER
+        if (closingResult.ok) events.push(...closingResult.value);
+      }
+    }
 
     return ok(events);
   }
@@ -1223,8 +1404,12 @@ export class CombatEngine {
       leaderShieldAfter: this.leaderShield,
       scenarioPlotAfter: this.scenarioPlot,
     };
-    const events = [playedEvent];
+    const events: CombatEvent[] = [playedEvent];
     this.eventBus.emit(playedEvent);
+
+    // NUEVO H1.18 — defensivo: revertir daño nunca sube un contador, pero se llama por
+    // consistencia y para no dejar un hueco silencioso (ver spec §0.6).
+    this.evaluateAndApplyCombatEnd(events);
 
     return ok(events);
   }
@@ -1435,6 +1620,7 @@ export class CombatEngine {
 
       // NUEVO H1.17 — ver spec §0.3, punto de evaluación 3 (rama SPECIAL_ACTION).
       this.evaluateAndApplyPhaseChanges(events);
+      this.evaluateAndApplyCombatEnd(events); // NUEVO H1.18
 
       return ok(events);
     }
@@ -1492,6 +1678,7 @@ export class CombatEngine {
 
       // NUEVO H1.17 — ver spec §0.3, punto de evaluación 3 (rama PLANO_ATTACK).
       this.evaluateAndApplyPhaseChanges(events);
+      this.evaluateAndApplyCombatEnd(events); // NUEVO H1.18
 
       return ok(events);
     }
@@ -1500,6 +1687,230 @@ export class CombatEngine {
     const skippedEvent: CombatEvent = { type: 'MINION_ACTION_SKIPPED', reason: 'NO_MINIONS_IN_PLAY' };
     this.eventBus.emit(skippedEvent);
     return ok([skippedEvent]);
+  }
+
+  /**
+   * NUEVO H1.18 — ver spec §0.1/§3.5. Baja una carta EVENTO/EQUIPO de `playableCards`
+   * (sin mano ni mazo). Exclusivo del Líder, consume 1 acción + Energía. Reutiliza
+   * `resolveAbilityUmbral` (H1.5) tal cual para el efecto `ATTACK_ENEMY`.
+   */
+  private handlePlayCard(
+    command: Extract<CombatCommand, { type: 'PLAY_CARD' }>
+  ): CombatCommandResult {
+    const def = this.playableCards.get(command.cardId);
+    if (!def) {
+      return err({ code: 'PLAY_CARD_UNKNOWN', cardId: command.cardId });
+    }
+
+    if (this.turnOwner !== 'LEADER') {
+      return err({ code: 'NOT_YOUR_TURN', expected: 'LEADER', actual: this.turnOwner });
+    }
+
+    if (this.actionsTakenThisTurn >= this.actionsAllowedThisTurn) {
+      return err({
+        code: 'NO_ACTIONS_REMAINING',
+        side: this.turnOwner,
+        actionsTaken: this.actionsTakenThisTurn,
+        actionsAllowed: this.actionsAllowedThisTurn,
+      });
+    }
+
+    if (this.leaderEnergy < def.energyCost) {
+      return err({
+        code: 'PLAY_CARD_INSUFFICIENT_ENERGY',
+        cardId: command.cardId,
+        required: def.energyCost,
+        available: this.leaderEnergy,
+      });
+    }
+
+    let nucleo: NucleoInstance | undefined;
+    if (def.effect?.kind === 'ATTACK_ENEMY') {
+      if (!command.nucleoInstanceId) {
+        return err({ code: 'PLAY_CARD_NUCLEO_REQUIRED', cardId: command.cardId });
+      }
+      const index = this.nucleoPool.findIndex((n) => n.id === command.nucleoInstanceId);
+      if (index === -1) {
+        return err({ code: 'NUCLEO_NOT_FOUND', nucleoInstanceId: command.nucleoInstanceId });
+      }
+      nucleo = this.nucleoPool[index];
+    }
+
+    // Mutación — desde aquí ninguna validación previa debe tener efectos secundarios.
+    this.leaderEnergy -= def.energyCost;
+    this.actionsTakenThisTurn += 1;
+
+    const events: CombatEvent[] = [];
+    const playedEvent: CombatEvent = {
+      type: 'CARD_PLAYED',
+      cardId: command.cardId,
+      sourceId: command.sourceId,
+      leaderEnergyAfter: this.leaderEnergy,
+    };
+    events.push(playedEvent);
+    this.eventBus.emit(playedEvent);
+
+    if (nucleo) {
+      // Consume el Núcleo del pool — mismo tratamiento que ACTIVATE_ABILITY.
+      const idx = this.nucleoPool.findIndex((n) => n.id === (nucleo as NucleoInstance).id);
+      this.nucleoPool = [...this.nucleoPool.slice(0, idx), ...this.nucleoPool.slice(idx + 1)];
+    }
+
+    this.applyPlayableCardEffect(command, def.effect, nucleo, events);
+
+    if (this.nucleoPool.length === 0) {
+      this.nucleoPool = this.rollNewPool();
+      const refilled: CombatEvent = {
+        type: 'NUCLEO_POOL_ROLLED',
+        pool: [...this.nucleoPool],
+        priorityTurnOwner: this.turnOwner,
+      };
+      events.push(refilled);
+      this.eventBus.emit(refilled);
+    }
+
+    this.evaluateAndApplyPhaseChanges(events);
+    this.evaluateAndApplyCombatEnd(events); // NUEVO H1.18
+
+    return ok(events);
+  }
+
+  /** NUEVO H1.18 — extraído de `handlePlayCard` para mantenerlo legible. Resuelve el
+   *  efecto (si lo hay) de una carta ya validada/pagada. */
+  private applyPlayableCardEffect(
+    command: Extract<CombatCommand, { type: 'PLAY_CARD' }>,
+    effect: PlayableCardEffectDefinition | undefined,
+    nucleo: NucleoInstance | undefined,
+    events: CombatEvent[]
+  ): void {
+    if (!effect) return;
+
+    if (effect.kind === 'ATTACK_ENEMY') {
+      const resolution = resolveAbilityUmbral(effect.formula, (nucleo as NucleoInstance).value);
+      this.enemyDamage += resolution.baseResolvedValue;
+      const dmgEvent: CombatEvent = {
+        type: 'ENEMY_DAMAGED',
+        cardId: command.cardId,
+        sourceId: command.sourceId,
+        nucleoSpent: nucleo as NucleoInstance,
+        rawAmount: resolution.baseResolvedValue,
+        bonusActivated: resolution.bonusActivated,
+        ...(resolution.bonusResolvedValue !== undefined ? { bonusResolvedValue: resolution.bonusResolvedValue } : {}),
+        enemyDamageAfter: this.enemyDamage,
+      };
+      events.push(dmgEvent);
+      this.eventBus.emit(dmgEvent);
+    } else if (effect.kind === 'PLOT') {
+      // TRAMA_X siempre DECREASE (§0.1.1) — exclusivo del Líder, satura en 0.
+      this.scenarioPlot = Math.max(0, this.scenarioPlot - effect.amount);
+      const plotEvent: CombatEvent = {
+        type: 'SCENARIO_PLOT_CHANGED',
+        // Sin abilityId — este cambio de Trama viene de una carta, no de una habilidad
+        // de catálogo (ver spec §3.5, nota de implementación).
+        sourceId: command.sourceId,
+        side: 'LEADER',
+        direction: 'DECREASE',
+        rawAmount: effect.amount,
+        appliedDelta: -effect.amount,
+        scenarioPlotAfter: this.scenarioPlot,
+      };
+      events.push(plotEvent);
+      this.eventBus.emit(plotEvent);
+    } else {
+      // effect.kind === 'SHIELD' — DEFENSA_X, cierra deuda de H1.6 §0.1.
+      const leaderShieldBefore = this.leaderShield;
+      this.leaderShield = Math.min(LEADER_SHIELD_MAX, this.leaderShield + effect.amount);
+      const shieldEvent: CombatEvent = {
+        type: 'LEADER_SHIELD_GAINED',
+        cardId: command.cardId,
+        sourceId: command.sourceId,
+        rawAmount: effect.amount,
+        leaderShieldBefore,
+        leaderShieldAfter: this.leaderShield,
+      };
+      events.push(shieldEvent);
+      this.eventBus.emit(shieldEvent);
+    }
+  }
+
+  /**
+   * NUEVO H1.18 — ver spec §0.5/§3.6. Decide Y ejecuta la acción del turno de Enemigo
+   * (Capa 1+2 de IA, H1.7) reutilizando el mismo camino interno que
+   * `ACTIVATE_ABILITY`/`RESOLVE_MINION_ACTION`. Solo se invoca cuando `enemyAiEnabled`
+   * es `true` — no-op en caso contrario (comportamiento idéntico a H1.3-H1.17).
+   */
+  private runAutomaticEnemyTurn(events: CombatEvent[]): void {
+    if (!this.enemyAiEnabled) return;
+
+    const icon = this.drawDramaturgiaCard(events);
+    const candidates = this.buildEnemyAbilityCandidates();
+    const decision = decideEnemyAbility(icon, candidates, this.nucleoPool, this.randomSource);
+
+    const requirement = this.abilityCoreCosts.get(decision.abilityId) as CoreCostRequirement;
+    const playerColors = derivePlayerColorsFromLeaderAbilities(this.abilityCoreCosts, this.abilityCooldowns);
+    const nucleoDecision = decideEnemyNucleoToSpend(requirement, this.nucleoPool, playerColors, this.randomSource);
+
+    const abilityResult = this.handleActivateAbility({
+      type: 'ACTIVATE_ABILITY',
+      abilityId: decision.abilityId,
+      sourceId: 'enemy',
+      side: 'ENEMY',
+      nucleoInstanceId: nucleoDecision.nucleo.id,
+    });
+    // handleActivateAbility no puede fallar aquí por construcción: decideEnemyAbility/
+    // decideEnemyNucleoToSpend ya garantizan CD listo + Núcleo válido (mismas
+    // invariantes que H1.7 ya probó exhaustivamente) — si lanzara, sería un bug de
+    // contenido (perfil de IA mal formado), no un caso de juego a manejar aquí.
+    if (abilityResult.ok) events.push(...abilityResult.value);
+
+    if (this.combatStatus !== 'IN_PROGRESS') return; // NUEVO H1.18 — parada de cascada (§0.6)
+
+    if (this.minionsInPlay.length > 0) {
+      const minionResult = this.handleResolveMinionAction({ type: 'RESOLVE_MINION_ACTION' });
+      if (minionResult.ok) events.push(...minionResult.value);
+    }
+  }
+
+  /**
+   * NUEVO H1.18 — ver spec §0.5.3. Roba 1 carta de Dramaturgia de la pila privada,
+   * reciclando la pila de descarte (barajada) si la de robo está vacía.
+   */
+  private drawDramaturgiaCard(events: CombatEvent[]): DramaturgiaCardIcon {
+    if (this.dramaturgiaDrawPile.length === 0) {
+      this.dramaturgiaDrawPile = this.shuffle(this.dramaturgiaDiscardPile);
+      this.dramaturgiaDiscardPile = [];
+      const reshuffled: CombatEvent = {
+        type: 'DRAMATURGIA_DECK_RESHUFFLED',
+        deckSize: this.dramaturgiaDrawPile.length,
+      };
+      events.push(reshuffled);
+      this.eventBus.emit(reshuffled);
+    }
+    const icon = this.dramaturgiaDrawPile.pop() as DramaturgiaCardIcon;
+    this.dramaturgiaDiscardPile.push(icon);
+    const drawn: CombatEvent = { type: 'DRAMATURGIA_CARD_DRAWN', icon };
+    events.push(drawn);
+    this.eventBus.emit(drawn);
+    return icon;
+  }
+
+  /** NUEVO H1.18 — ensambla la vista `EnemyAbilityCandidate[]` que pide `decideEnemyAbility`
+   *  (H1.7) a partir de `enemyAbilityAiProfiles` + `abilityCoreCosts`/`abilityCooldowns`/
+   *  `remainingCooldowns` ya existentes. */
+  private buildEnemyAbilityCandidates(): EnemyAbilityCandidate[] {
+    const result: EnemyAbilityCandidate[] = [];
+    for (const [abilityId, aiProfile] of this.enemyAbilityAiProfiles) {
+      const coreCost = this.abilityCoreCosts.get(abilityId) as CoreCostRequirement;
+      const cooldownDef = this.abilityCooldowns.get(abilityId) as AbilityCooldownDefinition;
+      result.push({
+        abilityId,
+        coreCost,
+        baseCooldown: cooldownDef.baseCooldown,
+        remainingCooldown: this.remainingCooldowns.get(abilityId) ?? 0,
+        aiProfile,
+      });
+    }
+    return result;
   }
 
   subscribe(listener: (event: CombatEvent) => void): Unsubscribe {
@@ -1544,6 +1955,8 @@ export class CombatEngine {
               totalPhases: this.scenarioPhases.length,
             }, // NUEVO H1.17
       enemyDamage: this.enemyDamage, // NUEVO H1.17
+      status: this.combatStatus, // NUEVO H1.18
+      ...(this.defeatReason !== undefined ? { defeatReason: this.defeatReason } : {}), // NUEVO H1.18
     };
   }
 }

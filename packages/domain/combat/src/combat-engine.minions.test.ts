@@ -41,7 +41,7 @@ function minionDefinitions(
 /** Fixture recomendada por la spec H1.16 §6: 2 habilidades ATTACK de acción especial de
  *  Secuaz (side ENEMY) + varias MinionDefinition cubriendo acción especial/plano/Defensor/pasivo. */
 function buildEngine(overrides: Partial<CombatEngineConfig> = {}) {
-  return new CombatEngine({
+  return new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
     randomSource: new SeededRandomSource(1),
     abilityCoreCosts: costs([ENEMY_SPECIAL_A, ENEMY_SPECIAL_B, LEADER_FILLER]),
     abilityCooldowns: cooldowns([
@@ -316,13 +316,13 @@ describe('CombatEngine — H1.16: Secuaces del enemigo (GDD §3.8)', () => {
 
   describe('constructor: validación de minionDefinitions', () => {
     it('lanza si planoAttackAmount no es entero o es negativo', () => {
-      expect(() => new CombatEngine({
+      expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
         randomSource: new SeededRandomSource(1),
         abilityCoreCosts: costs([]),
         abilityCooldowns: cooldowns([]),
         minionDefinitions: minionDefinitions([[MINION_PLANO, { passiveEffect: { kind: 'PLOT', amount: 0 }, planoAttackAmount: -1, isDefensor: false }]]),
       })).toThrow();
-      expect(() => new CombatEngine({
+      expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
         randomSource: new SeededRandomSource(1),
         abilityCoreCosts: costs([]),
         abilityCooldowns: cooldowns([]),
@@ -331,7 +331,7 @@ describe('CombatEngine — H1.16: Secuaces del enemigo (GDD §3.8)', () => {
     });
 
     it('lanza si specialActionAbilityId no existe en abilityCooldowns', () => {
-      expect(() => new CombatEngine({
+      expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
         randomSource: new SeededRandomSource(1),
         abilityCoreCosts: costs([]),
         abilityCooldowns: cooldowns([]),
@@ -340,7 +340,7 @@ describe('CombatEngine — H1.16: Secuaces del enemigo (GDD §3.8)', () => {
     });
 
     it('lanza si specialActionAbilityId existe con side LEADER', () => {
-      expect(() => new CombatEngine({
+      expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
         randomSource: new SeededRandomSource(1),
         abilityCoreCosts: costs([ENEMY_SPECIAL_A]),
         abilityCooldowns: cooldowns([[ENEMY_SPECIAL_A, { side: 'LEADER', baseCooldown: 1 }]]),

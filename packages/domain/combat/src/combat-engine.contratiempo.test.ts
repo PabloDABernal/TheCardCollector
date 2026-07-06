@@ -62,7 +62,7 @@ function minionDefinitions(
  *  contratiempoCards con 1 carta DAMAGE_ONLY y 1 FULL_TURN. Extendida en H1.15 con una
  *  habilidad ATTACK con Arrollar y una carta ALIADO (ver spec H1.15 §5.4). */
 function buildEngine(overrides: Partial<CombatEngineConfig> = {}) {
-  return new CombatEngine({
+  return new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
     randomSource: new SeededRandomSource(1),
     abilityCoreCosts: costs([ENEMY_ATTACK, ENEMY_ATTACK_ARROLLAR, ENEMY_PLOT, ENEMY_MINION_PLOT]),
     abilityCooldowns: cooldowns([
@@ -281,7 +281,7 @@ describe('CombatEngine — H1.14: Contratiempo (GDD §2.7)', () => {
   it('consume una acción: jugarlo cuando actionsTakenThisTurn === actionsAllowedThisTurn es rechazado con NO_ACTIONS_REMAINING', () => {
     const LEADER_FILLER_1: AbilityId = createId<'AbilityId'>('AbilityId', 'leader-filler-1');
     const LEADER_FILLER_2: AbilityId = createId<'AbilityId'>('AbilityId', 'leader-filler-2');
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([ENEMY_ATTACK, LEADER_FILLER_1, LEADER_FILLER_2]),
       abilityCooldowns: cooldowns([
@@ -314,7 +314,7 @@ describe('CombatEngine — H1.14: Contratiempo (GDD §2.7)', () => {
   });
 
   it('constructor: lanza si contratiempoCards tiene energyCost negativo', () => {
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -323,7 +323,7 @@ describe('CombatEngine — H1.14: Contratiempo (GDD §2.7)', () => {
   });
 
   it('constructor: lanza si contratiempoCards tiene energyCost no entero', () => {
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -332,13 +332,13 @@ describe('CombatEngine — H1.14: Contratiempo (GDD §2.7)', () => {
   });
 
   it('constructor: lanza si initialLeaderEnergy está fuera de [0, 5]', () => {
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
       initialLeaderEnergy: 6,
     })).toThrow();
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),

@@ -33,7 +33,7 @@ function abilityCooldowns(
 
 describe('CombatEngine — ciclo de turnos', () => {
   it('alterna turnOwner y turnNumber en cada END_TURN', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: abilityCosts(),
       abilityCooldowns: abilityCooldowns(), // H1.4
@@ -50,7 +50,7 @@ describe('CombatEngine — ciclo de turnos', () => {
   });
 
   it('respeta initialTurnOwner de la config', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: abilityCosts(),
       abilityCooldowns: abilityCooldowns(), // H1.4
@@ -60,7 +60,7 @@ describe('CombatEngine — ciclo de turnos', () => {
   });
 
   it('getSnapshot() devuelve una copia defensiva: mutar el array externo no corrompe el estado interno', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: abilityCosts(),
       abilityCooldowns: abilityCooldowns(), // H1.4
@@ -82,7 +82,7 @@ describe('CombatEngine — ciclo de turnos', () => {
 
 describe('CombatEngine — gasto de Núcleo', () => {
   it('gasto válido: elimina la ficha del pool y emite ABILITY_ACTIVATED', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(5),
       abilityCoreCosts: abilityCosts(),
       abilityCooldowns: abilityCooldowns(), // H1.4
@@ -111,7 +111,7 @@ describe('CombatEngine — gasto de Núcleo', () => {
   });
 
   it('rechaza gastar un Núcleo inexistente', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: abilityCosts(),
       abilityCooldowns: abilityCooldowns(), // H1.4
@@ -134,7 +134,7 @@ describe('CombatEngine — gasto de Núcleo', () => {
   });
 
   it('rechaza gastar dos veces el mismo Núcleo (ya gastado)', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: abilityCosts(),
       abilityCooldowns: abilityCooldowns(), // H1.4
@@ -162,7 +162,7 @@ describe('CombatEngine — gasto de Núcleo', () => {
   });
 
   it('rechaza color que no satisface el requisito, sin mutar el pool', () => {
-    const before0 = new CombatEngine({
+    const before0 = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: abilityCosts(),
       abilityCooldowns: abilityCooldowns(), // H1.4
@@ -175,7 +175,7 @@ describe('CombatEngine — gasto de Núcleo', () => {
     const ABILITY_MISMATCH: AbilityId = createId<'AbilityId'>('AbilityId', 'ability-mismatch');
     const costs = abilityCosts([[ABILITY_MISMATCH, { kind: 'COLOR', colors: mismatchedColors }]]);
     const cds = abilityCooldowns([[ABILITY_MISMATCH, { side: 'LEADER', baseCooldown: 1 }]]); // H1.4
-    const engine2 = new CombatEngine({ randomSource: new SeededRandomSource(1), abilityCoreCosts: costs, abilityCooldowns: cds, poolSize: 6 });
+    const engine2 = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, randomSource: new SeededRandomSource(1), abilityCoreCosts: costs, abilityCooldowns: cds, poolSize: 6 });
     const before = engine2.getSnapshot().nucleoPool;
 
     const result = engine2.dispatch({
@@ -194,7 +194,7 @@ describe('CombatEngine — gasto de Núcleo', () => {
   });
 
   it('rechaza abilityId no registrado en abilityCoreCosts', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: abilityCosts(),
       abilityCooldowns: abilityCooldowns(), // H1.4
@@ -218,7 +218,7 @@ describe('CombatEngine — gasto de Núcleo', () => {
   });
 
   it('rechaza activar una habilidad si `side` no coincide con el turnOwner actual', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: abilityCosts(),
       abilityCooldowns: abilityCooldowns(), // H1.4
@@ -244,7 +244,7 @@ describe('CombatEngine — gasto de Núcleo', () => {
 
 describe('CombatEngine — relanzado automático del pool', () => {
   it('al vaciarse el pool (poolSize 1), se relanza en el mismo dispatch y emite NUCLEO_POOL_ROLLED', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(9),
       abilityCoreCosts: abilityCosts(),
       abilityCooldowns: abilityCooldowns(), // H1.4
@@ -286,7 +286,7 @@ describe('CombatEngine — regla "elige primero quien tenga turno tras el vaciad
     // abilityId. Se registra LEADER_ANY_2 con el mismo coste 'ANY' para no alterar
     // el propósito del test.
     const LEADER_ANY_2: AbilityId = createId<'AbilityId'>('AbilityId', 'leader-any-2');
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(3),
       abilityCoreCosts: abilityCosts([[LEADER_ANY_2, { kind: 'ANY' }]]),
       abilityCooldowns: abilityCooldowns([[LEADER_ANY_2, { side: 'LEADER', baseCooldown: 1 }]]), // H1.4
@@ -314,7 +314,7 @@ describe('CombatEngine — regla "elige primero quien tenga turno tras el vaciad
   });
 
   it('Escenario B: el vaciado ocurre en el turno de ENEMY; tras END_TURN, LEADER (el turno siguiente) elige primero del nuevo pool', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(11),
       abilityCoreCosts: abilityCosts([[ABILITY_ANY_ENEMY, { kind: 'ANY' }]]), // H1.4
       abilityCooldowns: abilityCooldowns([[ABILITY_ANY_ENEMY, { side: 'ENEMY', baseCooldown: 1 }]]), // H1.4

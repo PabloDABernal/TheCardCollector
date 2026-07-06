@@ -262,6 +262,11 @@ export function parseLeaderDefinition(raw: unknown, context: string): LeaderDefi
   if (!Array.isArray(raw.levelUpOptions)) fail(context, 'campo "levelUpOptions" ausente o no es un array');
   const levelUpOptions = raw.levelUpOptions.map((o, i) => parseLevelUpOption(o, `${context}.levelUpOptions[${i}]`));
 
+  // NUEVO H1.18 — mismo criterio que EnemyDefinition.maxHealth (ver spec H1.18 §0.3).
+  if (!isPositiveInteger(raw.maxHealth) || raw.maxHealth > 100) {
+    fail(context, 'campo "maxHealth" debe ser un entero > 0 y <= 100 (GDD §3.4, "tope blando de vida")');
+  }
+
   if (raw.universeSkin !== undefined && typeof raw.universeSkin !== 'string') {
     fail(context, 'campo "universeSkin", si está presente, debe ser un string');
   }
@@ -272,6 +277,7 @@ export function parseLeaderDefinition(raw: unknown, context: string): LeaderDefi
     baseAbilities: baseAbilities as unknown as LeaderDefinition['baseAbilities'],
     cardPoolIds,
     levelUpOptions,
+    maxHealth: raw.maxHealth,
     ...(raw.universeSkin !== undefined ? { universeSkin: raw.universeSkin } : {}),
   };
 }

@@ -21,7 +21,7 @@ function cooldowns(entries: [AbilityId, AbilityCooldownDefinition][]): Map<Abili
 
 describe('CombatEngine — H1.14: Combo (GDD §2.6)', () => {
   it('activar una habilidad LEADER con abilityCombo emite COMBO_TRIGGERED (actionsAllowedThisTurn: 3), permitiendo una 3ª acción', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([LEADER_A, LEADER_B]),
       abilityCooldowns: cooldowns([
@@ -51,7 +51,7 @@ describe('CombatEngine — H1.14: Combo (GDD §2.6)', () => {
   });
 
   it('sin ninguna activación Combo, una 3ª ACTIVATE_ABILITY en el mismo turno es rechazada con NO_ACTIONS_REMAINING (actionsAllowed: 2)', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(2),
       abilityCoreCosts: costs([LEADER_A, LEADER_B, LEADER_C]),
       abilityCooldowns: cooldowns([
@@ -79,7 +79,7 @@ describe('CombatEngine — H1.14: Combo (GDD §2.6)', () => {
 
   it('activar 2 habilidades con Combo cada una: el bonus solo se concede una vez (tope 3, no sube a 4); una 4ª activación es rechazada con NO_ACTIONS_REMAINING', () => {
     const LEADER_D: AbilityId = createId<'AbilityId'>('AbilityId', 'leader-combo-d');
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(3),
       abilityCoreCosts: costs([LEADER_A, LEADER_B, LEADER_D]),
       abilityCooldowns: cooldowns([
@@ -125,7 +125,7 @@ describe('CombatEngine — H1.14: Combo (GDD §2.6)', () => {
   });
 
   it('repetir la MISMA abilityId como intento de 3ª acción (con Combo ya generado) es rechazada con ABILITY_ALREADY_ACTIVATED_THIS_TURN', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(4),
       abilityCoreCosts: costs([LEADER_A]),
       abilityCooldowns: cooldowns([[LEADER_A, { side: 'LEADER', baseCooldown: 1 }]]),
@@ -147,7 +147,7 @@ describe('CombatEngine — H1.14: Combo (GDD §2.6)', () => {
   });
 
   it('el bonus de Combo NO persiste al siguiente turno: tras END_TURN y volver al Líder, actionsAllowed vuelve a 2', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(5),
       abilityCoreCosts: costs([LEADER_A]),
       abilityCooldowns: cooldowns([[LEADER_A, { side: 'LEADER', baseCooldown: 1 }]]),
@@ -170,7 +170,7 @@ describe('CombatEngine — H1.14: Combo (GDD §2.6)', () => {
   });
 
   it('el constructor lanza si abilityCombo incluye un abilityId con side ENEMY', () => {
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([ENEMY_A]),
       abilityCooldowns: cooldowns([[ENEMY_A, { side: 'ENEMY', baseCooldown: 1 }]]),
@@ -179,7 +179,7 @@ describe('CombatEngine — H1.14: Combo (GDD §2.6)', () => {
   });
 
   it('ENEMY solo tiene 1 acción por turno: 2ª ACTIVATE_ABILITY de side ENEMY en el mismo turno es rechazada con NO_ACTIONS_REMAINING (actionsAllowed: 1)', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(6),
       abilityCoreCosts: costs([ENEMY_A, ENEMY_B]),
       abilityCooldowns: cooldowns([

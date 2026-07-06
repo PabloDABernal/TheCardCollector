@@ -2,6 +2,7 @@ import type { CoreCostRequirement, NucleoColor, NucleoInstanceId, AbilityId, Car
 import type { CombatEvent } from './events';
 import type { CombatSide } from './turn';
 import type { MinionDefinitionId } from './minion';
+import type { CombatOutcome } from './combat-status'; // NUEVO H1.18
 
 export type CombatCommandError =
   | { readonly code: 'ABILITY_COST_UNKNOWN'; readonly abilityId: AbilityId }
@@ -67,6 +68,25 @@ export type CombatCommandError =
       /** NUEVO H1.16. `RESOLVE_MINION_ACTION` ya se despachó con éxito este turno de
        *  Enemigo (contador propio `minionActionResolvedThisEnemyTurn`, ver spec H1.16 §0.3). */
       readonly code: 'MINION_ACTION_ALREADY_RESOLVED_THIS_TURN';
+    }
+  | { readonly code: 'PLAY_CARD_UNKNOWN'; readonly cardId: CardId }
+  | {
+      /** NUEVO H1.18. `PLAY_CARD` no tiene Energía suficiente para pagar `energyCost`. */
+      readonly code: 'PLAY_CARD_INSUFFICIENT_ENERGY';
+      readonly cardId: CardId;
+      readonly required: number;
+      readonly available: number;
+    }
+  | {
+      /** NUEVO H1.18. La carta tiene efecto ATTACK_ENEMY pero el comando no incluyó
+       *  nucleoInstanceId (ver spec H1.18 §0.1.1/§2.3). */
+      readonly code: 'PLAY_CARD_NUCLEO_REQUIRED';
+      readonly cardId: CardId;
+    }
+  | {
+      /** NUEVO H1.18. `dispatch()` rechaza cualquier comando una vez `status !== 'IN_PROGRESS'`. */
+      readonly code: 'COMBAT_ALREADY_ENDED';
+      readonly status: CombatOutcome;
     };
 
 /**

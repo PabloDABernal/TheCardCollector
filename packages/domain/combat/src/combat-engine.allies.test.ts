@@ -37,7 +37,7 @@ function allyCards(entries: [CardId, AllyCardDefinition][]): Map<CardId, AllyCar
  *  Arrollar) + 1 variante con Arrollar; allyCards con 1 Aliado plano (life 5) y 1
  *  Berserker (life 20). */
 function buildEngine(overrides: Partial<CombatEngineConfig> = {}) {
-  return new CombatEngine({
+  return new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
     randomSource: new SeededRandomSource(1),
     abilityCoreCosts: costs([ENEMY_ATTACK, ENEMY_ATTACK_ARROLLAR, LEADER_FILLER]),
     abilityCooldowns: cooldowns([
@@ -300,7 +300,7 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
   });
 
   it('calentamiento de habilidad propia: al jugar el Aliado, su abilityId vuelve a baseCooldown completo', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([ALLY_OWN_ABILITY]),
       abilityCooldowns: cooldowns([[ALLY_OWN_ABILITY, { side: 'LEADER', baseCooldown: 3 }]]),
@@ -324,13 +324,13 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
   });
 
   it('constructor: lanza si allyCards tiene life no entero o < 1', () => {
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
       allyCards: allyCards([[CARD_ALLY_PLAIN, { energyCost: 1, life: 0, isBerserker: false }]]),
     })).toThrow();
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -339,7 +339,7 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
   });
 
   it('constructor: lanza si allyCards tiene energyCost negativo o no entero', () => {
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -348,7 +348,7 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
   });
 
   it('constructor: lanza si abilityIds referencia un abilityId inexistente en abilityCooldowns', () => {
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -357,7 +357,7 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
   });
 
   it('constructor: lanza si abilityIds referencia un abilityId con side ENEMY', () => {
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([ALLY_OWN_ABILITY]),
       abilityCooldowns: cooldowns([[ALLY_OWN_ABILITY, { side: 'ENEMY', baseCooldown: 1 }]]),

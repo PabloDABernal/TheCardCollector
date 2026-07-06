@@ -35,6 +35,7 @@
     "card-mago-base-07", "card-mago-base-08", "card-mago-base-09",
     "card-mago-base-10"
   ],
+  "maxHealth": 30,
   "levelUpOptions": [
     {
       "id": "lvlup-mago-base-01",
