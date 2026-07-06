@@ -1,1 +1,1 @@
-{ "name": "@collector/data", "version": "0.0.0", "private": true, "type": "module", "dependencies": { "@collector/domain-catalog": "*" } }
+{ "name": "@collector/data", "version": "0.0.0", "private": true, "type": "module", "dependencies": { "@collector/domain-catalog": "*", "@collector/domain-shared": "*" } }
