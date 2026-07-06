@@ -232,7 +232,7 @@ export class CombatEngine {
       const def = this.abilityCooldowns.get(abilityId);
       if (!def) {
         throw new Error(
-          `CombatEngine: abilityId "${String(abilityId)}" está en abilityCombo pero no en abilityCooldowns/abilityCoreCosts`
+          `CombatEngine: abilityId "${String(abilityId)}" está en abilityCombo pero no en abilityCooldowns`
         );
       }
       if (def.side !== 'LEADER') {
