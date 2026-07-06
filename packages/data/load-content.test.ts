@@ -122,9 +122,12 @@ describe('Contenido de juguete — Enemigos (H1.10)', () => {
     }
   );
 
-  it.each(['enemy-bestia-base', 'enemy-espectro-base'])(
+  it.each([
+    ['enemy-bestia-base', 'ability-bestia-base-zarpazo', 'ability-bestia-base-rugido'],
+    ['enemy-espectro-base', 'ability-espectro-base-toque-gelido', 'ability-espectro-base-susurro'],
+  ] as const)(
     '%s: decideEnemyAbility (domain/combat, H1.7) elige la BASICA de cada rama sin lanzar, usando el contenido real',
-    async (enemyId) => {
+    async (enemyId, expectedAttackAbilityId, expectedPlotAbilityId) => {
       const loader = new CatalogLoader(buildRawInput());
       await loader.load();
       const enemy = loader.getEnemy(createId<'EnemyId'>('EnemyId', enemyId));
@@ -136,13 +139,20 @@ describe('Contenido de juguete — Enemigos (H1.10)', () => {
         remainingCooldown: 0, // todas listas — smoke test de compatibilidad de datos, no de reglas de CD
         aiProfile: a.aiProfile,
       }));
-      const pool: NucleoInstance[] = [{ id: createId<'NucleoInstanceId'>('NucleoInstanceId', 'n1'), color: 'AGRESION', value: 1 }];
+      // Pool vacío: no satisface ningún coreCost 'COLOR' de las FIRMA/STANDARD de
+      // ninguno de los dos enemigos (AGRESION/CAOS en bestia-base, CONTROL/CAOS en
+      // espectro-base), forzando el fallback real a BASICA en ambos casos.
+      const pool: NucleoInstance[] = [];
       const randomSource = new SeededRandomSource(1);
 
       const attackDecision = decideEnemyAbility('ATTACK', candidates, pool, randomSource);
       const plotDecision = decideEnemyAbility('PLOT', candidates, pool, randomSource);
       expect(attackDecision.branch).toBe('ATTACK');
+      expect(attackDecision.tier).toBe('BASICA');
+      expect(attackDecision.abilityId).toBe(expectedAttackAbilityId);
       expect(plotDecision.branch).toBe('PLOT');
+      expect(plotDecision.tier).toBe('BASICA');
+      expect(plotDecision.abilityId).toBe(expectedPlotAbilityId);
     }
   );
 });
