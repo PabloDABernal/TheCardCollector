@@ -1,4 +1,4 @@
-import type { CoreCostRequirement, NucleoColor, NucleoInstanceId, AbilityId, Result } from '@collector/domain-shared';
+import type { CoreCostRequirement, NucleoColor, NucleoInstanceId, AbilityId, CardId, Result } from '@collector/domain-shared';
 import type { CombatEvent } from './events';
 import type { CombatSide } from './turn';
 
@@ -17,6 +17,33 @@ export type CombatCommandError =
       readonly nucleoInstanceId: NucleoInstanceId;
       readonly requirement: CoreCostRequirement;
       readonly actualColor: NucleoColor;
+    }
+  | {
+      /** NUEVO H1.14. GDD §2.1/§3.4: límite de acciones del turno ya alcanzado. */
+      readonly code: 'NO_ACTIONS_REMAINING';
+      readonly side: CombatSide;
+      readonly actionsTaken: number;
+      readonly actionsAllowed: number;
+    }
+  | {
+      /** NUEVO H1.14. GDD §2.6: "no puedes repetir la misma habilidad en la misma
+       *  cadena". Ver spec §0.3 — en la práctica siempre se dispara ANTES que
+       *  ABILITY_ON_COOLDOWN por el nuevo orden de validación. */
+      readonly code: 'ABILITY_ALREADY_ACTIVATED_THIS_TURN';
+      readonly abilityId: AbilityId;
+    }
+  | { readonly code: 'CONTRATIEMPO_CARD_UNKNOWN'; readonly cardId: CardId }
+  | {
+      readonly code: 'CONTRATIEMPO_INSUFFICIENT_ENERGY';
+      readonly cardId: CardId;
+      readonly required: number;
+      readonly available: number;
+    }
+  | {
+      /** NUEVO H1.14. No hay turno de Enemigo previo (todavía) del que deshacer nada,
+       *  o la ventana ya se cerró (ver spec §0.4). */
+      readonly code: 'CONTRATIEMPO_NOTHING_TO_UNDO';
+      readonly cardId: CardId;
     };
 
 /**

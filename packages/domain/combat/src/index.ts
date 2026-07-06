@@ -12,4 +12,7 @@ export * from './types/enemy-ai'; // NUEVO — H1.7
 export * from './nucleo-pool';
 export * from './umbral'; // NUEVO — H1.5
 export * from './enemy-ai'; // NUEVO — H1.7
+export * from './types/action'; // NUEVO — H1.14
+export * from './types/contratiempo'; // NUEVO — H1.14
+export * from './types/energy'; // NUEVO — H1.14
 export * from './combat-engine';

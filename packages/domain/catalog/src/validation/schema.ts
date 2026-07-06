@@ -9,7 +9,7 @@ import {
 } from '@collector/domain-shared';
 import type { CardDefinition, CardType } from '../types/card';
 import type { KeywordInstance } from '../types/keyword';
-import { KEYWORDS_REQUIRING_AMOUNT, type KeywordId } from '../types/keyword';
+import { CONTRATIEMPO_SCOPE_KEYWORDS, KEYWORDS_REQUIRING_AMOUNT, type KeywordId } from '../types/keyword';
 import type {
   AbilityDefinition,
   CatalogAbilityEffect,
@@ -28,6 +28,7 @@ const CARD_TYPES: readonly CardType[] = ['EQUIPO', 'ALIADO', 'EVENTO', 'CONTRATI
 const KEYWORD_IDS: readonly KeywordId[] = [
   'ATAQUE', 'ATAQUE_MAS_X', 'ATAQUE_POR_X', 'CAOS', 'TRAMA_X', 'DEFENSA_X',
   'UMBRAL', 'COMBO', 'ARROLLAR', 'DEFENSOR', 'BERSERKER', 'NEUTRO',
+  'DESHACER_DANO', 'DESHACER_TURNO', // NUEVO H1.14
 ];
 
 // ---------------------------------------------------------------------------
@@ -50,6 +51,23 @@ export function parseCardDefinition(raw: unknown, context: string): CardDefiniti
   const keywords: KeywordInstance[] = raw.keywords.map((k, i) =>
     parseKeywordInstance(k, `${context}.keywords[${i}]`)
   );
+
+  // NUEVO H1.14 — GDD §2.7, ver spec §0.5: exactamente 1 keyword de alcance si y solo si
+  // type === 'CONTRATIEMPO'.
+  const scopeKeywords = keywords.filter((k) => CONTRATIEMPO_SCOPE_KEYWORDS.includes(k.keyword));
+  if (raw.type === 'CONTRATIEMPO') {
+    if (scopeKeywords.length !== 1) {
+      fail(
+        context,
+        `type CONTRATIEMPO exige exactamente 1 keyword de alcance (${CONTRATIEMPO_SCOPE_KEYWORDS.join('|')}), encontradas ${scopeKeywords.length} (GDD §2.7)`
+      );
+    }
+  } else if (scopeKeywords.length > 0) {
+    fail(
+      context,
+      `keyword(s) ${scopeKeywords.map((k) => k.keyword).join(',')} solo son válidas en cartas type CONTRATIEMPO (GDD §2.7), pero esta carta es type ${String(raw.type)}`
+    );
+  }
 
   if (raw.universeSkin !== undefined && typeof raw.universeSkin !== 'string') {
     fail(context, 'campo "universeSkin", si está presente, debe ser un string');

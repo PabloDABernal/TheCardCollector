@@ -1,7 +1,8 @@
-import type { AbilityId } from '@collector/domain-shared';
+import type { AbilityId, CardId } from '@collector/domain-shared';
 import type { NucleoInstance } from './nucleo';
 import type { CombatSide } from './turn';
 import type { AbilityCooldownSnapshot } from './cooldown';
+import type { ContratiempoUndoScope, UndoableEnemyActionLogEntry } from './contratiempo';
 
 /**
  * Slice de H1.3 del union completo esbozado en architecture_stack.md §2.2. Ese
@@ -88,5 +89,31 @@ export type CombatEvent =
       /** `rawAmount` con signo aplicado, ANTES del piso en 0 (puede ser negativo). */
       readonly appliedDelta: number;
       /** Valor de `scenarioPlot` tras aplicar `appliedDelta` y saturar en 0. */
+      readonly scenarioPlotAfter: number;
+    }
+  | {
+      /**
+       * NUEVO H1.14. Emitido inmediatamente tras el efecto de la activación que lo
+       * generó (si lo hay), como ÚLTIMO evento de ese `dispatch()` — GDD §2.6.
+       */
+      readonly type: 'COMBO_TRIGGERED';
+      readonly abilityId: AbilityId;
+      readonly side: CombatSide;
+      readonly sourceId: string;
+      /** `actionsAllowedThisTurn` YA con el bonus aplicado (típicamente 3). */
+      readonly actionsAllowedThisTurn: number;
+    }
+  | {
+      /** NUEVO H1.14. Único evento de un `PLAY_CONTRATIEMPO` exitoso. */
+      readonly type: 'CONTRATIEMPO_PLAYED';
+      readonly cardId: CardId;
+      readonly sourceId: string;
+      readonly undoScope: ContratiempoUndoScope;
+      readonly energySpent: number;
+      readonly leaderEnergyAfter: number;
+      /** Entradas del turno de Enemigo efectivamente revertidas (antes de vaciar la ventana). */
+      readonly revertedEntries: readonly UndoableEnemyActionLogEntry[];
+      readonly leaderDamageAfter: number;
+      readonly leaderShieldAfter: number;
       readonly scenarioPlotAfter: number;
     };

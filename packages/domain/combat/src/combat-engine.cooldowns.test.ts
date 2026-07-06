@@ -53,8 +53,11 @@ describe('CombatEngine — cooldowns: CD1 siempre disponible desde el primer tur
     const r2 = engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: LEADER_CD1, sourceId: 'leader', side: 'LEADER', nucleoInstanceId: nucleo2.id });
     expect(isErr(r2)).toBe(true);
     if (isErr(r2)) {
-      expect((r2.error as CombatCommandError).code).toBe('ABILITY_ON_COOLDOWN');
-      expect((r2.error as Extract<CombatCommandError, { code: 'ABILITY_ON_COOLDOWN' }>).remaining).toBe(1);
+      // H1.14: el nuevo orden de validación intercepta la repetición de la MISMA
+      // abilityId dentro del mismo turno con ABILITY_ALREADY_ACTIVATED_THIS_TURN, ANTES
+      // de llegar al chequeo de ABILITY_ON_COOLDOWN (ver spec H1.14 §0.3). Antes de
+      // H1.14 este test esperaba 'ABILITY_ON_COOLDOWN'.
+      expect((r2.error as CombatCommandError).code).toBe('ABILITY_ALREADY_ACTIVATED_THIS_TURN');
     }
     // No debe haberse mutado el pool: el 2º intento fue rechazado antes de tocar Núcleos.
     // (poolSize inicial 6, menos 1 consumido por la 1ª activación exitosa r1 = 5).

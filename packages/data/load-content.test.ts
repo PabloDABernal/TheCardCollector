@@ -102,6 +102,7 @@ describe('Contenido de juguete — Cartas base (H1.12)', () => {
 
   it.each([
     'ATAQUE', 'ATAQUE_MAS_X', 'ATAQUE_POR_X', 'DEFENSA_X', 'TRAMA_X', 'UMBRAL', 'ARROLLAR',
+    'DESHACER_DANO', 'DESHACER_TURNO', // NUEVO H1.14 — ver spec §7
   ] as const)('el catálogo instancia al menos una vez la keyword %s', async (keyword) => {
     const loader = new CatalogLoader(buildRawInput());
     const catalog = await loader.load();

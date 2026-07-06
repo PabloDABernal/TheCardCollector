@@ -1,4 +1,4 @@
-import type { AbilityId, NucleoInstanceId } from '@collector/domain-shared';
+import type { AbilityId, CardId, NucleoInstanceId } from '@collector/domain-shared';
 import type { CombatSide } from './turn';
 
 /**
@@ -22,4 +22,17 @@ export type CombatCommand =
       readonly side: CombatSide;
       readonly nucleoInstanceId: NucleoInstanceId;
     }
-  | { readonly type: 'END_TURN' };
+  | { readonly type: 'END_TURN' }
+  | {
+      /**
+       * NUEVO H1.14. Contratiempo es EXCLUSIVO del Líder (GDD §2.7: "carta que juegas...
+       * en tu propio turno"; el Enemigo no tiene mano, solo Dramaturgia, GDD §3.4) — por
+       * eso este comando no lleva `side` (a diferencia de ACTIVATE_ABILITY): siempre se
+       * valida contra `turnOwner === 'LEADER'` (ver combat-engine.ts,
+       * handlePlayContratiempo). No lleva `nucleoInstanceId` — Contratiempo paga
+       * Energía, nunca Núcleo (GDD §2.7: "Paga Energía").
+       */
+      readonly type: 'PLAY_CONTRATIEMPO';
+      readonly cardId: CardId;
+      readonly sourceId: string;
+    };

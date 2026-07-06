@@ -103,6 +103,13 @@ describe('CombatEngine — H1.6: una habilidad nunca hace ambas cosas (Ataque y 
     expect(engine.getSnapshot().leaderDamage).toBe(n1.value);
     expect(engine.getSnapshot().scenarioPlot).toBe(0); // ATTACK no tocó Trama
 
+    // H1.14: ENEMY_BASE_ACTIONS_PER_TURN es 1 — una 2ª ACTIVATE_ABILITY de ENEMY en el
+    // MISMO turno se rechazaría con NO_ACTIONS_REMAINING. Se avanza un ciclo completo de
+    // turno (ENEMY -> LEADER -> ENEMY) para que la 2ª activación sea la única acción de
+    // su propio turno de ENEMY, preservando el propósito original del test.
+    engine.dispatch({ type: 'END_TURN' });
+    engine.dispatch({ type: 'END_TURN' });
+
     const n2 = engine.getSnapshot().nucleoPool[0]!;
     engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ENEMY_PLOT, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: n2.id });
     expect(engine.getSnapshot().scenarioPlot).toBe(2);
@@ -139,6 +146,12 @@ describe('CombatEngine — H1.6: criterio de aceptación literal — "algo" bloq
     expect(afterAttack.leaderDamage).toBe(0); // daño bloqueado
     const shieldAfterAttack = afterAttack.leaderShield;
     expect(shieldAfterAttack).toBe(4 - attackNucleo.value); // escudo consumido según el ataque
+
+    // H1.14: ENEMY_BASE_ACTIONS_PER_TURN es 1 — se avanza un ciclo completo de turno
+    // (ENEMY -> LEADER -> ENEMY) para que la 2ª activación sea la única acción de su
+    // propio turno de ENEMY, preservando el propósito original del test.
+    engine.dispatch({ type: 'END_TURN' });
+    engine.dispatch({ type: 'END_TURN' });
 
     // 2) La MISMA fuente de bloqueo NO frena Trama: scenarioPlot sube su magnitud
     //    completa y leaderShield permanece intacto.

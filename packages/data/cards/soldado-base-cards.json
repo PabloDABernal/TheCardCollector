@@ -14,7 +14,7 @@
   { "id": "card-soldado-base-07", "name": "Veterano de Guerra", "type": "ALIADO", "cost": { "energy": 3 },
     "keywords": [{ "keyword": "BERSERKER" }] },
   { "id": "card-soldado-base-08", "name": "Contragolpe", "type": "CONTRATIEMPO", "cost": { "energy": 1 },
-    "keywords": [{ "keyword": "ATAQUE_MAS_X", "amount": 1 }] },
+    "keywords": [{ "keyword": "DESHACER_DANO" }] },
   { "id": "card-soldado-base-09", "name": "Grito de Batalla", "type": "EVENTO", "cost": { "energy": 1 },
     "keywords": [{ "keyword": "TRAMA_X", "amount": 1 }] },
   { "id": "card-soldado-base-10", "name": "Combo Final", "type": "EVENTO", "cost": { "energy": 2 },

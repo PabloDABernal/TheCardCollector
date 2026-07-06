@@ -9,6 +9,7 @@ import {
   type NucleoInstanceId,
   type RandomSource,
   type AbilityId,
+  type CardId,
   type CoreCostRequirement,
 } from '@collector/domain-shared';
 import type { CombatCommand } from './types/commands';
@@ -25,6 +26,12 @@ import { LEADER_SHIELD_MAX } from './types/ability-effect'; // NUEVO H1.6
 import { resolveAbilityUmbral } from './umbral'; // NUEVO H1.6 — conecta H1.5 con mutación real (spec §0.2)
 import type { UmbralFormula } from './types/umbral';
 import { rollPool, DEFAULT_NUCLEO_POOL_SIZE } from './nucleo-pool';
+import { baseActionsForSide, COMBO_MAX_BONUS_ACTIONS_PER_TURN } from './types/action'; // NUEVO H1.14
+import { LEADER_ENERGY_MAX, LEADER_ENERGY_INITIAL_DEFAULT } from './types/energy'; // NUEVO H1.14
+import type {
+  ContratiempoCardDefinition,
+  UndoableEnemyActionLogEntry,
+} from './types/contratiempo'; // NUEVO H1.14
 
 export class CombatEngine {
   private readonly randomSource: RandomSource;
@@ -46,6 +53,20 @@ export class CombatEngine {
   private leaderDamage: number;
   private leaderShield: number;
   private scenarioPlot: number;
+
+  // NUEVO H1.14 — ver spec §0.1/§0.2/§0.4.
+  private readonly abilityCombo: ReadonlySet<AbilityId>;
+  private readonly contratiempoCards: ReadonlyMap<CardId, ContratiempoCardDefinition>;
+
+  private leaderEnergy: number;
+
+  private actionsTakenThisTurn: number;
+  private actionsAllowedThisTurn: number;
+  private comboBonusGrantedThisTurn: boolean;
+  private abilityIdsActivatedThisTurn: Set<AbilityId>;
+
+  private currentEnemyTurnLog: UndoableEnemyActionLogEntry[];
+  private previousEnemyTurnLog: UndoableEnemyActionLogEntry[];
 
   constructor(config: CombatEngineConfig) {
     this.randomSource = config.randomSource;
@@ -76,6 +97,26 @@ export class CombatEngine {
     const initialLeaderShield = config.initialLeaderShield ?? 0;
     this.validateInitialLeaderShield(initialLeaderShield); // NUEVO H1.6
     this.leaderShield = initialLeaderShield;
+
+    // NUEVO H1.14 — resuelto igual que abilityCoreCosts/abilityCooldowns/abilityEffects.
+    this.abilityCombo = config.abilityCombo ?? new Set();
+    this.validateAbilityComboConfig();
+
+    this.contratiempoCards = config.contratiempoCards ?? new Map();
+    this.validateContratiempoCardsConfig();
+
+    const initialEnergy = config.initialLeaderEnergy ?? LEADER_ENERGY_INITIAL_DEFAULT;
+    this.validateInitialLeaderEnergy(initialEnergy);
+    this.leaderEnergy = initialEnergy;
+
+    // NUEVO H1.14 — el límite de acciones del PRIMER turno se calcula ya aquí, antes de
+    // cualquier dispatch (igual que el primer tick de cooldowns, H1.4).
+    this.actionsTakenThisTurn = 0;
+    this.actionsAllowedThisTurn = baseActionsForSide(this.turnOwner);
+    this.comboBonusGrantedThisTurn = false;
+    this.abilityIdsActivatedThisTurn = new Set();
+    this.currentEnemyTurnLog = [];
+    this.previousEnemyTurnLog = [];
 
     this.nucleoPool = this.rollNewPool();
 
@@ -181,6 +222,42 @@ export class CombatEngine {
     if (!Number.isInteger(value) || value < 0 || value > LEADER_SHIELD_MAX) {
       throw new Error(
         `CombatEngine: initialLeaderShield debe ser un entero entre 0 y ${LEADER_SHIELD_MAX} (GDD §2.8), recibido ${value}`
+      );
+    }
+  }
+
+  /** Ver spec H1.14 §0.2: toda habilidad con Combo debe ser del Líder. */
+  private validateAbilityComboConfig(): void {
+    for (const abilityId of this.abilityCombo) {
+      const def = this.abilityCooldowns.get(abilityId);
+      if (!def) {
+        throw new Error(
+          `CombatEngine: abilityId "${String(abilityId)}" está en abilityCombo pero no en abilityCooldowns/abilityCoreCosts`
+        );
+      }
+      if (def.side !== 'LEADER') {
+        throw new Error(
+          `CombatEngine: abilityId "${String(abilityId)}" está en abilityCombo con side "${def.side}" — Combo (GDD §2.6) extiende las 2 acciones del Líder (GDD §2.1); el Enemigo tiene 1 acción fija (GDD §3.4) sin 3ª acción, ver spec H1.14 §0.2`
+        );
+      }
+    }
+  }
+
+  private validateContratiempoCardsConfig(): void {
+    for (const [cardId, def] of this.contratiempoCards) {
+      if (!Number.isInteger(def.energyCost) || def.energyCost < 0) {
+        throw new Error(
+          `CombatEngine: contratiempoCards["${String(cardId)}"].energyCost debe ser un entero >= 0, recibido ${def.energyCost}`
+        );
+      }
+    }
+  }
+
+  /** Ver spec H1.14 §0 nota de estado del repo — mismo estilo que validateInitialLeaderShield (H1.6). */
+  private validateInitialLeaderEnergy(value: number): void {
+    if (!Number.isInteger(value) || value < 0 || value > LEADER_ENERGY_MAX) {
+      throw new Error(
+        `CombatEngine: initialLeaderEnergy debe ser un entero entre 0 y ${LEADER_ENERGY_MAX} (decisions.md, "Energía inicial del Líder: 1"), recibido ${value}`
       );
     }
   }
@@ -303,6 +380,8 @@ export class CombatEngine {
         return this.handleActivateAbility(command);
       case 'END_TURN':
         return this.handleEndTurn();
+      case 'PLAY_CONTRATIEMPO':
+        return this.handlePlayContratiempo(command);
     }
   }
 
@@ -316,6 +395,21 @@ export class CombatEngine {
 
     if (command.side !== this.turnOwner) {
       return err({ code: 'NOT_YOUR_TURN', expected: this.turnOwner, actual: command.side });
+    }
+
+    // NUEVO H1.14 — ver spec §0.1/§3.4.
+    if (this.actionsTakenThisTurn >= this.actionsAllowedThisTurn) {
+      return err({
+        code: 'NO_ACTIONS_REMAINING',
+        side: this.turnOwner,
+        actionsTaken: this.actionsTakenThisTurn,
+        actionsAllowed: this.actionsAllowedThisTurn,
+      });
+    }
+
+    // NUEVO H1.14 — ver spec §0.3.
+    if (this.abilityIdsActivatedThisTurn.has(command.abilityId)) {
+      return err({ code: 'ABILITY_ALREADY_ACTIVATED_THIS_TURN', abilityId: command.abilityId });
     }
 
     // NUEVO en H1.4 — ver §3.4 de esta spec para la justificación del orden.
@@ -347,7 +441,12 @@ export class CombatEngine {
     // (GDD §2.5: "como recién usada"). Siempre resetea a su CD BASE, nunca a un valor
     // parcial, sin importar cuánto tiempo llevara disponible.
     const def = this.abilityCooldowns.get(command.abilityId) as AbilityCooldownDefinition;
+    const cooldownBeforeThisActivation = this.remainingCooldowns.get(command.abilityId) ?? 0; // NUEVO H1.14
     this.remainingCooldowns.set(command.abilityId, def.baseCooldown);
+
+    // NUEVO H1.14
+    this.actionsTakenThisTurn += 1;
+    this.abilityIdsActivatedThisTurn.add(command.abilityId);
 
     const events: CombatEvent[] = [];
 
@@ -361,18 +460,62 @@ export class CombatEngine {
     events.push(activated);
     this.eventBus.emit(activated);
 
+    // NUEVO H1.14 — captura "antes" para el log de reversión de Contratiempo, SOLO si
+    // side === 'ENEMY' (ver spec §0.4).
+    let effectLogEntry: UndoableEnemyActionLogEntry['effect'] | undefined;
+
     // NUEVO H1.6 — se resuelve el efecto (si lo hay) INMEDIATAMENTE después de
     // ABILITY_ACTIVATED, y ANTES de comprobar si el pool quedó vacío (orden elegido
     // para que el efecto de ESTA activación siempre aparezca antes que un eventual
     // relanzado de pool causado por ella).
     const effectDef = this.abilityEffects.get(command.abilityId);
     if (effectDef) {
-      const effectEvent =
-        effectDef.kind === 'ATTACK'
-          ? this.applyAttackEffect(command, effectDef, nucleo)
-          : this.applyPlotEffect(command, effectDef);
-      events.push(effectEvent);
-      this.eventBus.emit(effectEvent);
+      if (effectDef.kind === 'ATTACK') {
+        const leaderDamageBefore = this.leaderDamage;
+        const leaderShieldBefore = this.leaderShield;
+        const effectEvent = this.applyAttackEffect(command, effectDef, nucleo);
+        events.push(effectEvent);
+        this.eventBus.emit(effectEvent);
+        effectLogEntry = {
+          kind: 'ATTACK',
+          leaderDamageBefore,
+          leaderDamageAfter: this.leaderDamage,
+          leaderShieldBefore,
+          leaderShieldAfter: this.leaderShield,
+        };
+      } else {
+        const scenarioPlotBefore = this.scenarioPlot;
+        const effectEvent = this.applyPlotEffect(command, effectDef);
+        events.push(effectEvent);
+        this.eventBus.emit(effectEvent);
+        effectLogEntry = { kind: 'PLOT', scenarioPlotBefore, scenarioPlotAfter: this.scenarioPlot };
+      }
+    }
+
+    // NUEVO H1.14
+    if (command.side === 'ENEMY') {
+      this.currentEnemyTurnLog.push({
+        abilityId: command.abilityId,
+        sourceId: command.sourceId,
+        cooldownBefore: cooldownBeforeThisActivation,
+        ...(effectLogEntry ? { effect: effectLogEntry } : {}),
+      });
+    }
+
+    // NUEVO H1.14 — Combo (GDD §2.6, ver spec §0.2). Se evalúa DESPUÉS del efecto para que
+    // COMBO_TRIGGERED sea el último evento de esta activación.
+    if (this.abilityCombo.has(command.abilityId) && !this.comboBonusGrantedThisTurn) {
+      this.comboBonusGrantedThisTurn = true;
+      this.actionsAllowedThisTurn += COMBO_MAX_BONUS_ACTIONS_PER_TURN;
+      const comboEvent: CombatEvent = {
+        type: 'COMBO_TRIGGERED',
+        abilityId: command.abilityId,
+        side: command.side,
+        sourceId: command.sourceId,
+        actionsAllowedThisTurn: this.actionsAllowedThisTurn,
+      };
+      events.push(comboEvent);
+      this.eventBus.emit(comboEvent);
     }
 
     if (this.nucleoPool.length === 0) {
@@ -419,6 +562,103 @@ export class CombatEngine {
     events.push(cooldownsTicked);
     this.eventBus.emit(cooldownsTicked);
 
+    // NUEVO H1.14 — reinicia el conteo de acciones para el lado que RECIBE el turno
+    // (GDD §2.1/§3.4): el bonus de Combo NUNCA persiste entre turnos (GDD §2.6: "este turno").
+    this.actionsTakenThisTurn = 0;
+    this.actionsAllowedThisTurn = baseActionsForSide(this.turnOwner);
+    this.comboBonusGrantedThisTurn = false;
+    this.abilityIdsActivatedThisTurn = new Set();
+
+    // NUEVO H1.14 — ventana de Contratiempo (GDD §2.7, "1 turno atrás"; ver spec §0.4).
+    if (previousTurnOwner === 'LEADER') {
+      // El Líder ya tuvo su oportunidad de jugar Contratiempo sobre el turno de Enemigo
+      // anterior; esa ventana se cierra ahora, sin importar si se usó o no.
+      this.previousEnemyTurnLog = [];
+      this.currentEnemyTurnLog = [];
+    } else {
+      // previousTurnOwner === 'ENEMY': se congela lo acumulado durante SU turno como la
+      // ventana disponible para el próximo turno de Líder.
+      this.previousEnemyTurnLog = this.currentEnemyTurnLog;
+      this.currentEnemyTurnLog = [];
+    }
+
+    return ok(events);
+  }
+
+  private handlePlayContratiempo(
+    command: Extract<CombatCommand, { type: 'PLAY_CONTRATIEMPO' }>
+  ): CombatCommandResult {
+    const def = this.contratiempoCards.get(command.cardId);
+    if (!def) {
+      return err({ code: 'CONTRATIEMPO_CARD_UNKNOWN', cardId: command.cardId });
+    }
+
+    // Contratiempo es exclusivo del Líder (GDD §2.7) — ver comentario en types/commands.ts.
+    if (this.turnOwner !== 'LEADER') {
+      return err({ code: 'NOT_YOUR_TURN', expected: 'LEADER', actual: this.turnOwner });
+    }
+
+    if (this.actionsTakenThisTurn >= this.actionsAllowedThisTurn) {
+      return err({
+        code: 'NO_ACTIONS_REMAINING',
+        side: this.turnOwner,
+        actionsTaken: this.actionsTakenThisTurn,
+        actionsAllowed: this.actionsAllowedThisTurn,
+      });
+    }
+
+    if (this.leaderEnergy < def.energyCost) {
+      return err({
+        code: 'CONTRATIEMPO_INSUFFICIENT_ENERGY',
+        cardId: command.cardId,
+        required: def.energyCost,
+        available: this.leaderEnergy,
+      });
+    }
+
+    if (this.previousEnemyTurnLog.length === 0) {
+      return err({ code: 'CONTRATIEMPO_NOTHING_TO_UNDO', cardId: command.cardId });
+    }
+
+    // Mutación.
+    this.leaderEnergy -= def.energyCost;
+    this.actionsTakenThisTurn += 1;
+
+    const revertedEntries = [...this.previousEnemyTurnLog];
+    for (const entry of revertedEntries) {
+      if (def.undoScope === 'FULL_TURN') {
+        this.remainingCooldowns.set(entry.abilityId, entry.cooldownBefore);
+      }
+      if (!entry.effect) continue;
+      if (entry.effect.kind === 'ATTACK') {
+        // El daño SIEMPRE se revierte, en ambos alcances — GDD: "algunas revierten solo
+        // el daño" ya implica que el daño se revierte también en FULL_TURN.
+        this.leaderDamage = entry.effect.leaderDamageBefore;
+        this.leaderShield = entry.effect.leaderShieldBefore;
+      } else if (def.undoScope === 'FULL_TURN') {
+        // Trama SOLO se revierte en alcance FULL_TURN — DAMAGE_ONLY nunca la toca.
+        this.scenarioPlot = entry.effect.scenarioPlotBefore;
+      }
+    }
+
+    // GDD §2.7: "Lo cancelado se descarta" — consumo de un solo uso, ver spec §0.4.
+    this.previousEnemyTurnLog = [];
+
+    const playedEvent: CombatEvent = {
+      type: 'CONTRATIEMPO_PLAYED',
+      cardId: command.cardId,
+      sourceId: command.sourceId,
+      undoScope: def.undoScope,
+      energySpent: def.energyCost,
+      leaderEnergyAfter: this.leaderEnergy,
+      revertedEntries,
+      leaderDamageAfter: this.leaderDamage,
+      leaderShieldAfter: this.leaderShield,
+      scenarioPlotAfter: this.scenarioPlot,
+    };
+    const events = [playedEvent];
+    this.eventBus.emit(playedEvent);
+
     return ok(events);
   }
 
@@ -434,6 +674,14 @@ export class CombatEngine {
       leaderDamage: this.leaderDamage, // NUEVO H1.6
       leaderShield: this.leaderShield, // NUEVO H1.6
       scenarioPlot: this.scenarioPlot, // NUEVO H1.6
+      leaderEnergy: this.leaderEnergy, // NUEVO H1.14
+      actions: {
+        side: this.turnOwner,
+        actionsTaken: this.actionsTakenThisTurn,
+        actionsAllowed: this.actionsAllowedThisTurn,
+        comboBonusGranted: this.comboBonusGrantedThisTurn,
+      }, // NUEVO H1.14
+      undoableLastEnemyTurn: [...this.previousEnemyTurnLog], // NUEVO H1.14
     };
   }
 }

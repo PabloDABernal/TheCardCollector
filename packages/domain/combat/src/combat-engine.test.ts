@@ -153,12 +153,11 @@ describe('CombatEngine — gasto de Núcleo', () => {
     const second = engine.dispatch(command);
     expect(isErr(second)).toBe(true);
     if (isErr(second)) {
-      // H1.4: la 2ª activación ya está en cooldown, PERO el motor sigue rechazando
-      // primero por NUCLEO_NOT_FOUND si el nucleoInstanceId ya fue consumido — en este
-      // caso concreto, la validación de ABILITY_ON_COOLDOWN se dispara ANTES que la
-      // de NUCLEO_NOT_FOUND (ver orden en §3.4 de la spec), así que el código esperado
-      // cambia respecto a H1.3.
-      expect((second.error as CombatCommandError).code).toBe('ABILITY_ON_COOLDOWN');
+      // H1.14: el nuevo orden de validación intercepta la 2ª activación de la MISMA
+      // abilityId dentro del mismo turno con ABILITY_ALREADY_ACTIVATED_THIS_TURN, ANTES
+      // de llegar al chequeo de ABILITY_ON_COOLDOWN (ver spec H1.14 §0.3/§3.4). Antes de
+      // H1.14 este test esperaba 'ABILITY_ON_COOLDOWN'.
+      expect((second.error as CombatCommandError).code).toBe('ABILITY_ALREADY_ACTIVATED_THIS_TURN');
     }
   });
 

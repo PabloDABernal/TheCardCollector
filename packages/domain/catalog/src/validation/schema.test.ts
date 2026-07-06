@@ -171,6 +171,40 @@ describe('parseCardDefinition', () => {
     const raw = cardRaw({ keywords: [{ keyword: 'ARROLLAR', amount: 1 }] });
     expect(() => parseCardDefinition(raw, 'cards[0]')).toThrow();
   });
+
+  // ---------------------------------------------------------------------------
+  // NUEVO H1.14 — validación cruzada CONTRATIEMPO ↔ keyword de alcance (spec §0.5/§6.2)
+  // ---------------------------------------------------------------------------
+
+  it('type CONTRATIEMPO con keyword DESHACER_DANO → ok', () => {
+    const raw = cardRaw({ type: 'CONTRATIEMPO', keywords: [{ keyword: 'DESHACER_DANO' }] });
+    const result = parseCardDefinition(raw, 'cards[0]');
+    expect(result.keywords).toEqual([{ keyword: 'DESHACER_DANO' }]);
+  });
+
+  it('type CONTRATIEMPO con keyword DESHACER_TURNO → ok', () => {
+    const raw = cardRaw({ type: 'CONTRATIEMPO', keywords: [{ keyword: 'DESHACER_TURNO' }] });
+    const result = parseCardDefinition(raw, 'cards[0]');
+    expect(result.keywords).toEqual([{ keyword: 'DESHACER_TURNO' }]);
+  });
+
+  it('type CONTRATIEMPO sin ninguna keyword de alcance → lanza', () => {
+    const raw = cardRaw({ type: 'CONTRATIEMPO', keywords: [{ keyword: 'NEUTRO' }] });
+    expect(() => parseCardDefinition(raw, 'cards[0]')).toThrow();
+  });
+
+  it('type CONTRATIEMPO con las dos keywords de alcance a la vez → lanza', () => {
+    const raw = cardRaw({
+      type: 'CONTRATIEMPO',
+      keywords: [{ keyword: 'DESHACER_DANO' }, { keyword: 'DESHACER_TURNO' }],
+    });
+    expect(() => parseCardDefinition(raw, 'cards[0]')).toThrow();
+  });
+
+  it('keyword DESHACER_DANO en una carta type EVENTO (no CONTRATIEMPO) → lanza', () => {
+    const raw = cardRaw({ type: 'EVENTO', keywords: [{ keyword: 'DESHACER_DANO' }] });
+    expect(() => parseCardDefinition(raw, 'cards[0]')).toThrow();
+  });
 });
 
 // -----------------------------------------------------------------------------

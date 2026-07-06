@@ -1,6 +1,8 @@
 import type { NucleoInstance } from './nucleo';
 import type { TurnState } from './turn';
 import type { AbilityCooldownSnapshot } from './cooldown';
+import type { ActionsStateSnapshot } from './action';
+import type { UndoableEnemyActionLogEntry } from './contratiempo';
 
 /**
  * Slice de H1.3 de `CombatStateSnapshot` (architecture_stack.md §2.2). Historias
@@ -47,4 +49,16 @@ export interface CombatStateSnapshot {
    * Escenario, no al Enemigo (decisions.md) — el propio nombre del campo lo refleja.
    */
   readonly scenarioPlot: number;
+
+  /** NUEVO H1.14. */
+  readonly leaderEnergy: number;
+
+  /** NUEVO H1.14. Acciones del `turnOwner` ACTUAL. */
+  readonly actions: ActionsStateSnapshot;
+
+  /**
+   * NUEVO H1.14. Ventana de Contratiempo vigente AHORA MISMO (vacía si no aplica — ni
+   * hay turno de Enemigo previo, ni ya se jugó un Contratiempo este ciclo). Ver spec §0.4.
+   */
+  readonly undoableLastEnemyTurn: readonly UndoableEnemyActionLogEntry[];
 }

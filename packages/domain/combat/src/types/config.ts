@@ -1,7 +1,8 @@
-import type { RandomSource, AbilityId, CoreCostRequirement } from '@collector/domain-shared';
+import type { RandomSource, AbilityId, CardId, CoreCostRequirement } from '@collector/domain-shared';
 import type { CombatSide } from './turn';
 import type { AbilityCooldownDefinition } from './cooldown';
 import type { AbilityEffectDefinition } from './ability-effect';
+import type { ContratiempoCardDefinition } from './contratiempo';
 
 export interface CombatEngineConfig {
   readonly randomSource: RandomSource;
@@ -49,4 +50,21 @@ export interface CombatEngineConfig {
    * genere en runtime (contenido futuro, no bloqueante — ver spec §0.1).
    */
   readonly initialLeaderShield?: number;
+
+  /**
+   * NUEVO H1.14. Habilidades (siempre `side: 'LEADER'`, validado en el constructor —
+   * ver spec §0.2) que generan Combo al activarse con éxito. Default: `Set` vacío.
+   */
+  readonly abilityCombo?: ReadonlySet<AbilityId>;
+
+  /**
+   * NUEVO H1.14. Cartas CONTRATIEMPO jugables vía `PLAY_CONTRATIEMPO`. Default: `Map` vacío.
+   */
+  readonly contratiempoCards?: ReadonlyMap<CardId, ContratiempoCardDefinition>;
+
+  /**
+   * NUEVO H1.14. Energía inicial del Líder (decisions.md: "1"). Entero en
+   * `[0, LEADER_ENERGY_MAX]`; el constructor lanza si está fuera de rango.
+   */
+  readonly initialLeaderEnergy?: number;
 }
