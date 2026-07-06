@@ -4,6 +4,7 @@
     { "path": "packages/domain/shared" },
     { "path": "packages/domain/catalog" },
     { "path": "packages/domain/combat" },
-    { "path": "packages/data" }
+    { "path": "packages/data" },
+    { "path": "packages/cli" }
   ]
 }

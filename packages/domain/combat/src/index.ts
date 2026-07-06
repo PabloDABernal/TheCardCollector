@@ -20,3 +20,4 @@ export * from './types/minion'; // NUEVO — H1.16
 export * from './minion-ai'; // NUEVO — H1.16
 export * from './types/leader-state'; // NUEVO — H1.17
 export * from './combat-engine';
+export * from './catalog-adapter'; // NUEVO — H1.19
