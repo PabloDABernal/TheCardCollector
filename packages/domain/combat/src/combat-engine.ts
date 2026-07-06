@@ -36,6 +36,8 @@ import type {
 import type { AllyCardDefinition, AllyInPlay } from './types/ally'; // NUEVO H1.15
 import type { MinionDefinition, MinionDefinitionId, MinionInPlay } from './types/minion'; // NUEVO H1.16
 import { poolHasValidNucleo, decideEnemyNucleoToSpend, derivePlayerColorsFromLeaderAbilities } from './enemy-ai'; // NUEVO H1.16, reusa H1.7
+import type { PhaseDefinition, PhaseChangeCondition } from '@collector/domain-catalog'; // NUEVO H1.17 — ver spec H1.17 §0.1
+import { LEADER_LEVEL_BASE, LEADER_LEVEL_UPS_MAX } from './types/leader-state'; // NUEVO H1.17
 
 /**
  * NUEVO H1.16 — fuente mínima común para armar `LEADER_DAMAGED`/`ALLY_DAMAGED`/
@@ -96,6 +98,17 @@ export class CombatEngine {
   private minionActionResolvedThisEnemyTurn: boolean;
   private minionInstanceIdCounter: number;
 
+  // NUEVO H1.17 — ver spec H1.17 §0.1/§0.3.
+  private readonly enemyPhases: readonly PhaseDefinition[];
+  private readonly scenarioPhases: readonly PhaseDefinition[];
+  private readonly enemyMaxHealth: number | undefined;
+  private enemyPhaseIndex: number; // 0-based, índice dentro de enemyPhases
+  private scenarioPhaseIndex: number; // 0-based, índice dentro de scenarioPhases
+  private enemyDamage: number; // "dato en reposo", ver §0.3
+
+  // NUEVO H1.17 — ver spec §0.6. `level` se deriva de este único contador.
+  private leaderLevelUpsSpent: number;
+
   constructor(config: CombatEngineConfig) {
     this.randomSource = config.randomSource;
     this.abilityCoreCosts = config.abilityCoreCosts;
@@ -148,6 +161,24 @@ export class CombatEngine {
     this.minionsInPlay = [];
     this.minionActionResolvedThisEnemyTurn = false;
     this.minionInstanceIdCounter = 0;
+
+    // NUEVO H1.17 — ver spec H1.17 §0.1/§0.2/§0.3. Orden respecto a los campos de
+    // H1.14/H1.15/H1.16 irrelevante, sin dependencias cruzadas.
+    this.enemyPhases = config.enemyPhases ?? [];
+    this.scenarioPhases = config.scenarioPhases ?? [];
+    this.enemyMaxHealth = config.enemyMaxHealth;
+    this.validateEnemyPhasesConfig();
+    this.validateScenarioPhasesConfig();
+    this.enemyPhaseIndex = 0;
+    this.scenarioPhaseIndex = 0;
+
+    const initialEnemyDamage = config.initialEnemyDamage ?? 0;
+    this.validateInitialEnemyDamage(initialEnemyDamage);
+    this.enemyDamage = initialEnemyDamage;
+
+    const initialLevelUpsSpent = config.initialLeaderLevelUpsSpent ?? 0;
+    this.validateInitialLeaderLevelUpsSpent(initialLevelUpsSpent);
+    this.leaderLevelUpsSpent = initialLevelUpsSpent;
 
     const initialEnergy = config.initialLeaderEnergy ?? LEADER_ENERGY_INITIAL_DEFAULT;
     this.validateInitialLeaderEnergy(initialEnergy);
@@ -370,6 +401,83 @@ export class CombatEngine {
     }
   }
 
+  /**
+   * NUEVO H1.17. Invariantes de `enemyPhases` — mismo estilo defensivo que
+   * `validateAbilityCooldownsConfig`; revalida localmente lo que
+   * `parseEnemyDefinition` ya garantiza en origen (ver spec H1.17 §3.2).
+   */
+  private validateEnemyPhasesConfig(): void {
+    if (this.enemyPhases.length === 0) return; // sin fases = sin tracking, válido (§0.2)
+
+    const phaseNumbers = this.enemyPhases.map((p) => p.phaseNumber);
+    const expected = phaseNumbers.map((_, i) => i + 1);
+    if (phaseNumbers.some((n, i) => n !== expected[i])) {
+      throw new Error(
+        `CombatEngine: enemyPhases.phaseNumber debe ser una secuencia 1..N sin huecos ni duplicados, recibido [${phaseNumbers.join(', ')}]`
+      );
+    }
+
+    const needsMaxHealth = this.enemyPhases.some(
+      (p) => p.changeCondition.kind === 'HEALTH_BELOW_PERCENT'
+    );
+    if (needsMaxHealth && this.enemyMaxHealth === undefined) {
+      throw new Error(
+        'CombatEngine: enemyMaxHealth es obligatorio cuando enemyPhases incluye HEALTH_BELOW_PERCENT'
+      );
+    }
+    if (
+      this.enemyMaxHealth !== undefined &&
+      (!Number.isInteger(this.enemyMaxHealth) || this.enemyMaxHealth <= 0 || this.enemyMaxHealth > 100)
+    ) {
+      throw new Error(
+        `CombatEngine: enemyMaxHealth debe ser un entero en (0, 100] (GDD §3.4, "ningún enemigo supera 100HP"), recibido ${this.enemyMaxHealth}`
+      );
+    }
+  }
+
+  /**
+   * NUEVO H1.17. Invariantes de `scenarioPhases` — el Escenario no tiene vida, por lo
+   * que `HEALTH_BELOW_PERCENT` no es una condición válida aquí (ver spec H1.17 §3.2).
+   */
+  private validateScenarioPhasesConfig(): void {
+    if (this.scenarioPhases.length === 0) return;
+
+    const phaseNumbers = this.scenarioPhases.map((p) => p.phaseNumber);
+    const expected = phaseNumbers.map((_, i) => i + 1);
+    if (phaseNumbers.some((n, i) => n !== expected[i])) {
+      throw new Error(
+        `CombatEngine: scenarioPhases.phaseNumber debe ser una secuencia 1..N sin huecos ni duplicados, recibido [${phaseNumbers.join(', ')}]`
+      );
+    }
+
+    if (this.scenarioPhases.some((p) => p.changeCondition.kind === 'HEALTH_BELOW_PERCENT')) {
+      throw new Error(
+        'CombatEngine: scenarioPhases no admite HEALTH_BELOW_PERCENT — el Escenario no tiene vida (GDD §3.6)'
+      );
+    }
+  }
+
+  /** NUEVO H1.17 — ver spec §0.3, mismo estilo que `validateInitialLeaderShield`. */
+  private validateInitialEnemyDamage(value: number): void {
+    if (!Number.isInteger(value) || value < 0) {
+      throw new Error(`CombatEngine: initialEnemyDamage debe ser un entero >= 0, recibido ${value}`);
+    }
+    if (this.enemyMaxHealth !== undefined && value > this.enemyMaxHealth) {
+      throw new Error(
+        `CombatEngine: initialEnemyDamage (${value}) no puede exceder enemyMaxHealth (${this.enemyMaxHealth})`
+      );
+    }
+  }
+
+  /** NUEVO H1.17 — ver spec §0.6. */
+  private validateInitialLeaderLevelUpsSpent(value: number): void {
+    if (!Number.isInteger(value) || value < 0 || value > LEADER_LEVEL_UPS_MAX) {
+      throw new Error(
+        `CombatEngine: initialLeaderLevelUpsSpent debe ser un entero entre 0 y ${LEADER_LEVEL_UPS_MAX}, recibido ${value}`
+      );
+    }
+  }
+
   /** Ver spec H1.14 §0 nota de estado del repo — mismo estilo que validateInitialLeaderShield (H1.6). */
   private validateInitialLeaderEnergy(value: number): void {
     if (!Number.isInteger(value) || value < 0 || value > LEADER_ENERGY_MAX) {
@@ -569,6 +677,92 @@ export class CombatEngine {
       appliedDelta,
       scenarioPlotAfter: this.scenarioPlot,
     };
+  }
+
+  /**
+   * NUEVO H1.17. Evalúa la condición de cambio de fase de `condition` contra el estado
+   * actual del motor (ver spec H1.17 §0.3).
+   */
+  private isPhaseChangeConditionMet(condition: PhaseChangeCondition): boolean {
+    switch (condition.kind) {
+      case 'TURN_COUNT_AT_LEAST':
+        return this.turnNumber >= condition.turn;
+      case 'SCENARIO_PLOT_AT_LEAST':
+        return this.scenarioPlot >= condition.amount;
+      case 'HEALTH_BELOW_PERCENT': {
+        const maxHealth = this.enemyMaxHealth as number; // garantizado por validateEnemyPhasesConfig
+        const remainingPercent = ((maxHealth - this.enemyDamage) / maxHealth) * 100;
+        return remainingPercent <= condition.percent;
+      }
+    }
+  }
+
+  /**
+   * NUEVO H1.17. Intenta avanzar la fase de `source` mientras la condición de la fase
+   * ACTUAL se cumpla y haya una fase siguiente (bucle genérico, no asume número de
+   * fases — ver spec H1.17 §0.3). Emite un `PHASE_CHANGED` por cada transición y llama
+   * a `tryGrantLevelUp` inmediatamente después de cada uno.
+   */
+  private tryAdvancePhase(source: 'ENEMY' | 'SCENARIO', events: CombatEvent[]): void {
+    const phases = source === 'ENEMY' ? this.enemyPhases : this.scenarioPhases;
+
+    let index = source === 'ENEMY' ? this.enemyPhaseIndex : this.scenarioPhaseIndex;
+    while (index < phases.length - 1) {
+      const condition = (phases[index] as PhaseDefinition).changeCondition;
+      if (!this.isPhaseChangeConditionMet(condition)) break;
+
+      const fromPhaseNumber = (phases[index] as PhaseDefinition).phaseNumber;
+      index += 1;
+      const toPhaseNumber = (phases[index] as PhaseDefinition).phaseNumber;
+
+      if (source === 'ENEMY') {
+        this.enemyPhaseIndex = index;
+      } else {
+        this.scenarioPhaseIndex = index;
+      }
+
+      const phaseChanged: CombatEvent = {
+        type: 'PHASE_CHANGED',
+        source,
+        fromPhaseNumber,
+        toPhaseNumber,
+      };
+      events.push(phaseChanged);
+      this.eventBus.emit(phaseChanged);
+
+      this.tryGrantLevelUp(source, events);
+    }
+  }
+
+  /**
+   * NUEVO H1.17. Registra un Level-Up si todavía no se alcanzó el tope (ver spec
+   * H1.17 §0.4/§0.5). No aplica ningún `LevelUpEffectSpec` — el motor solo cuenta.
+   */
+  private tryGrantLevelUp(source: 'ENEMY' | 'SCENARIO', events: CombatEvent[]): void {
+    if (this.leaderLevelUpsSpent >= LEADER_LEVEL_UPS_MAX) {
+      return; // §0.5 — "no hace nada", sin evento, sin mutación
+    }
+
+    this.leaderLevelUpsSpent += 1;
+    const event: CombatEvent = {
+      type: 'LEADER_LEVELED_UP',
+      triggeredBy: source,
+      levelAfter: LEADER_LEVEL_BASE + this.leaderLevelUpsSpent,
+      levelUpsSpentAfter: this.leaderLevelUpsSpent,
+    };
+    events.push(event);
+    this.eventBus.emit(event);
+  }
+
+  /**
+   * NUEVO H1.17. Punto único de evaluación llamado tras cualquier mutación de
+   * `turnNumber`/`scenarioPlot`/`enemyDamage` (ver spec H1.17 §0.3, "puntos de
+   * evaluación"). Enemigo y Escenario se evalúan de forma independiente y secuencial,
+   * Enemigo primero.
+   */
+  private evaluateAndApplyPhaseChanges(events: CombatEvent[]): void {
+    this.tryAdvancePhase('ENEMY', events);
+    this.tryAdvancePhase('SCENARIO', events);
   }
 
   /**
@@ -778,6 +972,9 @@ export class CombatEngine {
       this.eventBus.emit(refilled);
     }
 
+    // NUEVO H1.17 — ver spec §0.3, punto de evaluación 2.
+    this.evaluateAndApplyPhaseChanges(events);
+
     return ok(events);
   }
 
@@ -911,6 +1108,9 @@ export class CombatEngine {
       events.push(passiveEvent);
       this.eventBus.emit(passiveEvent);
     }
+
+    // NUEVO H1.17 — ver spec §0.3, punto de evaluación 1.
+    this.evaluateAndApplyPhaseChanges(events);
 
     return ok(events);
   }
@@ -1233,6 +1433,9 @@ export class CombatEngine {
       events.push(resolvedEvent);
       this.eventBus.emit(resolvedEvent);
 
+      // NUEVO H1.17 — ver spec §0.3, punto de evaluación 3 (rama SPECIAL_ACTION).
+      this.evaluateAndApplyPhaseChanges(events);
+
       return ok(events);
     }
 
@@ -1287,6 +1490,9 @@ export class CombatEngine {
       events.push(resolvedEvent);
       this.eventBus.emit(resolvedEvent);
 
+      // NUEVO H1.17 — ver spec §0.3, punto de evaluación 3 (rama PLANO_ATTACK).
+      this.evaluateAndApplyPhaseChanges(events);
+
       return ok(events);
     }
 
@@ -1319,6 +1525,25 @@ export class CombatEngine {
       alliesInPlay: [...this.alliesInPlay], // NUEVO H1.15
       activeDamageRedirectTargetId: this.activeDamageRedirectTargetId, // NUEVO H1.15
       minionsInPlay: [...this.minionsInPlay], // NUEVO H1.16
+      leaderState: {
+        level: LEADER_LEVEL_BASE + this.leaderLevelUpsSpent,
+        levelUpsSpent: this.leaderLevelUpsSpent,
+      }, // NUEVO H1.17
+      enemyPhase:
+        this.enemyPhases.length === 0
+          ? { phaseNumber: 0, totalPhases: 0 }
+          : {
+              phaseNumber: (this.enemyPhases[this.enemyPhaseIndex] as PhaseDefinition).phaseNumber,
+              totalPhases: this.enemyPhases.length,
+            }, // NUEVO H1.17
+      scenarioPhase:
+        this.scenarioPhases.length === 0
+          ? { phaseNumber: 0, totalPhases: 0 }
+          : {
+              phaseNumber: (this.scenarioPhases[this.scenarioPhaseIndex] as PhaseDefinition).phaseNumber,
+              totalPhases: this.scenarioPhases.length,
+            }, // NUEVO H1.17
+      enemyDamage: this.enemyDamage, // NUEVO H1.17
     };
   }
 }

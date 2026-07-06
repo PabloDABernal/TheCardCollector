@@ -6,6 +6,7 @@ import type { UndoableEnemyActionLogEntry } from './contratiempo';
 import type { AllyInPlay } from './ally';
 import type { MinionInPlay } from './minion';
 import type { CardInstanceId } from '@collector/domain-shared';
+import type { LeaderState } from './leader-state'; // NUEVO H1.17
 
 /**
  * Slice de H1.3 de `CombatStateSnapshot` (architecture_stack.md §2.2). Historias
@@ -77,4 +78,19 @@ export interface CombatStateSnapshot {
   /** NUEVO H1.16. Nunca se eliminan entradas (ver spec §0.1 — sin mecanismo de "matar"
    *  Secuaces en esta historia). Orden estable = orden de invocación. */
   readonly minionsInPlay: readonly MinionInPlay[];
+
+  /** NUEVO H1.17. `level` derivado de `levelUpsSpent` — ver spec H1.17 §0.6. */
+  readonly leaderState: LeaderState;
+
+  /** NUEVO H1.17. Fase activa del Enemigo ahora mismo. `totalPhases === 0` si
+   *  `CombatEngineConfig.enemyPhases` se omitió (sin tracking de fase para este lado). */
+  readonly enemyPhase: { readonly phaseNumber: number; readonly totalPhases: number };
+
+  /** NUEVO H1.17. Análogo para el Escenario. */
+  readonly scenarioPhase: { readonly phaseNumber: number; readonly totalPhases: number };
+
+  /** NUEVO H1.17. Daño acumulado sobre el Enemigo — "dato en reposo" hasta H1.18 (ver
+   *  spec §0.3): ningún comando de esta historia lo muta. Solo alimenta la evaluación
+   *  de `HEALTH_BELOW_PERCENT`. */
+  readonly enemyDamage: number;
 }

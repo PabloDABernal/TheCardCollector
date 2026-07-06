@@ -205,4 +205,34 @@ export type CombatEvent =
       readonly plotAmount: number;
       readonly leaderDamageAfter: number;
       readonly scenarioPlotAfter: number;
+    }
+  | {
+      /**
+       * NUEVO H1.17. Emitido cuando la fase ACTUAL de `source` (Enemigo o Escenario)
+       * completa su `changeCondition` (GDD §3.4/§3.6; decisions.md "checkpoint de cambio
+       * de fase"). Puede emitirse más de una vez en el mismo `dispatch()` para el mismo
+       * `source` si una única mutación encadena varias transiciones (contenido de 3+
+       * fases, ver spec H1.17 §0.3) y una vez más para el otro `source` si ambos cambian
+       * de fase a la vez (spec §0.3, "decisión 2"). Se emite SIEMPRE que la condición se
+       * cumple, incluso si el Level-Up correspondiente queda sin efecto por tope (§0.5).
+       */
+      readonly type: 'PHASE_CHANGED';
+      readonly source: 'ENEMY' | 'SCENARIO';
+      readonly fromPhaseNumber: number;
+      readonly toPhaseNumber: number;
+    }
+  | {
+      /**
+       * NUEVO H1.17. Emitido inmediatamente después del `PHASE_CHANGED` que lo disparó,
+       * únicamente si `levelUpsSpent < LEADER_LEVEL_UPS_MAX` en ese instante (GDD
+       * §4.3/§7.3, decisions.md "contador único por run"). El `LevelUpEffectSpec`
+       * concreto (`LeaderDefinition.levelUpOptions`) NO se selecciona ni aplica aquí —
+       * ver spec H1.17 §0.4, fuera de alcance explícito de esta historia. Si el tope ya
+       * se alcanzó, este evento simplemente no se emite (spec §0.5) — no hay variante de
+       * "skipped".
+       */
+      readonly type: 'LEADER_LEVELED_UP';
+      readonly triggeredBy: 'ENEMY' | 'SCENARIO';
+      readonly levelAfter: number;
+      readonly levelUpsSpentAfter: number;
     };

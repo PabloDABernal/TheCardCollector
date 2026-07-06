@@ -1,4 +1,5 @@
 import type { RandomSource, AbilityId, CardId, CoreCostRequirement } from '@collector/domain-shared';
+import type { PhaseDefinition } from '@collector/domain-catalog'; // NUEVO H1.17 — ver spec H1.17 §0.1
 import type { CombatSide } from './turn';
 import type { AbilityCooldownDefinition } from './cooldown';
 import type { AbilityEffectDefinition } from './ability-effect';
@@ -83,4 +84,45 @@ export interface CombatEngineConfig {
    * `specialActionAbilityId` (`validateMinionDefinitionsConfig`).
    */
   readonly minionDefinitions?: ReadonlyMap<MinionDefinitionId, MinionDefinition>;
+
+  /**
+   * NUEVO H1.17. Fases del Enemigo activo (GDD §3.4, `EnemyDefinition.phases`,
+   * `domain-catalog`, H1.8/H1.10 — reutilizado tal cual, ver spec H1.17 §0.1). Default
+   * `[]` (sin fases = ningún PHASE_CHANGED de origen ENEMY se emite nunca — ver §0.2).
+   * Si alguna entrada usa `changeCondition.kind === 'HEALTH_BELOW_PERCENT'`,
+   * `enemyMaxHealth` pasa a ser obligatorio (el constructor lanza si falta).
+   */
+  readonly enemyPhases?: readonly PhaseDefinition[];
+
+  /**
+   * NUEVO H1.17. Fases del Escenario activo (GDD §3.6, `ScenarioDefinition.phases`).
+   * Default `[]`. `HEALTH_BELOW_PERCENT` no es una condición válida aquí — ya bloqueado
+   * en origen por `parseScenarioDefinition` (H1.8); el constructor de `CombatEngine` lo
+   * revalida localmente por defensividad (ver spec §3.2).
+   */
+  readonly scenarioPhases?: readonly PhaseDefinition[];
+
+  /**
+   * NUEVO H1.17. Mirror de `EnemyDefinition.maxHealth` — SOLO necesario para evaluar
+   * `HEALTH_BELOW_PERCENT` (ver spec H1.17 §0.3). Obligatorio si y solo si alguna
+   * entrada de `enemyPhases` usa ese `changeCondition.kind`; el constructor lanza si
+   * falta en ese caso. Sin efecto alguno si ningún `enemyPhases` lo necesita.
+   */
+  readonly enemyMaxHealth?: number;
+
+  /**
+   * NUEVO H1.17. Valor inicial de `enemyDamage` (ver spec H1.17 §0.3 — "dato en
+   * reposo", mismo tratamiento que `initialLeaderShield`, H1.6). Default `0`. Entero en
+   * `[0, enemyMaxHealth]` (si `enemyMaxHealth` está definido; si no, solo se exige
+   * entero >= 0). Ningún comando de esta historia lo muta en runtime.
+   */
+  readonly initialEnemyDamage?: number;
+
+  /**
+   * NUEVO H1.17. Valor inicial de `levelUpsSpent` (decisions.md: "contador único por
+   * run" — permite que un combate posterior de la misma run arranque con Level-Ups ya
+   * ganados en un combate/descanso previo). Default `0`. Entero en `[0,
+   * LEADER_LEVEL_UPS_MAX]`; el constructor lanza si está fuera de rango.
+   */
+  readonly initialLeaderLevelUpsSpent?: number;
 }
