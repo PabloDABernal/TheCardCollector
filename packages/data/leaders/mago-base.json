@@ -1,0 +1,55 @@
+{
+  "id": "leader-mago-base",
+  "name": "Mago Base",
+  "baseAbilities": [
+    {
+      "id": "ability-mago-base-canalizar",
+      "name": "Canalizar",
+      "coreCost": { "kind": "ANY" },
+      "baseCooldown": 1
+    },
+    {
+      "id": "ability-mago-base-distorsion",
+      "name": "Distorsión",
+      "coreCost": { "kind": "COLOR", "colors": ["CONTROL"] },
+      "baseCooldown": 2,
+      "effect": { "kind": "PLOT", "amount": 1 }
+    },
+    {
+      "id": "ability-mago-base-barrera-arcana",
+      "name": "Barrera Arcana",
+      "coreCost": { "kind": "COLOR", "colors": ["CAOS"] },
+      "baseCooldown": 3
+    },
+    {
+      "id": "ability-mago-base-tormenta-arcana",
+      "name": "Tormenta Arcana",
+      "coreCost": { "kind": "COLOR", "colors": ["CONTROL", "CAOS"] },
+      "baseCooldown": 4,
+      "effect": { "kind": "PLOT", "amount": 2 }
+    }
+  ],
+  "cardPoolIds": [
+    "card-mago-base-01", "card-mago-base-02", "card-mago-base-03",
+    "card-mago-base-04", "card-mago-base-05", "card-mago-base-06",
+    "card-mago-base-07", "card-mago-base-08", "card-mago-base-09",
+    "card-mago-base-10"
+  ],
+  "levelUpOptions": [
+    {
+      "id": "lvlup-mago-base-01",
+      "description": "Distorsión cuesta 1 menos.",
+      "effect": { "op": "DECREASE_COST", "abilityId": "ability-mago-base-distorsion" }
+    },
+    {
+      "id": "lvlup-mago-base-02",
+      "description": "Tormenta Arcana pierde su contraefecto.",
+      "effect": { "op": "REMOVE_BACKLASH", "abilityId": "ability-mago-base-tormenta-arcana" }
+    },
+    {
+      "id": "lvlup-mago-base-03",
+      "description": "Tormenta Arcana mueve 1 punto adicional de Trama.",
+      "effect": { "op": "INCREASE_DAMAGE", "abilityId": "ability-mago-base-tormenta-arcana", "amount": 1 }
+    }
+  ]
+}

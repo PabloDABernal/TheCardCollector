@@ -1,0 +1,22 @@
+[
+  { "id": "card-soldado-base-01", "name": "Estocada", "type": "EVENTO", "cost": { "energy": 1 },
+    "keywords": [{ "keyword": "ATAQUE_MAS_X", "amount": 2 }, { "keyword": "UMBRAL" }] },
+  { "id": "card-soldado-base-02", "name": "Golpe Certero", "type": "EVENTO", "cost": { "energy": 2 },
+    "keywords": [{ "keyword": "ATAQUE_POR_X", "amount": 2 }] },
+  { "id": "card-soldado-base-03", "name": "Arremetida", "type": "EVENTO", "cost": { "energy": 2 },
+    "keywords": [{ "keyword": "ATAQUE_MAS_X", "amount": 3 }, { "keyword": "ARROLLAR" }] },
+  { "id": "card-soldado-base-04", "name": "Escudo de Guardia", "type": "EQUIPO", "cost": { "energy": 1 },
+    "keywords": [{ "keyword": "DEFENSA_X", "amount": 2 }] },
+  { "id": "card-soldado-base-05", "name": "Armadura Reforzada", "type": "EQUIPO", "cost": { "energy": 2 },
+    "keywords": [{ "keyword": "DEFENSA_X", "amount": 3 }, { "keyword": "NEUTRO" }] },
+  { "id": "card-soldado-base-06", "name": "Recluta Leal", "type": "ALIADO", "cost": { "energy": 2 },
+    "keywords": [{ "keyword": "DEFENSOR" }] },
+  { "id": "card-soldado-base-07", "name": "Veterano de Guerra", "type": "ALIADO", "cost": { "energy": 3 },
+    "keywords": [{ "keyword": "BERSERKER" }] },
+  { "id": "card-soldado-base-08", "name": "Contragolpe", "type": "CONTRATIEMPO", "cost": { "energy": 1 },
+    "keywords": [{ "keyword": "ATAQUE_MAS_X", "amount": 1 }] },
+  { "id": "card-soldado-base-09", "name": "Grito de Batalla", "type": "EVENTO", "cost": { "energy": 1 },
+    "keywords": [{ "keyword": "TRAMA_X", "amount": 1 }] },
+  { "id": "card-soldado-base-10", "name": "Combo Final", "type": "EVENTO", "cost": { "energy": 2 },
+    "keywords": [{ "keyword": "ATAQUE_MAS_X", "amount": 1 }, { "keyword": "COMBO" }] }
+]

@@ -1,0 +1,55 @@
+{
+  "id": "leader-soldado-base",
+  "name": "Soldado Base",
+  "baseAbilities": [
+    {
+      "id": "ability-soldado-base-guardia-firme",
+      "name": "Guardia Firme",
+      "coreCost": { "kind": "ANY" },
+      "baseCooldown": 1
+    },
+    {
+      "id": "ability-soldado-base-avance-agresivo",
+      "name": "Avance Agresivo",
+      "coreCost": { "kind": "COLOR", "colors": ["AGRESION"] },
+      "baseCooldown": 2,
+      "effect": { "kind": "PLOT", "amount": 1 }
+    },
+    {
+      "id": "ability-soldado-base-linea-defensiva",
+      "name": "Línea Defensiva",
+      "coreCost": { "kind": "COLOR", "colors": ["DEFENSA"] },
+      "baseCooldown": 3
+    },
+    {
+      "id": "ability-soldado-base-grito-de-guerra",
+      "name": "Grito de Guerra",
+      "coreCost": { "kind": "COLOR", "colors": ["AGRESION", "DEFENSA"] },
+      "baseCooldown": 4,
+      "effect": { "kind": "PLOT", "amount": 2 }
+    }
+  ],
+  "cardPoolIds": [
+    "card-soldado-base-01", "card-soldado-base-02", "card-soldado-base-03",
+    "card-soldado-base-04", "card-soldado-base-05", "card-soldado-base-06",
+    "card-soldado-base-07", "card-soldado-base-08", "card-soldado-base-09",
+    "card-soldado-base-10"
+  ],
+  "levelUpOptions": [
+    {
+      "id": "lvlup-soldado-base-01",
+      "description": "Avance Agresivo cuesta 1 menos.",
+      "effect": { "op": "DECREASE_COST", "abilityId": "ability-soldado-base-avance-agresivo" }
+    },
+    {
+      "id": "lvlup-soldado-base-02",
+      "description": "Grito de Guerra pierde su contraefecto.",
+      "effect": { "op": "REMOVE_BACKLASH", "abilityId": "ability-soldado-base-grito-de-guerra" }
+    },
+    {
+      "id": "lvlup-soldado-base-03",
+      "description": "Grito de Guerra mueve 1 punto adicional de Trama.",
+      "effect": { "op": "INCREASE_DAMAGE", "abilityId": "ability-soldado-base-grito-de-guerra", "amount": 1 }
+    }
+  ]
+}
