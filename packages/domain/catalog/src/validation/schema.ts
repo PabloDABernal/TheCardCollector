@@ -430,7 +430,7 @@ function parsePassiveEffect(raw: unknown, context: string): ScenarioPassiveEffec
   return { description: raw.description };
 }
 
-/** Exige >= 1 threshold y `atLeast` estrictamente ascendente sin repetidos, en el mismo
+/** Exige >= 3 thresholds y `atLeast` estrictamente ascendente sin repetidos, en el mismo
  *  orden del array (GDD §3.6: "efectos variables por umbrales escalados"; criterio de
  *  aceptación H1.11: "Trama con umbrales escalonados"). No exige ningún tamaño de paso
  *  concreto (+1, +2...) — eso es balance, no invariante de motor. */
