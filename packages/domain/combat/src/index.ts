@@ -15,4 +15,5 @@ export * from './enemy-ai'; // NUEVO — H1.7
 export * from './types/action'; // NUEVO — H1.14
 export * from './types/contratiempo'; // NUEVO — H1.14
 export * from './types/energy'; // NUEVO — H1.14
+export * from './types/ally'; // NUEVO — H1.15
 export * from './combat-engine';

@@ -3,6 +3,8 @@ import type { TurnState } from './turn';
 import type { AbilityCooldownSnapshot } from './cooldown';
 import type { ActionsStateSnapshot } from './action';
 import type { UndoableEnemyActionLogEntry } from './contratiempo';
+import type { AllyInPlay } from './ally';
+import type { CardInstanceId } from '@collector/domain-shared';
 
 /**
  * Slice de H1.3 de `CombatStateSnapshot` (architecture_stack.md §2.2). Historias
@@ -61,4 +63,13 @@ export interface CombatStateSnapshot {
    * hay turno de Enemigo previo, ni ya se jugó un Contratiempo este ciclo). Ver spec §0.4.
    */
   readonly undoableLastEnemyTurn: readonly UndoableEnemyActionLogEntry[];
+
+  /** NUEVO H1.15. Incluye Aliados muertos (`life === 0`, ver spec H1.15 §0.6) — filtrar
+   *  en el consumidor si se necesita solo "vivos". Orden estable = orden de entrada en mesa. */
+  readonly alliesInPlay: readonly AllyInPlay[];
+
+  /** NUEVO H1.15. Postura de redirección vigente ahora mismo (`null` = ninguna) — ver
+   *  spec H1.15 §0.3/§0.4. Puede apuntar a un Aliado que en la práctica será ignorado si
+   *  hay un Berserker vivo (consultar `alliesInPlay` para saberlo, igual que hace el motor). */
+  readonly activeDamageRedirectTargetId: CardInstanceId | null;
 }

@@ -1,4 +1,4 @@
-import type { AbilityId, CardId } from '@collector/domain-shared';
+import type { AbilityId, CardId, CardInstanceId } from '@collector/domain-shared';
 import type { NucleoInstance } from './nucleo';
 import type { CombatSide } from './turn';
 import type { AbilityCooldownSnapshot } from './cooldown';
@@ -116,4 +116,45 @@ export type CombatEvent =
       readonly leaderDamageAfter: number;
       readonly leaderShieldAfter: number;
       readonly scenarioPlotAfter: number;
+    }
+  | {
+      /** NUEVO H1.15. Único evento de un `PLAY_ALLY` exitoso. */
+      readonly type: 'ALLY_ENTERED_PLAY';
+      readonly cardId: CardId;
+      readonly sourceId: string;
+      readonly allyInstanceId: CardInstanceId;
+      readonly maxLife: number;
+      readonly isBerserker: boolean;
+      readonly leaderEnergyAfter: number;
+    }
+  | {
+      /**
+       * NUEVO H1.15. Emitido en vez de `LEADER_DAMAGED` cuando `resolveDamageTarget`
+       * (ver spec H1.15 §0.4) resuelve un Aliado como objetivo del golpe — nunca ambos a
+       * la vez para la misma activación (mismo espíritu que H1.6 "una habilidad nunca
+       * hace ambas cosas" — aquí, "un golpe nunca golpea a los dos objetivos a la vez").
+       */
+      readonly type: 'ALLY_DAMAGED';
+      readonly abilityId: AbilityId;
+      readonly sourceId: string;
+      readonly side: CombatSide;
+      readonly nucleoSpent: NucleoInstance;
+      readonly allyInstanceId: CardInstanceId;
+      readonly rawAmount: number;
+      readonly absorbedByAlly: number;
+      readonly allyLifeBefore: number;
+      readonly allyLifeAfter: number;
+      readonly allyDied: boolean;
+      /** Exceso sobre la vida del Aliado (`rawAmount - absorbedByAlly`), ANTES de decidir si pasa al Líder. */
+      readonly excess: number;
+      /** `excess` si la habilidad tiene `arrollar: true`, si no 0 — mismo criterio que `LEADER_DAMAGED.appliedDamage`. */
+      readonly appliedDamageToLeader: number;
+      readonly leaderDamageAfter: number;
+    }
+  | {
+      /** NUEVO H1.15. Único evento de un `SET_DAMAGE_REDIRECT` (siempre se acepta o falla, nunca ambos). */
+      readonly type: 'DAMAGE_REDIRECT_SET';
+      readonly targetAllyInstanceId: CardInstanceId | null;
+      /** Informativo: `true` si en este instante hay un Berserker vivo que va a ignorar este valor en la práctica (ver spec H1.15 §0.3/§0.4). */
+      readonly forcedByBerserker: boolean;
     };

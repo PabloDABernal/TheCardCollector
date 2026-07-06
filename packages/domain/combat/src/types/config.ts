@@ -3,6 +3,7 @@ import type { CombatSide } from './turn';
 import type { AbilityCooldownDefinition } from './cooldown';
 import type { AbilityEffectDefinition } from './ability-effect';
 import type { ContratiempoCardDefinition } from './contratiempo';
+import type { AllyCardDefinition } from './ally';
 
 export interface CombatEngineConfig {
   readonly randomSource: RandomSource;
@@ -67,4 +68,10 @@ export interface CombatEngineConfig {
    * `[0, LEADER_ENERGY_MAX]`; el constructor lanza si está fuera de rango.
    */
   readonly initialLeaderEnergy?: number;
+
+  /**
+   * NUEVO H1.15. Cartas ALIADO jugables vía `PLAY_ALLY`. Default: `Map` vacío. Resuelto
+   * externamente, igual patrón que `contratiempoCards` — ver spec H1.15 §0.1/§0.5.
+   */
+  readonly allyCards?: ReadonlyMap<CardId, AllyCardDefinition>;
 }

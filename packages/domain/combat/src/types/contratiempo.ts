@@ -1,4 +1,4 @@
-import type { AbilityId } from '@collector/domain-shared';
+import type { AbilityId, CardInstanceId } from '@collector/domain-shared';
 
 /** GDD §2.7: "Alcance según la carta: algunas revierten solo el daño [DAMAGE_ONLY],
  *  otras la carta de Dramaturgia entera [FULL_TURN]". */
@@ -34,10 +34,22 @@ export interface UndoableEnemyActionLogEntry {
   readonly effect?:
     | {
         readonly kind: 'ATTACK';
+        readonly target: 'LEADER';
         readonly leaderDamageBefore: number;
         readonly leaderDamageAfter: number;
         readonly leaderShieldBefore: number;
         readonly leaderShieldAfter: number;
+      }
+    | {
+        /** NUEVO H1.15 — ver spec H1.15 §0.7. */
+        readonly kind: 'ATTACK';
+        readonly target: 'ALLY';
+        readonly allyInstanceId: CardInstanceId;
+        readonly allyLifeBefore: number;
+        readonly allyLifeAfter: number;
+        /** Daño que además cayó sobre el Líder por derrame de Arrollar (0 si no hubo). */
+        readonly leaderDamageBefore: number;
+        readonly leaderDamageAfter: number;
       }
     | {
         readonly kind: 'PLOT';

@@ -29,6 +29,7 @@ const KEYWORD_IDS: readonly KeywordId[] = [
   'ATAQUE', 'ATAQUE_MAS_X', 'ATAQUE_POR_X', 'CAOS', 'TRAMA_X', 'DEFENSA_X',
   'UMBRAL', 'COMBO', 'ARROLLAR', 'DEFENSOR', 'BERSERKER', 'NEUTRO',
   'DESHACER_DANO', 'DESHACER_TURNO', // NUEVO H1.14
+  'VIDA_X', // NUEVO H1.15
 ];
 
 // ---------------------------------------------------------------------------
@@ -66,6 +67,22 @@ export function parseCardDefinition(raw: unknown, context: string): CardDefiniti
     fail(
       context,
       `keyword(s) ${scopeKeywords.map((k) => k.keyword).join(',')} solo son válidas en cartas type CONTRATIEMPO (GDD §2.7), pero esta carta es type ${String(raw.type)}`
+    );
+  }
+
+  // NUEVO H1.15 — GDD §3.7, ver spec §0.5: exactamente 1 VIDA_X si y solo si type === 'ALIADO'.
+  const lifeKeywords = keywords.filter((k) => k.keyword === 'VIDA_X');
+  if (raw.type === 'ALIADO') {
+    if (lifeKeywords.length !== 1) {
+      fail(
+        context,
+        `type ALIADO exige exactamente 1 keyword VIDA_X, encontradas ${lifeKeywords.length} (GDD §3.7)`
+      );
+    }
+  } else if (lifeKeywords.length > 0) {
+    fail(
+      context,
+      `keyword VIDA_X solo es válida en cartas type ALIADO (GDD §3.7), pero esta carta es type ${String(raw.type)}`
     );
   }
 

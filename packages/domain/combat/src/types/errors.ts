@@ -1,4 +1,4 @@
-import type { CoreCostRequirement, NucleoColor, NucleoInstanceId, AbilityId, CardId, Result } from '@collector/domain-shared';
+import type { CoreCostRequirement, NucleoColor, NucleoInstanceId, AbilityId, CardId, CardInstanceId, Result } from '@collector/domain-shared';
 import type { CombatEvent } from './events';
 import type { CombatSide } from './turn';
 
@@ -44,6 +44,18 @@ export type CombatCommandError =
        *  o la ventana ya se cerró (ver spec §0.4). */
       readonly code: 'CONTRATIEMPO_NOTHING_TO_UNDO';
       readonly cardId: CardId;
+    }
+  | { readonly code: 'ALLY_CARD_UNKNOWN'; readonly cardId: CardId }
+  | {
+      readonly code: 'ALLY_INSUFFICIENT_ENERGY';
+      readonly cardId: CardId;
+      readonly required: number;
+      readonly available: number;
+    }
+  | {
+      /** NUEVO H1.15. `targetAllyInstanceId` no corresponde a ningún Aliado vivo en mesa ahora mismo. */
+      readonly code: 'REDIRECT_TARGET_NOT_FOUND';
+      readonly targetAllyInstanceId: CardInstanceId;
     };
 
 /**

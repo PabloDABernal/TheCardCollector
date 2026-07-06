@@ -205,6 +205,34 @@ describe('parseCardDefinition', () => {
     const raw = cardRaw({ type: 'EVENTO', keywords: [{ keyword: 'DESHACER_DANO' }] });
     expect(() => parseCardDefinition(raw, 'cards[0]')).toThrow();
   });
+
+  // ---------------------------------------------------------------------------
+  // NUEVO H1.15 — validación cruzada ALIADO ↔ keyword VIDA_X (spec §0.5/§6.2)
+  // ---------------------------------------------------------------------------
+
+  it('type ALIADO con keyword VIDA_X → ok', () => {
+    const raw = cardRaw({ type: 'ALIADO', keywords: [{ keyword: 'VIDA_X', amount: 5 }] });
+    const result = parseCardDefinition(raw, 'cards[0]');
+    expect(result.keywords).toEqual([{ keyword: 'VIDA_X', amount: 5 }]);
+  });
+
+  it('type ALIADO sin keyword VIDA_X → lanza', () => {
+    const raw = cardRaw({ type: 'ALIADO', keywords: [{ keyword: 'NEUTRO' }] });
+    expect(() => parseCardDefinition(raw, 'cards[0]')).toThrow();
+  });
+
+  it('type ALIADO con 2 keywords VIDA_X → lanza', () => {
+    const raw = cardRaw({
+      type: 'ALIADO',
+      keywords: [{ keyword: 'VIDA_X', amount: 5 }, { keyword: 'VIDA_X', amount: 3 }],
+    });
+    expect(() => parseCardDefinition(raw, 'cards[0]')).toThrow();
+  });
+
+  it('keyword VIDA_X en una carta type EVENTO (no ALIADO) → lanza', () => {
+    const raw = cardRaw({ type: 'EVENTO', keywords: [{ keyword: 'VIDA_X', amount: 5 }] });
+    expect(() => parseCardDefinition(raw, 'cards[0]')).toThrow();
+  });
 });
 
 // -----------------------------------------------------------------------------

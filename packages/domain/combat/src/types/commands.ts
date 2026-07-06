@@ -1,4 +1,4 @@
-import type { AbilityId, CardId, NucleoInstanceId } from '@collector/domain-shared';
+import type { AbilityId, CardId, CardInstanceId, NucleoInstanceId } from '@collector/domain-shared';
 import type { CombatSide } from './turn';
 
 /**
@@ -35,4 +35,22 @@ export type CombatCommand =
       readonly type: 'PLAY_CONTRATIEMPO';
       readonly cardId: CardId;
       readonly sourceId: string;
+    }
+  | {
+      /**
+       * NUEVO H1.15. Bajar una carta ALIADO de la mano (GDD §2.2 punto 4). Exclusivo del
+       * Líder (mismo motivo que PLAY_CONTRATIEMPO: el Enemigo no tiene mano, GDD §3.4).
+       * Consume 1 acción + Energía — ver spec H1.15 §0.2.
+       */
+      readonly type: 'PLAY_ALLY';
+      readonly cardId: CardId;
+      readonly sourceId: string;
+    }
+  | {
+      /**
+       * NUEVO H1.15. Declara/retira el Aliado al que se redirige el daño de Ataque
+       * entrante — GDD §3.3/§3.7, "sin gastar acción". Ver spec H1.15 §0.3/§0.4.
+       */
+      readonly type: 'SET_DAMAGE_REDIRECT';
+      readonly targetAllyInstanceId: CardInstanceId | null;
     };

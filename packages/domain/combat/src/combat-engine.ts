@@ -10,6 +10,7 @@ import {
   type RandomSource,
   type AbilityId,
   type CardId,
+  type CardInstanceId,
   type CoreCostRequirement,
 } from '@collector/domain-shared';
 import type { CombatCommand } from './types/commands';
@@ -32,6 +33,7 @@ import type {
   ContratiempoCardDefinition,
   UndoableEnemyActionLogEntry,
 } from './types/contratiempo'; // NUEVO H1.14
+import type { AllyCardDefinition, AllyInPlay } from './types/ally'; // NUEVO H1.15
 
 export class CombatEngine {
   private readonly randomSource: RandomSource;
@@ -67,6 +69,12 @@ export class CombatEngine {
 
   private currentEnemyTurnLog: UndoableEnemyActionLogEntry[];
   private previousEnemyTurnLog: UndoableEnemyActionLogEntry[];
+
+  // NUEVO H1.15 — ver spec H1.15 §0.1/§0.2/§0.3.
+  private readonly allyCards: ReadonlyMap<CardId, AllyCardDefinition>;
+  private alliesInPlay: AllyInPlay[];
+  private activeDamageRedirectTargetId: CardInstanceId | null;
+  private cardInstanceIdCounter: number;
 
   constructor(config: CombatEngineConfig) {
     this.randomSource = config.randomSource;
@@ -104,6 +112,14 @@ export class CombatEngine {
 
     this.contratiempoCards = config.contratiempoCards ?? new Map();
     this.validateContratiempoCardsConfig();
+
+    // NUEVO H1.15 — ver spec H1.15 §0.1/§4.2. Orden respecto a los campos de H1.14 no
+    // importa — no hay dependencia entre ellos.
+    this.allyCards = config.allyCards ?? new Map();
+    this.validateAllyCardsConfig();
+    this.alliesInPlay = [];
+    this.activeDamageRedirectTargetId = null;
+    this.cardInstanceIdCounter = 0;
 
     const initialEnergy = config.initialLeaderEnergy ?? LEADER_ENERGY_INITIAL_DEFAULT;
     this.validateInitialLeaderEnergy(initialEnergy);
@@ -253,6 +269,45 @@ export class CombatEngine {
     }
   }
 
+  /**
+   * NUEVO H1.15. Invariantes de configuración de `allyCards` — mismo estilo que
+   * `validateContratiempoCardsConfig`. Ver spec H1.15 §3.6.
+   */
+  private validateAllyCardsConfig(): void {
+    for (const [cardId, def] of this.allyCards) {
+      if (!Number.isInteger(def.energyCost) || def.energyCost < 0) {
+        throw new Error(
+          `CombatEngine: allyCards["${String(cardId)}"].energyCost debe ser un entero >= 0, recibido ${def.energyCost}`
+        );
+      }
+      if (!Number.isInteger(def.life) || def.life < 1) {
+        throw new Error(
+          `CombatEngine: allyCards["${String(cardId)}"].life debe ser un entero >= 1, recibido ${def.life}`
+        );
+      }
+      for (const abilityId of def.abilityIds ?? []) {
+        const cdDef = this.abilityCooldowns.get(abilityId);
+        if (!cdDef) {
+          throw new Error(
+            `CombatEngine: allyCards["${String(cardId)}"].abilityIds incluye "${String(abilityId)}" que no está en abilityCooldowns`
+          );
+        }
+        if (cdDef.side !== 'LEADER') {
+          throw new Error(
+            `CombatEngine: allyCards["${String(cardId)}"].abilityIds incluye "${String(abilityId)}" con side "${cdDef.side}" — las habilidades de un Aliado del jugador son siempre side 'LEADER' (turn.ts: "sourceId distintos dentro del mismo lado")`
+          );
+        }
+      }
+    }
+  }
+
+  /** NUEVO H1.15 — primer uso real de `CardInstanceId` (H1.1). */
+  private nextCardInstanceId(): CardInstanceId {
+    const id = createId<'CardInstanceId'>('CardInstanceId', `ally-${this.cardInstanceIdCounter}`);
+    this.cardInstanceIdCounter += 1;
+    return id;
+  }
+
   /** Ver spec H1.14 §0 nota de estado del repo — mismo estilo que validateInitialLeaderShield (H1.6). */
   private validateInitialLeaderEnergy(value: number): void {
     if (!Number.isInteger(value) || value < 0 || value > LEADER_ENERGY_MAX) {
@@ -322,6 +377,21 @@ export class CombatEngine {
     const resolution = resolveAbilityUmbral(effectDef.formula, nucleo.value);
     const rawAmount = resolution.baseResolvedValue;
 
+    const target = this.resolveDamageTarget(); // NUEVO H1.15
+    if (target) {
+      return this.applyAttackEffectToAlly(command, effectDef, nucleo, rawAmount, target);
+    }
+    return this.applyAttackEffectToLeader(command, effectDef, nucleo, rawAmount);
+  }
+
+  /** H1.6 sin cambios de comportamiento — solo renombrada/extraída para separar la rama
+   *  nueva de Aliados (ver spec H1.15 §4.4). */
+  private applyAttackEffectToLeader(
+    command: Extract<CombatCommand, { type: 'ACTIVATE_ABILITY' }>,
+    effectDef: Extract<AbilityEffectDefinition, { kind: 'ATTACK' }>,
+    nucleo: NucleoInstance,
+    rawAmount: number
+  ): CombatEvent {
     const shieldBefore = this.leaderShield;
     const absorbedByShield = Math.min(shieldBefore, rawAmount);
     this.leaderShield = shieldBefore - absorbedByShield;
@@ -342,6 +412,65 @@ export class CombatEngine {
       leaderShieldAfter: this.leaderShield,
       leaderDamageAfter: this.leaderDamage,
     };
+  }
+
+  /** NUEVO H1.15 — ver spec §0.4 sobre por qué el Escudo no interviene aquí. */
+  private applyAttackEffectToAlly(
+    command: Extract<CombatCommand, { type: 'ACTIVATE_ABILITY' }>,
+    effectDef: Extract<AbilityEffectDefinition, { kind: 'ATTACK' }>,
+    nucleo: NucleoInstance,
+    rawAmount: number,
+    target: AllyInPlay
+  ): CombatEvent {
+    const allyLifeBefore = target.life;
+    const absorbedByAlly = Math.min(allyLifeBefore, rawAmount);
+    const allyLifeAfter = allyLifeBefore - absorbedByAlly;
+
+    this.alliesInPlay = this.alliesInPlay.map((a) =>
+      a.instanceId === target.instanceId ? { ...a, life: allyLifeAfter } : a
+    );
+    if (allyLifeAfter === 0 && this.activeDamageRedirectTargetId === target.instanceId) {
+      this.activeDamageRedirectTargetId = null;
+    }
+
+    const excess = rawAmount - absorbedByAlly;
+    const appliedDamageToLeader = effectDef.arrollar === true ? excess : 0;
+    this.leaderDamage += appliedDamageToLeader;
+
+    return {
+      type: 'ALLY_DAMAGED',
+      abilityId: command.abilityId,
+      sourceId: command.sourceId,
+      side: command.side,
+      nucleoSpent: nucleo,
+      allyInstanceId: target.instanceId,
+      rawAmount,
+      absorbedByAlly,
+      allyLifeBefore,
+      allyLifeAfter,
+      allyDied: allyLifeAfter === 0,
+      excess,
+      appliedDamageToLeader,
+      leaderDamageAfter: this.leaderDamage,
+    };
+  }
+
+  /** NUEVO H1.15 — ver spec H1.15 §0.4. Determina a quién golpea un Ataque del Enemigo
+   *  AHORA MISMO. */
+  private resolveDamageTarget(): AllyInPlay | null {
+    const berserker = this.alliesInPlay.find((a) => a.isBerserker && a.life > 0);
+    if (berserker) return berserker;
+
+    if (this.activeDamageRedirectTargetId !== null) {
+      const target = this.alliesInPlay.find(
+        (a) => a.instanceId === this.activeDamageRedirectTargetId && a.life > 0
+      );
+      if (target) return target;
+      // Referencia obsoleta (el Aliado murió por otra vía, o ya no existe) — se limpia.
+      this.activeDamageRedirectTargetId = null;
+    }
+
+    return null;
   }
 
   /**
@@ -382,6 +511,10 @@ export class CombatEngine {
         return this.handleEndTurn();
       case 'PLAY_CONTRATIEMPO':
         return this.handlePlayContratiempo(command);
+      case 'PLAY_ALLY':
+        return this.handlePlayAlly(command);
+      case 'SET_DAMAGE_REDIRECT':
+        return this.handleSetDamageRedirect(command);
     }
   }
 
@@ -476,13 +609,27 @@ export class CombatEngine {
         const effectEvent = this.applyAttackEffect(command, effectDef, nucleo);
         events.push(effectEvent);
         this.eventBus.emit(effectEvent);
-        effectLogEntry = {
-          kind: 'ATTACK',
-          leaderDamageBefore,
-          leaderDamageAfter: this.leaderDamage,
-          leaderShieldBefore,
-          leaderShieldAfter: this.leaderShield,
-        };
+
+        if (effectEvent.type === 'ALLY_DAMAGED') {
+          effectLogEntry = {
+            kind: 'ATTACK',
+            target: 'ALLY',
+            allyInstanceId: effectEvent.allyInstanceId,
+            allyLifeBefore: effectEvent.allyLifeBefore,
+            allyLifeAfter: effectEvent.allyLifeAfter,
+            leaderDamageBefore,
+            leaderDamageAfter: this.leaderDamage,
+          };
+        } else {
+          effectLogEntry = {
+            kind: 'ATTACK',
+            target: 'LEADER',
+            leaderDamageBefore,
+            leaderDamageAfter: this.leaderDamage,
+            leaderShieldBefore,
+            leaderShieldAfter: this.leaderShield,
+          };
+        }
       } else {
         const scenarioPlotBefore = this.scenarioPlot;
         const effectEvent = this.applyPlotEffect(command, effectDef);
@@ -634,7 +781,15 @@ export class CombatEngine {
         // El daño SIEMPRE se revierte, en ambos alcances — GDD: "algunas revierten solo
         // el daño" ya implica que el daño se revierte también en FULL_TURN.
         this.leaderDamage = entry.effect.leaderDamageBefore;
-        this.leaderShield = entry.effect.leaderShieldBefore;
+        if (entry.effect.target === 'LEADER') {
+          this.leaderShield = entry.effect.leaderShieldBefore;
+        } else {
+          // target === 'ALLY' — NUEVO H1.15, ver spec H1.15 §0.7.
+          const allyEffect = entry.effect;
+          this.alliesInPlay = this.alliesInPlay.map((a) =>
+            a.instanceId === allyEffect.allyInstanceId ? { ...a, life: allyEffect.allyLifeBefore } : a
+          );
+        }
       } else if (def.undoScope === 'FULL_TURN') {
         // Trama SOLO se revierte en alcance FULL_TURN — DAMAGE_ONLY nunca la toca.
         this.scenarioPlot = entry.effect.scenarioPlotBefore;
@@ -662,6 +817,101 @@ export class CombatEngine {
     return ok(events);
   }
 
+  /** NUEVO H1.15 — ver spec H1.15 §3.4/§4.7. */
+  private handlePlayAlly(
+    command: Extract<CombatCommand, { type: 'PLAY_ALLY' }>
+  ): CombatCommandResult {
+    const def = this.allyCards.get(command.cardId);
+    if (!def) {
+      return err({ code: 'ALLY_CARD_UNKNOWN', cardId: command.cardId });
+    }
+
+    if (this.turnOwner !== 'LEADER') {
+      return err({ code: 'NOT_YOUR_TURN', expected: 'LEADER', actual: this.turnOwner });
+    }
+
+    if (this.actionsTakenThisTurn >= this.actionsAllowedThisTurn) {
+      return err({
+        code: 'NO_ACTIONS_REMAINING',
+        side: this.turnOwner,
+        actionsTaken: this.actionsTakenThisTurn,
+        actionsAllowed: this.actionsAllowedThisTurn,
+      });
+    }
+
+    if (this.leaderEnergy < def.energyCost) {
+      return err({
+        code: 'ALLY_INSUFFICIENT_ENERGY',
+        cardId: command.cardId,
+        required: def.energyCost,
+        available: this.leaderEnergy,
+      });
+    }
+
+    // Mutación.
+    this.leaderEnergy -= def.energyCost;
+    this.actionsTakenThisTurn += 1;
+
+    const instanceId = this.nextCardInstanceId();
+    const ally: AllyInPlay = {
+      instanceId,
+      cardId: command.cardId,
+      isBerserker: def.isBerserker,
+      maxLife: def.life,
+      life: def.life,
+    };
+    this.alliesInPlay = [...this.alliesInPlay, ally];
+
+    // Calentamiento (GDD §2.5) de las habilidades propias del Aliado, si las tiene.
+    for (const abilityId of def.abilityIds ?? []) {
+      const cdDef = this.abilityCooldowns.get(abilityId);
+      if (cdDef) this.remainingCooldowns.set(abilityId, cdDef.baseCooldown);
+    }
+
+    const event: CombatEvent = {
+      type: 'ALLY_ENTERED_PLAY',
+      cardId: command.cardId,
+      sourceId: command.sourceId,
+      allyInstanceId: instanceId,
+      maxLife: def.life,
+      isBerserker: def.isBerserker,
+      leaderEnergyAfter: this.leaderEnergy,
+    };
+    this.eventBus.emit(event);
+
+    return ok([event]);
+  }
+
+  /** NUEVO H1.15 — ver spec H1.15 §0.3/§3.5/§4.8. */
+  private handleSetDamageRedirect(
+    command: Extract<CombatCommand, { type: 'SET_DAMAGE_REDIRECT' }>
+  ): CombatCommandResult {
+    if (command.targetAllyInstanceId !== null) {
+      const target = this.alliesInPlay.find(
+        (a) => a.instanceId === command.targetAllyInstanceId && a.life > 0
+      );
+      if (!target) {
+        return err({
+          code: 'REDIRECT_TARGET_NOT_FOUND',
+          targetAllyInstanceId: command.targetAllyInstanceId,
+        });
+      }
+    }
+
+    // Mutación — sin tocar acciones/Energía/Núcleo (ver spec §0.3).
+    this.activeDamageRedirectTargetId = command.targetAllyInstanceId;
+
+    const forcedByBerserker = this.alliesInPlay.some((a) => a.isBerserker && a.life > 0);
+    const event: CombatEvent = {
+      type: 'DAMAGE_REDIRECT_SET',
+      targetAllyInstanceId: command.targetAllyInstanceId,
+      forcedByBerserker,
+    };
+    this.eventBus.emit(event);
+
+    return ok([event]);
+  }
+
   subscribe(listener: (event: CombatEvent) => void): Unsubscribe {
     return this.eventBus.subscribe(listener);
   }
@@ -682,6 +932,8 @@ export class CombatEngine {
         comboBonusGranted: this.comboBonusGrantedThisTurn,
       }, // NUEVO H1.14
       undoableLastEnemyTurn: [...this.previousEnemyTurnLog], // NUEVO H1.14
+      alliesInPlay: [...this.alliesInPlay], // NUEVO H1.15
+      activeDamageRedirectTargetId: this.activeDamageRedirectTargetId, // NUEVO H1.15
     };
   }
 }

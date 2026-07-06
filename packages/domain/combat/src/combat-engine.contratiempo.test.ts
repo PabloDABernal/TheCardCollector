@@ -7,12 +7,15 @@ import type { CombatEngineConfig } from './types/config';
 import type { AbilityCooldownDefinition } from './types/cooldown';
 import type { AbilityEffectDefinition } from './types/ability-effect';
 import type { ContratiempoCardDefinition } from './types/contratiempo';
+import type { AllyCardDefinition } from './types/ally';
 
 const ENEMY_ATTACK: AbilityId = createId<'AbilityId'>('AbilityId', 'enemy-attack');
+const ENEMY_ATTACK_ARROLLAR: AbilityId = createId<'AbilityId'>('AbilityId', 'enemy-attack-arrollar');
 const ENEMY_PLOT: AbilityId = createId<'AbilityId'>('AbilityId', 'enemy-plot');
 
 const CARD_DAMAGE_ONLY: CardId = createId<'CardId'>('CardId', 'card-damage-only');
 const CARD_FULL_TURN: CardId = createId<'CardId'>('CardId', 'card-full-turn');
+const CARD_ALLY_PLAIN: CardId = createId<'CardId'>('CardId', 'card-ally-plain'); // NUEVO H1.15
 
 function costs(ids: AbilityId[]): Map<AbilityId, CoreCostRequirement> {
   return new Map(ids.map((id) => [id, { kind: 'ANY' } as CoreCostRequirement]));
@@ -32,24 +35,32 @@ function contratiempoCards(
   return new Map(entries);
 }
 
+function allyCards(entries: [CardId, AllyCardDefinition][]): Map<CardId, AllyCardDefinition> {
+  return new Map(entries);
+}
+
 /** Fixture recomendada por la spec §5.3: Enemigo con 1 habilidad ATTACK y 1 PLOT, y
- *  contratiempoCards con 1 carta DAMAGE_ONLY y 1 FULL_TURN. */
+ *  contratiempoCards con 1 carta DAMAGE_ONLY y 1 FULL_TURN. Extendida en H1.15 con una
+ *  habilidad ATTACK con Arrollar y una carta ALIADO (ver spec H1.15 §5.4). */
 function buildEngine(overrides: Partial<CombatEngineConfig> = {}) {
   return new CombatEngine({
     randomSource: new SeededRandomSource(1),
-    abilityCoreCosts: costs([ENEMY_ATTACK, ENEMY_PLOT]),
+    abilityCoreCosts: costs([ENEMY_ATTACK, ENEMY_ATTACK_ARROLLAR, ENEMY_PLOT]),
     abilityCooldowns: cooldowns([
       [ENEMY_ATTACK, { side: 'ENEMY', baseCooldown: 1 }],
+      [ENEMY_ATTACK_ARROLLAR, { side: 'ENEMY', baseCooldown: 1 }],
       [ENEMY_PLOT, { side: 'ENEMY', baseCooldown: 1 }],
     ]),
     abilityEffects: effects([
       [ENEMY_ATTACK, { kind: 'ATTACK', formula: { baseFormula: { kind: 'VALUE' } } }],
+      [ENEMY_ATTACK_ARROLLAR, { kind: 'ATTACK', formula: { baseFormula: { kind: 'ADD', amount: 6 } }, arrollar: true }],
       [ENEMY_PLOT, { kind: 'PLOT', amount: 3 }],
     ]),
     contratiempoCards: contratiempoCards([
       [CARD_DAMAGE_ONLY, { energyCost: 1, undoScope: 'DAMAGE_ONLY' }],
       [CARD_FULL_TURN, { energyCost: 2, undoScope: 'FULL_TURN' }],
     ]),
+    allyCards: allyCards([[CARD_ALLY_PLAIN, { energyCost: 1, life: 5, isBerserker: false }]]),
     initialLeaderEnergy: 5,
     initialTurnOwner: 'LEADER',
     poolSize: 6,
@@ -305,5 +316,117 @@ describe('CombatEngine — H1.14: Contratiempo (GDD §2.7)', () => {
     if (isErr(result)) {
       expect((result.error as CombatCommandError).code).toBe('CONTRATIEMPO_CARD_UNKNOWN');
     }
+  });
+});
+
+// -----------------------------------------------------------------------------
+// NUEVO H1.15 — integración Contratiempo + Aliados (ver spec H1.15 §0.7/§5.4)
+// -----------------------------------------------------------------------------
+describe('CombatEngine — H1.15: Contratiempo revierte un Ataque que golpeó a un Aliado', () => {
+  it('DAMAGE_ONLY: restaura la vida del Aliado a su valor previo; leaderDamage no cambia (sin derrame)', () => {
+    const engine = buildEngine();
+
+    const playResult = engine.dispatch({ type: 'PLAY_ALLY', cardId: CARD_ALLY_PLAIN, sourceId: 'leader' });
+    expect(isOk(playResult)).toBe(true);
+    if (!isOk(playResult)) throw new Error('unreachable');
+    const entered = playResult.value[0] as Extract<CombatEvent, { type: 'ALLY_ENTERED_PLAY' }>;
+    const allyId = entered.allyInstanceId;
+
+    engine.dispatch({ type: 'SET_DAMAGE_REDIRECT', targetAllyInstanceId: allyId });
+
+    engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
+    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id });
+    const lifeAfterAttack = engine.getSnapshot().alliesInPlay.find((a) => a.instanceId === allyId)!.life;
+    expect(lifeAfterAttack).toBeLessThan(5); // formula VALUE (1-4) siempre < life 5 — no letal
+
+    engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
+
+    const result = engine.dispatch({ type: 'PLAY_CONTRATIEMPO', cardId: CARD_DAMAGE_ONLY, sourceId: 'leader' });
+    expect(isOk(result)).toBe(true);
+
+    const snapshot = engine.getSnapshot();
+    expect(snapshot.alliesInPlay.find((a) => a.instanceId === allyId)!.life).toBe(5);
+    expect(snapshot.leaderDamage).toBe(0);
+  });
+
+  it('"resucita" un Aliado muerto por Arrollar con derrame: la vida del Aliado vuelve a >0 Y leaderDamage vuelve a su valor previo', () => {
+    const engine = buildEngine();
+
+    const playResult = engine.dispatch({ type: 'PLAY_ALLY', cardId: CARD_ALLY_PLAIN, sourceId: 'leader' });
+    expect(isOk(playResult)).toBe(true);
+    if (!isOk(playResult)) throw new Error('unreachable');
+    const entered = playResult.value[0] as Extract<CombatEvent, { type: 'ALLY_ENTERED_PLAY' }>;
+    const allyId = entered.allyInstanceId;
+
+    engine.dispatch({ type: 'SET_DAMAGE_REDIRECT', targetAllyInstanceId: allyId });
+
+    engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
+    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK_ARROLLAR, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id });
+
+    const afterAttack = engine.getSnapshot();
+    expect(afterAttack.alliesInPlay.find((a) => a.instanceId === allyId)!.life).toBe(0);
+    expect(afterAttack.leaderDamage).toBeGreaterThan(0); // derrame de Arrollar
+
+    engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
+
+    const result = engine.dispatch({ type: 'PLAY_CONTRATIEMPO', cardId: CARD_DAMAGE_ONLY, sourceId: 'leader' });
+    expect(isOk(result)).toBe(true);
+
+    const snapshot = engine.getSnapshot();
+    expect(snapshot.alliesInPlay.find((a) => a.instanceId === allyId)!.life).toBe(5);
+    expect(snapshot.leaderDamage).toBe(0);
+  });
+
+  it('FULL_TURN sobre un Ataque a Aliado también restaura el CD de la habilidad de Enemigo usada', () => {
+    const engine = buildEngine();
+
+    const playResult = engine.dispatch({ type: 'PLAY_ALLY', cardId: CARD_ALLY_PLAIN, sourceId: 'leader' });
+    expect(isOk(playResult)).toBe(true);
+    if (!isOk(playResult)) throw new Error('unreachable');
+    const entered = playResult.value[0] as Extract<CombatEvent, { type: 'ALLY_ENTERED_PLAY' }>;
+    const allyId = entered.allyInstanceId;
+
+    engine.dispatch({ type: 'SET_DAMAGE_REDIRECT', targetAllyInstanceId: allyId });
+
+    engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
+    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id });
+    const remainingAfterActivation = engine.getSnapshot().cooldowns.find((c) => c.abilityId === ENEMY_ATTACK)!.remaining;
+    expect(remainingAfterActivation).toBe(1); // baseCooldown, recién activada
+
+    engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
+
+    const result = engine.dispatch({ type: 'PLAY_CONTRATIEMPO', cardId: CARD_FULL_TURN, sourceId: 'leader' });
+    expect(isOk(result)).toBe(true);
+
+    const snapshot = engine.getSnapshot();
+    expect(snapshot.alliesInPlay.find((a) => a.instanceId === allyId)!.life).toBe(5);
+    const restoredRemaining = snapshot.cooldowns.find((c) => c.abilityId === ENEMY_ATTACK)!.remaining;
+    expect(restoredRemaining).toBe(0);
+  });
+
+  it('no reabre el bug latente de handlePlayContratiempo (§0.8): PLAY_ALLY/SET_DAMAGE_REDIRECT nunca aparecen en currentEnemyTurnLog, ni siquiera invocados durante el turno de Enemigo', () => {
+    const engine = buildEngine({ initialTurnOwner: 'ENEMY' });
+
+    // PLAY_ALLY es exclusivo del Líder — rechazado, no muta ni registra nada.
+    const playResult = engine.dispatch({ type: 'PLAY_ALLY', cardId: CARD_ALLY_PLAIN, sourceId: 'leader' });
+    expect(isErr(playResult)).toBe(true);
+    if (isErr(playResult)) {
+      expect((playResult.error as CombatCommandError).code).toBe('NOT_YOUR_TURN');
+    }
+
+    // SET_DAMAGE_REDIRECT no valida turno (spec §0.3) — se acepta incluso en turno de
+    // Enemigo, pero NO empuja nada a currentEnemyTurnLog (solo handleActivateAbility con
+    // side ENEMY lo hace).
+    const redirectResult = engine.dispatch({ type: 'SET_DAMAGE_REDIRECT', targetAllyInstanceId: null });
+    expect(isOk(redirectResult)).toBe(true);
+
+    // ENEMY_BASE_ACTIONS_PER_TURN sigue en 1 y abilityCombo sigue exigiendo side LEADER
+    // (H1.15 no toca ninguna de las dos) — como mucho 1 entrada ATTACK de side ENEMY por
+    // turno puede llegar a currentEnemyTurnLog, exactamente igual que en H1.14.
+    engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER: cierra la ventana (vacía)
+    expect(engine.getSnapshot().undoableLastEnemyTurn).toHaveLength(0);
   });
 });
