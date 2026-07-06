@@ -24,7 +24,8 @@ export interface RunReplParams {
  */
 export function runRepl(params: RunReplParams): Promise<void> {
   return new Promise((resolve) => {
-    const rl = createInterface({ input: params.input, output: params.output, terminal: false });
+    const isInteractiveTty = Boolean((params.input as { isTTY?: boolean }).isTTY);
+    const rl = createInterface({ input: params.input, output: params.output, terminal: isInteractiveTty });
 
     let stopped = false;
 
