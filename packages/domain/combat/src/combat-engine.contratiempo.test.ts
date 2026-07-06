@@ -23,6 +23,11 @@ const CARD_ALLY_PLAIN: CardId = createId<'CardId'>('CardId', 'card-ally-plain');
 const MINION_PLANO: MinionDefinitionId = 'minion-plano';
 const MINION_PLOT_SPECIAL: MinionDefinitionId = 'minion-plot-special';
 const MINION_PASSIVE_ATTACK: MinionDefinitionId = 'minion-passive-attack';
+// NUEVO QA H1.16 (regresión N=3, ver bug #25): Secuaz con pasivo ATTACK Y ataque plano
+// no nulo, para poder aportar tanto la 1ª entrada (MINION_PASSIVE) como la 3ª
+// (MINION_PLANO_ATTACK) del mismo turno con un único Secuaz en mesa — evita cualquier
+// ambigüedad de selección aleatoria de `RESOLVE_MINION_ACTION` cuando hay >1 Secuaz.
+const MINION_PASSIVE_AND_PLANO: MinionDefinitionId = 'minion-passive-and-plano';
 
 function costs(ids: AbilityId[]): Map<AbilityId, CoreCostRequirement> {
   return new Map(ids.map((id) => [id, { kind: 'ANY' } as CoreCostRequirement]));
@@ -91,6 +96,8 @@ function buildEngine(overrides: Partial<CombatEngineConfig> = {}) {
         },
       ],
       [MINION_PASSIVE_ATTACK, { passiveEffect: { kind: 'ATTACK', amount: 2 }, planoAttackAmount: 0, isDefensor: false }],
+      // NUEVO QA H1.16 (regresión N=3)
+      [MINION_PASSIVE_AND_PLANO, { passiveEffect: { kind: 'ATTACK', amount: 2 }, planoAttackAmount: 3, isDefensor: false }],
     ]),
     initialLeaderEnergy: 5,
     initialTurnOwner: 'LEADER',
@@ -666,5 +673,58 @@ describe('CombatEngine — H1.16: fix del bug #25 (Contratiempo revierte TODAS l
     // El CD de ENEMY_ATTACK se restaura al "antes" de SU propia activación en esta
     // ventana (turno 2): estaba en 0 antes de activarse.
     expect(snapshot.cooldowns.find((c) => c.abilityId === ENEMY_ATTACK)!.remaining).toBe(0);
+  });
+
+  it('QA H1.16: se generaliza a N=3 mutaciones en el mismo turno de Enemigo (MINION_PASSIVE + ABILITY + MINION_PLANO_ATTACK) — Contratiempo revierte las 3 y leaderDamage vuelve al valor de ANTES de la primera, no de la 2ª ni la 3ª', () => {
+    const engine = buildEngine();
+
+    // Turno 1 de Enemigo: solo se invoca el Secuaz (sin activar nada), para que su
+    // pasivo NO se aplique retroactivamente este mismo turno (spec §0.7) y leaderDamage
+    // siga en 0 al cerrar la ventana.
+    engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY (turno 1)
+    engine.dispatch({ type: 'SUMMON_MINION', minionDefinitionId: MINION_PASSIVE_AND_PLANO, sourceId: 'enemy' });
+    expect(engine.getSnapshot().leaderDamage).toBe(0);
+
+    engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER (cierra la ventana, vacía, del turno 1)
+
+    // Turno 2 de Enemigo: al empezar, se aplica el pasivo del Secuaz ya en mesa
+    // (MINION_PASSIVE, 1ª mutación de esta ventana).
+    engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY (turno 2)
+    const damageBeforeAll = 0; // valor de leaderDamage justo ANTES de la 1ª entrada.
+    const damageAfterPassive = engine.getSnapshot().leaderDamage;
+    expect(damageAfterPassive).toBeGreaterThan(damageBeforeAll); // MINION_PASSIVE ya aplicado (amount 2)
+
+    // 2ª mutación: ACTIVATE_ABILITY real del Enemigo con efecto ATTACK (origin ABILITY).
+    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const attack = engine.dispatch({
+      type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
+    });
+    expect(isOk(attack)).toBe(true);
+    const damageAfterAbility = engine.getSnapshot().leaderDamage;
+    expect(damageAfterAbility).toBeGreaterThan(damageAfterPassive);
+
+    // 3ª mutación: RESOLVE_MINION_ACTION con ataque plano del mismo Secuaz (origin
+    // MINION_PLANO_ATTACK) — único Secuaz en mesa, selección aleatoria sin ambigüedad.
+    const minionAction = engine.dispatch({ type: 'RESOLVE_MINION_ACTION' });
+    expect(isOk(minionAction)).toBe(true);
+    const damageAfterMinionAttack = engine.getSnapshot().leaderDamage;
+    // planoAttackAmount 3, sin escudo activo → se suma completo.
+    expect(damageAfterMinionAttack).toBe(damageAfterAbility + 3);
+
+    engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER (congela las 3 entradas del turno 2)
+
+    const result = engine.dispatch({ type: 'PLAY_CONTRATIEMPO', cardId: CARD_DAMAGE_ONLY, sourceId: 'leader' });
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      const played = result.value[0] as Extract<CombatEvent, { type: 'CONTRATIEMPO_PLAYED' }>;
+      expect(played.revertedEntries).toHaveLength(3);
+    }
+
+    // Pre-fix (bug #25 "última entrada gana"), el bucle habría dejado leaderDamage en el
+    // valor de ANTES de la 3ª entrada (damageAfterAbility) en vez de revertir la ventana
+    // completa hasta ANTES de la 1ª (damageBeforeAll).
+    expect(engine.getSnapshot().leaderDamage).toBe(damageBeforeAll);
+    expect(engine.getSnapshot().leaderDamage).not.toBe(damageAfterAbility);
+    expect(engine.getSnapshot().leaderDamage).not.toBe(damageAfterPassive);
   });
 });
