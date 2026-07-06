@@ -19,4 +19,32 @@ export interface CombatStateSnapshot {
    * (orden estable, útil para tests con `toEqual` y para UI futura).
    */
   readonly cooldowns: readonly AbilityCooldownSnapshot[];
+
+  /**
+   * NUEVO en H1.6. Daño de Ataque acumulado sobre el Líder (GDD §3.4/§3.7), YA NETO de
+   * absorción por `leaderShield` (§3.2). Empieza en 0, solo sube. Deliberadamente NO es
+   * "vida restante" — la vida máxima del Líder y la condición de derrota
+   * (`leaderDamage` vs. vida máxima) son alcance de H1.18 (que sí depende de
+   * `LeaderDefinition`, H1.8, todavía inexistente). Ver spec H1.6 §0.5.
+   */
+  readonly leaderDamage: number;
+
+  /**
+   * NUEVO en H1.6. Fichas de Escudo del Líder disponibles ahora mismo (GDD §2.8).
+   * Entero en `[0, LEADER_SHIELD_MAX]`. Consume daño de Ataque antes de que llegue a
+   * `leaderDamage` (§3.2); nunca es afectado por Trama (GDD §3.6: "el daño de Trama es
+   * inabsorbible"). Modelo mínimo de "algo que bloquea daño" para esta historia — NO
+   * es el sistema de Aliados de H1.15. Ver spec H1.6 §0.1.
+   */
+  readonly leaderShield: number;
+
+  /**
+   * NUEVO en H1.6. Contador de Trama del Escenario (GDD §3.6), bidireccional: sube con
+   * habilidades `PLOT` de `side: 'ENEMY'`, baja con las de `side: 'LEADER'` (GDD §12:
+   * "Enemigo sube, jugador baja"). Piso en 0 (saturado, ver spec §0.4). Sin techo en
+   * esta historia — el "Umbral final" de derrota es dato de `ScenarioDefinition`
+   * (H1.11) y su comprobación es alcance de H1.18. Pertenece conceptualmente al
+   * Escenario, no al Enemigo (decisions.md) — el propio nombre del campo lo refleja.
+   */
+  readonly scenarioPlot: number;
 }

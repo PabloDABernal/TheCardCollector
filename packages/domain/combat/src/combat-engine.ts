@@ -20,12 +20,17 @@ import type { CombatSide } from './types/turn';
 import type { NucleoInstance } from './types/nucleo';
 import type { AbilityCooldownDefinition, AbilityCooldownSnapshot } from './types/cooldown';
 import { ABILITY_BASE_COOLDOWN_MIN } from './types/cooldown';
+import type { AbilityEffectDefinition } from './types/ability-effect'; // NUEVO H1.6
+import { LEADER_SHIELD_MAX } from './types/ability-effect'; // NUEVO H1.6
+import { resolveAbilityUmbral } from './umbral'; // NUEVO H1.6 — conecta H1.5 con mutación real (spec §0.2)
+import type { UmbralFormula } from './types/umbral';
 import { rollPool, DEFAULT_NUCLEO_POOL_SIZE } from './nucleo-pool';
 
 export class CombatEngine {
   private readonly randomSource: RandomSource;
   private readonly abilityCoreCosts: ReadonlyMap<AbilityId, CoreCostRequirement>;
   private readonly abilityCooldowns: ReadonlyMap<AbilityId, AbilityCooldownDefinition>;
+  private readonly abilityEffects: ReadonlyMap<AbilityId, AbilityEffectDefinition>; // NUEVO H1.6
   private readonly poolSize: number;
   private readonly eventBus: EventBus<CombatEvent>;
 
@@ -37,11 +42,19 @@ export class CombatEngine {
    *  `abilityCooldowns` desde la construcción (Calentamiento, GDD §2.5). */
   private remainingCooldowns: Map<AbilityId, number>;
 
+  // NUEVO H1.6 — ver spec §0.5, §0.1, §0.4 respectivamente.
+  private leaderDamage: number;
+  private leaderShield: number;
+  private scenarioPlot: number;
+
   constructor(config: CombatEngineConfig) {
     this.randomSource = config.randomSource;
     this.abilityCoreCosts = config.abilityCoreCosts;
     this.abilityCooldowns = config.abilityCooldowns;
     this.validateAbilityCooldownsConfig();
+
+    this.abilityEffects = config.abilityEffects ?? new Map(); // NUEVO H1.6
+    this.validateAbilityEffectsConfig(); // NUEVO H1.6
 
     this.poolSize = config.poolSize ?? DEFAULT_NUCLEO_POOL_SIZE;
     this.turnOwner = config.initialTurnOwner ?? 'LEADER';
@@ -55,6 +68,14 @@ export class CombatEngine {
     for (const [abilityId, def] of this.abilityCooldowns) {
       this.remainingCooldowns.set(abilityId, def.baseCooldown);
     }
+
+    // NUEVO H1.6 — estado inicial de daño/Trama/escudo. `leaderDamage`/`scenarioPlot`
+    // SIEMPRE arrancan en 0 (ningún config knob para ellos, ver spec §0.4/§0.5).
+    this.leaderDamage = 0;
+    this.scenarioPlot = 0;
+    const initialLeaderShield = config.initialLeaderShield ?? 0;
+    this.validateInitialLeaderShield(initialLeaderShield); // NUEVO H1.6
+    this.leaderShield = initialLeaderShield;
 
     this.nucleoPool = this.rollNewPool();
 
@@ -101,6 +122,69 @@ export class CombatEngine {
     }
   }
 
+  /**
+   * NUEVO H1.6. Invariantes de configuración de `abilityEffects` — fallan rápido en el
+   * constructor (mismo estilo que `validateAbilityCooldownsConfig`):
+   *  1. Toda clave de `abilityEffects` DEBE existir en `abilityCoreCosts` (que ya
+   *     garantiza, por `validateAbilityCooldownsConfig`, que también existe en
+   *     `abilityCooldowns`).
+   *  2. Toda entrada `kind: 'ATTACK'` DEBE pertenecer a una habilidad cuyo
+   *     `abilityCooldowns[...].side` sea `'ENEMY'` — ver spec §0.5 (el Líder nunca es
+   *     origen de un efecto ATTACK en esta historia; no existe `enemyHealth`).
+   *  3. Ningún `amount` de `ADD`/`MULTIPLY` (en `ATTACK.formula` o `PLOT.amount`) puede
+   *     ser negativo — "modificadores negativos" son una capa futura fuera de alcance
+   *     (GDD §12, ver `types/umbral.ts`), y un `amount` negativo rompería el invariante
+   *     `leaderShield ∈ [0, LEADER_SHIELD_MAX]`/`leaderDamage >= 0` en runtime (hallado
+   *     por QA durante H1.6).
+   */
+  private validateAbilityEffectsConfig(): void {
+    const costKeys = new Set(this.abilityCoreCosts.keys());
+    for (const [abilityId, effect] of this.abilityEffects) {
+      if (!costKeys.has(abilityId)) {
+        throw new Error(
+          `CombatEngine: abilityId "${String(abilityId)}" está en abilityEffects pero no en abilityCoreCosts/abilityCooldowns`
+        );
+      }
+      if (effect.kind === 'ATTACK') {
+        const def = this.abilityCooldowns.get(abilityId) as AbilityCooldownDefinition;
+        if (def.side !== 'ENEMY') {
+          throw new Error(
+            `CombatEngine: abilityEffects["${String(abilityId)}"] es de tipo ATTACK pero su dueño (abilityCooldowns.side) es "${def.side}" — H1.6 solo modela daño Enemigo→Líder (GDD §3.7), ver spec H1.6 §0.5`
+          );
+        }
+        this.validateUmbralFormulaNonNegative(abilityId, effect.formula.baseFormula);
+        if (effect.formula.bonusFormula) {
+          this.validateUmbralFormulaNonNegative(abilityId, effect.formula.bonusFormula);
+        }
+      } else if (effect.amount < 0) {
+        throw new Error(
+          `CombatEngine: abilityEffects["${String(abilityId)}"] (PLOT) tiene amount negativo (${effect.amount}) — modificadores negativos son una capa futura fuera de alcance (GDD §12)`
+        );
+      }
+    }
+  }
+
+  /** Ver `validateAbilityEffectsConfig`, invariante 3. */
+  private validateUmbralFormulaNonNegative(abilityId: AbilityId, formula: UmbralFormula): void {
+    if (formula.kind !== 'VALUE' && formula.amount < 0) {
+      throw new Error(
+        `CombatEngine: abilityEffects["${String(abilityId)}"] tiene una fórmula ${formula.kind} con amount negativo (${formula.amount}) — modificadores negativos son una capa futura fuera de alcance (GDD §12)`
+      );
+    }
+  }
+
+  /**
+   * NUEVO H1.6. `initialLeaderShield` debe ser un entero en [0, LEADER_SHIELD_MAX]
+   * (GDD §2.8, "Tope global de escudo del Líder: 5" — ver spec §0.1/§2.1).
+   */
+  private validateInitialLeaderShield(value: number): void {
+    if (!Number.isInteger(value) || value < 0 || value > LEADER_SHIELD_MAX) {
+      throw new Error(
+        `CombatEngine: initialLeaderShield debe ser un entero entre 0 y ${LEADER_SHIELD_MAX} (GDD §2.8), recibido ${value}`
+      );
+    }
+  }
+
   private nextNucleoId(): NucleoInstanceId {
     const id = createId<'NucleoInstanceId'>('NucleoInstanceId', `nucleo-${this.nucleoIdCounter}`);
     this.nucleoIdCounter += 1;
@@ -139,6 +223,78 @@ export class CombatEngine {
       });
     }
     return result;
+  }
+
+  /**
+   * NUEVO H1.6. Resuelve un efecto ATTACK (GDD §3.4/§2.8/§3.7): calcula el daño bruto
+   * vía `resolveAbilityUmbral` (H1.5) con el valor del Núcleo gastado, lo hace pasar
+   * primero por `leaderShield` (absorción automática e incondicional, sin
+   * `CombatCommand` de por medio — ver spec §0.1). Si NO había ninguna ficha de Escudo
+   * activa (`shieldBefore === 0`), no hay nada que "exceda" — el daño es normal y pasa
+   * completo a `leaderDamage`, sin necesitar Arrollar (no hay Escudo del que "arrollar
+   * por encima"). Si SÍ había Escudo activo y no bastó para absorber todo el golpe, el
+   * exceso sobre esas fichas solo pasa a `leaderDamage` si la habilidad tiene
+   * `arrollar: true` (GDD §2.8: "sin Arrollar por defecto [...] el exceso se pierde").
+   * Muta `this.leaderShield`/`this.leaderDamage`.
+   */
+  private applyAttackEffect(
+    command: Extract<CombatCommand, { type: 'ACTIVATE_ABILITY' }>,
+    effectDef: Extract<AbilityEffectDefinition, { kind: 'ATTACK' }>,
+    nucleo: NucleoInstance
+  ): CombatEvent {
+    const resolution = resolveAbilityUmbral(effectDef.formula, nucleo.value);
+    const rawAmount = resolution.baseResolvedValue;
+
+    const shieldBefore = this.leaderShield;
+    const absorbedByShield = Math.min(shieldBefore, rawAmount);
+    this.leaderShield = shieldBefore - absorbedByShield;
+
+    const excess = rawAmount - absorbedByShield;
+    const appliedDamage = shieldBefore === 0 || effectDef.arrollar === true ? excess : 0;
+    this.leaderDamage += appliedDamage;
+
+    return {
+      type: 'LEADER_DAMAGED',
+      abilityId: command.abilityId,
+      sourceId: command.sourceId,
+      side: command.side,
+      nucleoSpent: nucleo,
+      rawAmount,
+      absorbedByShield,
+      appliedDamage,
+      leaderShieldAfter: this.leaderShield,
+      leaderDamageAfter: this.leaderDamage,
+    };
+  }
+
+  /**
+   * NUEVO H1.6. Resuelve un efecto PLOT (GDD §3.6/§12): magnitud fija
+   * (`effectDef.amount`, NO alimentada por Núcleo — ver spec §0.3), dirección derivada
+   * del `side` dueño de la habilidad (`ENEMY` → sube, `LEADER` → baja — spec §0.4).
+   * Satura `scenarioPlot` en 0 por abajo. Nunca toca `leaderShield`/`leaderDamage`
+   * (GDD §3.6: "el daño de Trama es inabsorbible" — es, además, conceptualmente otra
+   * cosa que "daño").
+   */
+  private applyPlotEffect(
+    command: Extract<CombatCommand, { type: 'ACTIVATE_ABILITY' }>,
+    effectDef: Extract<AbilityEffectDefinition, { kind: 'PLOT' }>
+  ): CombatEvent {
+    const ownerDef = this.abilityCooldowns.get(command.abilityId) as AbilityCooldownDefinition;
+    const direction: 'INCREASE' | 'DECREASE' = ownerDef.side === 'ENEMY' ? 'INCREASE' : 'DECREASE';
+    const rawAmount = effectDef.amount;
+    const appliedDelta = direction === 'INCREASE' ? rawAmount : -rawAmount;
+    this.scenarioPlot = Math.max(0, this.scenarioPlot + appliedDelta);
+
+    return {
+      type: 'SCENARIO_PLOT_CHANGED',
+      abilityId: command.abilityId,
+      sourceId: command.sourceId,
+      side: command.side,
+      direction,
+      rawAmount,
+      appliedDelta,
+      scenarioPlotAfter: this.scenarioPlot,
+    };
   }
 
   dispatch(command: CombatCommand): CombatCommandResult {
@@ -205,6 +361,20 @@ export class CombatEngine {
     events.push(activated);
     this.eventBus.emit(activated);
 
+    // NUEVO H1.6 — se resuelve el efecto (si lo hay) INMEDIATAMENTE después de
+    // ABILITY_ACTIVATED, y ANTES de comprobar si el pool quedó vacío (orden elegido
+    // para que el efecto de ESTA activación siempre aparezca antes que un eventual
+    // relanzado de pool causado por ella).
+    const effectDef = this.abilityEffects.get(command.abilityId);
+    if (effectDef) {
+      const effectEvent =
+        effectDef.kind === 'ATTACK'
+          ? this.applyAttackEffect(command, effectDef, nucleo)
+          : this.applyPlotEffect(command, effectDef);
+      events.push(effectEvent);
+      this.eventBus.emit(effectEvent);
+    }
+
     if (this.nucleoPool.length === 0) {
       this.nucleoPool = this.rollNewPool();
       const refilled: CombatEvent = {
@@ -261,6 +431,9 @@ export class CombatEngine {
       turn: { turnOwner: this.turnOwner, turnNumber: this.turnNumber },
       nucleoPool: [...this.nucleoPool],
       cooldowns: this.buildCooldownSnapshot(),
+      leaderDamage: this.leaderDamage, // NUEVO H1.6
+      leaderShield: this.leaderShield, // NUEVO H1.6
+      scenarioPlot: this.scenarioPlot, // NUEVO H1.6
     };
   }
 }
