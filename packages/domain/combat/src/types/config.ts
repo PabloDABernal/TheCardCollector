@@ -4,6 +4,7 @@ import type { AbilityCooldownDefinition } from './cooldown';
 import type { AbilityEffectDefinition } from './ability-effect';
 import type { ContratiempoCardDefinition } from './contratiempo';
 import type { AllyCardDefinition } from './ally';
+import type { MinionDefinition, MinionDefinitionId } from './minion';
 
 export interface CombatEngineConfig {
   readonly randomSource: RandomSource;
@@ -74,4 +75,12 @@ export interface CombatEngineConfig {
    * externamente, igual patrón que `contratiempoCards` — ver spec H1.15 §0.1/§0.5.
    */
   readonly allyCards?: ReadonlyMap<CardId, AllyCardDefinition>;
+
+  /**
+   * NUEVO H1.16. Definiciones de Secuaz jugables vía `SUMMON_MINION`. Default: `Map`
+   * vacío. Resuelto externamente, mismo patrón que `allyCards`/`contratiempoCards` —
+   * ver spec H1.16 §0.1/§3.5. El constructor valida `planoAttackAmount`/
+   * `specialActionAbilityId` (`validateMinionDefinitionsConfig`).
+   */
+  readonly minionDefinitions?: ReadonlyMap<MinionDefinitionId, MinionDefinition>;
 }

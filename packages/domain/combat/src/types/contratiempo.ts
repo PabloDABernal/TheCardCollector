@@ -19,18 +19,34 @@ export interface ContratiempoCardDefinition {
 }
 
 /**
- * Una entrada por cada `ACTIVATE_ABILITY` exitosa de `side: 'ENEMY'` ocurrida durante
- * SU turno más reciente. Suficiente para invertir selectivamente (DAMAGE_ONLY) o por
- * completo (FULL_TURN) sin snapshotear ni recomputar el resto del estado del motor —
- * ver spec §0.4. Los valores "antes"/"después" ya los calculan `applyAttackEffect`/
+ * NUEVO H1.16. Hasta H1.15, toda entrada del log venía de `ACTIVATE_ABILITY` y siempre
+ * tenía `abilityId`/`cooldownBefore`. Con `RESOLVE_MINION_ACTION` (H1.16, ver spec
+ * §0.3/§0.6) aparecen entradas sin habilidad de catálogo detrás — el "ataque plano" de
+ * un Secuaz sin acción especial (`MINION_PLANO_ATTACK`) y la presencia pasiva de
+ * Secuaces aplicada en `handleEndTurn` (`MINION_PASSIVE`, ver spec §0.7).
+ */
+export type UndoableEnemyActionLogEntryOrigin = 'ABILITY' | 'MINION_PLANO_ATTACK' | 'MINION_PASSIVE';
+
+/**
+ * Una entrada por cada mutación revertible de `side: 'ENEMY'` ocurrida durante SU
+ * turno más reciente — hasta H1.15, únicamente `ACTIVATE_ABILITY` exitosa; desde
+ * H1.16, también `RESOLVE_MINION_ACTION` y la presencia pasiva de Secuaces (ver
+ * `origin`). Suficiente para invertir selectivamente (DAMAGE_ONLY) o por completo
+ * (FULL_TURN) sin snapshotear ni recomputar el resto del estado del motor — ver spec
+ * §0.4. Los valores "antes"/"después" ya los calculan `applyAttackEffect`/
  * `applyPlotEffect` (H1.6); esta historia solo los captura en vez de descartarlos.
  */
 export interface UndoableEnemyActionLogEntry {
-  readonly abilityId: AbilityId;
+  /** NUEVO H1.16. Ver `UndoableEnemyActionLogEntryOrigin`. */
+  readonly origin: UndoableEnemyActionLogEntryOrigin;
   readonly sourceId: string;
+  /** Presentes si y solo si `origin === 'ABILITY'` (invariante mantenida por
+   *  convención, no por el sistema de tipos — mismo nivel de rigor que otras
+   *  invariantes de esta base de código documentadas solo en el constructor). */
+  readonly abilityId?: AbilityId;
   /** CD restante de `abilityId` INMEDIATAMENTE ANTES de esta activación — se restaura
    *  solo en alcance FULL_TURN (revertir el CD "como si el Enemigo nunca hubiera actuado"). */
-  readonly cooldownBefore: number;
+  readonly cooldownBefore?: number;
   readonly effect?:
     | {
         readonly kind: 'ATTACK';

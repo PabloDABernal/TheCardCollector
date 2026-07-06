@@ -3,6 +3,7 @@ import type { NucleoInstance } from './nucleo';
 import type { CombatSide } from './turn';
 import type { AbilityCooldownSnapshot } from './cooldown';
 import type { ContratiempoUndoScope, UndoableEnemyActionLogEntry } from './contratiempo';
+import type { MinionDefinitionId } from './minion';
 
 /**
  * Slice de H1.3 del union completo esbozado en architecture_stack.md §2.2. Ese
@@ -59,10 +60,17 @@ export type CombatEvent =
        * pool — ver §3.3).
        */
       readonly type: 'LEADER_DAMAGED';
-      readonly abilityId: AbilityId;
+      /** NUEVO H1.16: ausente cuando el daño viene de un ataque plano/pasivo de Secuaz
+       *  (sin habilidad de catálogo detrás, ver spec H1.16 §0.2/§0.7/§4.4) — presente
+       *  siempre que este evento provenga de `ACTIVATE_ABILITY`/`RESOLVE_MINION_ACTION`
+       *  vía acción especial, exactamente como hasta H1.15. */
+      readonly abilityId?: AbilityId;
       readonly sourceId: string;
       readonly side: CombatSide;
-      readonly nucleoSpent: NucleoInstance;
+      /** NUEVO H1.16: `null` cuando el daño viene de un ataque plano/pasivo de Secuaz
+       *  (sin Núcleo real involucrado, ver spec H1.16 §0.2/§0.7/§4.4) — todo caller
+       *  existente (H1.6-H1.15) sigue pasando un `NucleoInstance` real, nunca `null`. */
+      readonly nucleoSpent: NucleoInstance | null;
       /** `baseResolvedValue` de `resolveAbilityUmbral` — el daño ANTES de aplicar Escudo. */
       readonly rawAmount: number;
       /** Fichas de `leaderShield` consumidas por este golpe (`min(shieldAntes, rawAmount)`). */
@@ -135,10 +143,12 @@ export type CombatEvent =
        * hace ambas cosas" — aquí, "un golpe nunca golpea a los dos objetivos a la vez").
        */
       readonly type: 'ALLY_DAMAGED';
-      readonly abilityId: AbilityId;
+      /** NUEVO H1.16: ver comentario equivalente en `LEADER_DAMAGED`. */
+      readonly abilityId?: AbilityId;
       readonly sourceId: string;
       readonly side: CombatSide;
-      readonly nucleoSpent: NucleoInstance;
+      /** NUEVO H1.16: ver comentario equivalente en `LEADER_DAMAGED`. */
+      readonly nucleoSpent: NucleoInstance | null;
       readonly allyInstanceId: CardInstanceId;
       readonly rawAmount: number;
       readonly absorbedByAlly: number;
@@ -157,4 +167,42 @@ export type CombatEvent =
       readonly targetAllyInstanceId: CardInstanceId | null;
       /** Informativo: `true` si en este instante hay un Berserker vivo que va a ignorar este valor en la práctica (ver spec H1.15 §0.3/§0.4). */
       readonly forcedByBerserker: boolean;
+    }
+  | {
+      /** NUEVO H1.16. Único evento de un `SUMMON_MINION` exitoso. */
+      readonly type: 'MINION_SUMMONED';
+      readonly minionDefinitionId: MinionDefinitionId;
+      readonly sourceId: string;
+      readonly instanceId: CardInstanceId;
+      readonly isDefensor: boolean;
+    }
+  | {
+      /**
+       * NUEVO H1.16. Emitido cuando `RESOLVE_MINION_ACTION` ejecuta la acción de un
+       * Secuaz — mismo payload semántico que `ABILITY_ACTIVATED` + `LEADER_DAMAGED`/
+       * `ALLY_DAMAGED`/`SCENARIO_PLOT_CHANGED` ya emitidos por el camino compartido con
+       * `handleActivateAbility` (mecanismo `SPECIAL_ACTION`): no se duplica esa
+       * información aquí, este evento solo señala QUÉ Secuaz fue el elegido y por qué
+       * mecanismo.
+       */
+      readonly type: 'MINION_ACTION_RESOLVED';
+      readonly instanceId: CardInstanceId;
+      readonly mechanism: 'SPECIAL_ACTION' | 'PLANO_ATTACK';
+    }
+  | {
+      /** NUEVO H1.16. `RESOLVE_MINION_ACTION` sin ningún Secuaz en mesa — no es un error. */
+      readonly type: 'MINION_ACTION_SKIPPED';
+      readonly reason: 'NO_MINIONS_IN_PLAY';
+    }
+  | {
+      /**
+       * NUEVO H1.16. Emitido en `handleEndTurn` al aplicar la presencia pasiva (GDD
+       * §3.8), SIEMPRE que el turno que empieza sea de Enemigo (aunque los montos sean 0).
+       */
+      readonly type: 'MINION_PASSIVE_EFFECTS_APPLIED';
+      readonly minionCount: number;
+      readonly attackAmount: number;
+      readonly plotAmount: number;
+      readonly leaderDamageAfter: number;
+      readonly scenarioPlotAfter: number;
     };

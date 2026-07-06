@@ -164,9 +164,13 @@ describe('CombatEngine — cooldowns: evento COOLDOWNS_TICKED', () => {
     const result = engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value).toHaveLength(2);
+      // NUEVO H1.16: el turno que EMPIEZA es de Enemigo → se emite también
+      // MINION_PASSIVE_EFFECTS_APPLIED (informativo, con montos en 0 sin Secuaces en
+      // mesa — ver spec H1.16 §0.7 punto 4).
+      expect(result.value).toHaveLength(3);
       expect(result.value[0]!.type).toBe('TURN_ENDED');
       expect(result.value[1]!.type).toBe('COOLDOWNS_TICKED');
+      expect(result.value[2]!.type).toBe('MINION_PASSIVE_EFFECTS_APPLIED');
       const tickedEvent = result.value[1] as Extract<CombatEvent, { type: 'COOLDOWNS_TICKED' }>;
       expect(tickedEvent.side).toBe('ENEMY');
       expect(tickedEvent.cooldowns).toEqual([

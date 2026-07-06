@@ -1,6 +1,7 @@
 import type { CoreCostRequirement, NucleoColor, NucleoInstanceId, AbilityId, CardId, CardInstanceId, Result } from '@collector/domain-shared';
 import type { CombatEvent } from './events';
 import type { CombatSide } from './turn';
+import type { MinionDefinitionId } from './minion';
 
 export type CombatCommandError =
   | { readonly code: 'ABILITY_COST_UNKNOWN'; readonly abilityId: AbilityId }
@@ -56,6 +57,16 @@ export type CombatCommandError =
       /** NUEVO H1.15. `targetAllyInstanceId` no corresponde a ningún Aliado vivo en mesa ahora mismo. */
       readonly code: 'REDIRECT_TARGET_NOT_FOUND';
       readonly targetAllyInstanceId: CardInstanceId;
+    }
+  | {
+      /** NUEVO H1.16. `minionDefinitionId` no existe en `CombatEngineConfig.minionDefinitions`. */
+      readonly code: 'MINION_DEFINITION_UNKNOWN';
+      readonly minionDefinitionId: MinionDefinitionId;
+    }
+  | {
+      /** NUEVO H1.16. `RESOLVE_MINION_ACTION` ya se despachó con éxito este turno de
+       *  Enemigo (contador propio `minionActionResolvedThisEnemyTurn`, ver spec H1.16 §0.3). */
+      readonly code: 'MINION_ACTION_ALREADY_RESOLVED_THIS_TURN';
     };
 
 /**

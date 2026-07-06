@@ -4,6 +4,7 @@ import type { AbilityCooldownSnapshot } from './cooldown';
 import type { ActionsStateSnapshot } from './action';
 import type { UndoableEnemyActionLogEntry } from './contratiempo';
 import type { AllyInPlay } from './ally';
+import type { MinionInPlay } from './minion';
 import type { CardInstanceId } from '@collector/domain-shared';
 
 /**
@@ -72,4 +73,8 @@ export interface CombatStateSnapshot {
    *  spec H1.15 §0.3/§0.4. Puede apuntar a un Aliado que en la práctica será ignorado si
    *  hay un Berserker vivo (consultar `alliesInPlay` para saberlo, igual que hace el motor). */
   readonly activeDamageRedirectTargetId: CardInstanceId | null;
+
+  /** NUEVO H1.16. Nunca se eliminan entradas (ver spec §0.1 — sin mecanismo de "matar"
+   *  Secuaces en esta historia). Orden estable = orden de invocación. */
+  readonly minionsInPlay: readonly MinionInPlay[];
 }

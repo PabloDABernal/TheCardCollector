@@ -1,5 +1,6 @@
 import type { AbilityId, CardId, CardInstanceId, NucleoInstanceId } from '@collector/domain-shared';
 import type { CombatSide } from './turn';
+import type { MinionDefinitionId } from './minion';
 
 /**
  * Slice de H1.3 del union completo esbozado en architecture_stack.md §2.2. Historias
@@ -53,4 +54,27 @@ export type CombatCommand =
        */
       readonly type: 'SET_DAMAGE_REDIRECT';
       readonly targetAllyInstanceId: CardInstanceId | null;
+    }
+  | {
+      /**
+       * NUEVO H1.16. Introduce un Secuaz en mesa (GDD §3.8) — equivalente a lo que hoy
+       * hace, sin ejecutar, el `effectDescription` de una carta de Dramaturgia (ver spec
+       * H1.16 §0.8). Sin coste de acción/Núcleo/Energía. Exclusivo de
+       * `turnOwner === 'ENEMY'` (mismo criterio que `PLAY_CONTRATIEMPO`/`PLAY_ALLY` con
+       * su lado fijo, pero espejado a Enemigo).
+       */
+      readonly type: 'SUMMON_MINION';
+      readonly minionDefinitionId: MinionDefinitionId;
+      readonly sourceId: string;
+    }
+  | {
+      /**
+       * NUEVO H1.16. Decide Y ejecuta, en una sola llamada, la acción del turno de los
+       * Secuaces (selección aleatoria con filtro de validez incluida — ver spec H1.16
+       * §0.3). Sin payload — a diferencia de `ACTIVATE_ABILITY`, la selección es
+       * responsabilidad del motor. Exclusivo de `turnOwner === 'ENEMY'`, 1 sola vez por
+       * turno de Enemigo (contador propio `minionActionResolvedThisEnemyTurn`,
+       * independiente de `ENEMY_BASE_ACTIONS_PER_TURN`).
+       */
+      readonly type: 'RESOLVE_MINION_ACTION';
     };

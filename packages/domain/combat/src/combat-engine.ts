@@ -34,6 +34,20 @@ import type {
   UndoableEnemyActionLogEntry,
 } from './types/contratiempo'; // NUEVO H1.14
 import type { AllyCardDefinition, AllyInPlay } from './types/ally'; // NUEVO H1.15
+import type { MinionDefinition, MinionDefinitionId, MinionInPlay } from './types/minion'; // NUEVO H1.16
+import { poolHasValidNucleo, decideEnemyNucleoToSpend, derivePlayerColorsFromLeaderAbilities } from './enemy-ai'; // NUEVO H1.16, reusa H1.7
+
+/**
+ * NUEVO H1.16 — fuente mínima común para armar `LEADER_DAMAGED`/`ALLY_DAMAGED`/
+ * `SCENARIO_PLOT_CHANGED` sin depender de un `ACTIVATE_ABILITY` completo (ver spec
+ * H1.16 §4.4, nota de refactor). `abilityId` está ausente para un ataque plano/pasivo
+ * de Secuaz (sin habilidad de catálogo detrás).
+ */
+interface AbilityActionSource {
+  readonly abilityId?: AbilityId;
+  readonly sourceId: string;
+  readonly side: CombatSide;
+}
 
 export class CombatEngine {
   private readonly randomSource: RandomSource;
@@ -75,6 +89,12 @@ export class CombatEngine {
   private alliesInPlay: AllyInPlay[];
   private activeDamageRedirectTargetId: CardInstanceId | null;
   private cardInstanceIdCounter: number;
+
+  // NUEVO H1.16 — ver spec H1.16 §0.1/§0.3/§4.1.
+  private readonly minionDefinitions: ReadonlyMap<MinionDefinitionId, MinionDefinition>;
+  private minionsInPlay: MinionInPlay[];
+  private minionActionResolvedThisEnemyTurn: boolean;
+  private minionInstanceIdCounter: number;
 
   constructor(config: CombatEngineConfig) {
     this.randomSource = config.randomSource;
@@ -120,6 +140,14 @@ export class CombatEngine {
     this.alliesInPlay = [];
     this.activeDamageRedirectTargetId = null;
     this.cardInstanceIdCounter = 0;
+
+    // NUEVO H1.16 — orden respecto a los campos de H1.14/H1.15 irrelevante, sin
+    // dependencias cruzadas (ver spec H1.16 §4.1).
+    this.minionDefinitions = config.minionDefinitions ?? new Map();
+    this.validateMinionDefinitionsConfig();
+    this.minionsInPlay = [];
+    this.minionActionResolvedThisEnemyTurn = false;
+    this.minionInstanceIdCounter = 0;
 
     const initialEnergy = config.initialLeaderEnergy ?? LEADER_ENERGY_INITIAL_DEFAULT;
     this.validateInitialLeaderEnergy(initialEnergy);
@@ -308,6 +336,40 @@ export class CombatEngine {
     return id;
   }
 
+  /** NUEVO H1.16 — mismo patrón que `nextCardInstanceId` (H1.15), contador propio. */
+  private nextMinionInstanceId(): CardInstanceId {
+    const id = createId<'CardInstanceId'>('CardInstanceId', `minion-${this.minionInstanceIdCounter}`);
+    this.minionInstanceIdCounter += 1;
+    return id;
+  }
+
+  /**
+   * NUEVO H1.16. Invariantes de configuración de `minionDefinitions` — mismo estilo que
+   * `validateAllyCardsConfig`. Ver spec H1.16 §3.5.
+   */
+  private validateMinionDefinitionsConfig(): void {
+    for (const [minionDefinitionId, def] of this.minionDefinitions) {
+      if (!Number.isInteger(def.planoAttackAmount) || def.planoAttackAmount < 0) {
+        throw new Error(
+          `CombatEngine: minionDefinitions["${String(minionDefinitionId)}"].planoAttackAmount debe ser un entero >= 0, recibido ${def.planoAttackAmount}`
+        );
+      }
+      if (def.specialActionAbilityId !== undefined) {
+        const cdDef = this.abilityCooldowns.get(def.specialActionAbilityId);
+        if (!cdDef) {
+          throw new Error(
+            `CombatEngine: minionDefinitions["${String(minionDefinitionId)}"].specialActionAbilityId "${String(def.specialActionAbilityId)}" no está en abilityCooldowns`
+          );
+        }
+        if (cdDef.side !== 'ENEMY') {
+          throw new Error(
+            `CombatEngine: minionDefinitions["${String(minionDefinitionId)}"].specialActionAbilityId "${String(def.specialActionAbilityId)}" tiene side "${cdDef.side}" — la acción especial de un Secuaz siempre es side 'ENEMY' (turn.ts: "sourceId distintos dentro del mismo lado")`
+          );
+        }
+      }
+    }
+  }
+
   /** Ver spec H1.14 §0 nota de estado del repo — mismo estilo que validateInitialLeaderShield (H1.6). */
   private validateInitialLeaderEnergy(value: number): void {
     if (!Number.isInteger(value) || value < 0 || value > LEADER_ENERGY_MAX) {
@@ -370,7 +432,7 @@ export class CombatEngine {
    * Muta `this.leaderShield`/`this.leaderDamage`.
    */
   private applyAttackEffect(
-    command: Extract<CombatCommand, { type: 'ACTIVATE_ABILITY' }>,
+    source: AbilityActionSource,
     effectDef: Extract<AbilityEffectDefinition, { kind: 'ATTACK' }>,
     nucleo: NucleoInstance
   ): CombatEvent {
@@ -379,17 +441,19 @@ export class CombatEngine {
 
     const target = this.resolveDamageTarget(); // NUEVO H1.15
     if (target) {
-      return this.applyAttackEffectToAlly(command, effectDef, nucleo, rawAmount, target);
+      return this.applyAttackEffectToAlly(source, effectDef, nucleo, rawAmount, target);
     }
-    return this.applyAttackEffectToLeader(command, effectDef, nucleo, rawAmount);
+    return this.applyAttackEffectToLeader(source, effectDef, nucleo, rawAmount);
   }
 
   /** H1.6 sin cambios de comportamiento — solo renombrada/extraída para separar la rama
-   *  nueva de Aliados (ver spec H1.15 §4.4). */
+   *  nueva de Aliados (ver spec H1.15 §4.4). NUEVO H1.16: `source`/`nucleo` generalizados
+   *  (ver spec H1.16 §4.4 nota de refactor) para admitir el ataque plano/pasivo de
+   *  Secuaz, sin habilidad de catálogo ni Núcleo real detrás. */
   private applyAttackEffectToLeader(
-    command: Extract<CombatCommand, { type: 'ACTIVATE_ABILITY' }>,
-    effectDef: Extract<AbilityEffectDefinition, { kind: 'ATTACK' }>,
-    nucleo: NucleoInstance,
+    source: AbilityActionSource,
+    effectDef: { readonly arrollar?: boolean },
+    nucleo: NucleoInstance | null,
     rawAmount: number
   ): CombatEvent {
     const shieldBefore = this.leaderShield;
@@ -402,9 +466,11 @@ export class CombatEngine {
 
     return {
       type: 'LEADER_DAMAGED',
-      abilityId: command.abilityId,
-      sourceId: command.sourceId,
-      side: command.side,
+      // NUEVO H1.16 — `exactOptionalPropertyTypes`: solo se incluye la clave si hay
+      // abilityId real detrás (ver AbilityActionSource).
+      ...(source.abilityId !== undefined ? { abilityId: source.abilityId } : {}),
+      sourceId: source.sourceId,
+      side: source.side,
       nucleoSpent: nucleo,
       rawAmount,
       absorbedByShield,
@@ -414,11 +480,12 @@ export class CombatEngine {
     };
   }
 
-  /** NUEVO H1.15 — ver spec §0.4 sobre por qué el Escudo no interviene aquí. */
+  /** NUEVO H1.15 — ver spec §0.4 sobre por qué el Escudo no interviene aquí. NUEVO
+   *  H1.16: `source`/`nucleo` generalizados, ver comentario en `applyAttackEffectToLeader`. */
   private applyAttackEffectToAlly(
-    command: Extract<CombatCommand, { type: 'ACTIVATE_ABILITY' }>,
-    effectDef: Extract<AbilityEffectDefinition, { kind: 'ATTACK' }>,
-    nucleo: NucleoInstance,
+    source: AbilityActionSource,
+    effectDef: { readonly arrollar?: boolean },
+    nucleo: NucleoInstance | null,
     rawAmount: number,
     target: AllyInPlay
   ): CombatEvent {
@@ -439,9 +506,10 @@ export class CombatEngine {
 
     return {
       type: 'ALLY_DAMAGED',
-      abilityId: command.abilityId,
-      sourceId: command.sourceId,
-      side: command.side,
+      // NUEVO H1.16 — ver comentario equivalente en `applyAttackEffectToLeader`.
+      ...(source.abilityId !== undefined ? { abilityId: source.abilityId } : {}),
+      sourceId: source.sourceId,
+      side: source.side,
       nucleoSpent: nucleo,
       allyInstanceId: target.instanceId,
       rawAmount,
@@ -482,10 +550,10 @@ export class CombatEngine {
    * cosa que "daño").
    */
   private applyPlotEffect(
-    command: Extract<CombatCommand, { type: 'ACTIVATE_ABILITY' }>,
+    source: AbilityActionSource & { readonly abilityId: AbilityId },
     effectDef: Extract<AbilityEffectDefinition, { kind: 'PLOT' }>
   ): CombatEvent {
-    const ownerDef = this.abilityCooldowns.get(command.abilityId) as AbilityCooldownDefinition;
+    const ownerDef = this.abilityCooldowns.get(source.abilityId) as AbilityCooldownDefinition;
     const direction: 'INCREASE' | 'DECREASE' = ownerDef.side === 'ENEMY' ? 'INCREASE' : 'DECREASE';
     const rawAmount = effectDef.amount;
     const appliedDelta = direction === 'INCREASE' ? rawAmount : -rawAmount;
@@ -493,14 +561,98 @@ export class CombatEngine {
 
     return {
       type: 'SCENARIO_PLOT_CHANGED',
-      abilityId: command.abilityId,
-      sourceId: command.sourceId,
-      side: command.side,
+      abilityId: source.abilityId,
+      sourceId: source.sourceId,
+      side: source.side,
       direction,
       rawAmount,
       appliedDelta,
       scenarioPlotAfter: this.scenarioPlot,
     };
+  }
+
+  /**
+   * NUEVO H1.16 (extraído de `handleActivateAbility`, ver spec §4.4 punto 2 —
+   * "reutilizar, no duplicar"). Ejecuta el núcleo compartido de una activación de
+   * habilidad YA VALIDADA por el caller: gasta el `nucleo` indicado (ya elegido),
+   * resetea su CD a `baseCooldown`, resuelve `abilityEffects` (si los hay) y arma la
+   * entrada de log de Contratiempo correspondiente (`origin: 'ABILITY'` construido por
+   * el caller, no aquí). Usado tanto por `handleActivateAbility` (Enemigo/Líder mismos)
+   * como por `handleResolveMinionAction` (acción especial de Secuaz, `side: 'ENEMY'`
+   * fijo, `sourceId` = `instanceId` del Secuaz elegido). NO incrementa
+   * `actionsTakenThisTurn`/`abilityIdsActivatedThisTurn` ni evalúa Combo ni relanza el
+   * pool — esas 3 cosas siguen siendo responsabilidad exclusiva de cada caller (ver
+   * spec §4.4), para no alterar el orden de eventos ya cubierto por tests H1.14.
+   */
+  private executeAbilityEffect(
+    abilityId: AbilityId,
+    sourceId: string,
+    side: CombatSide,
+    nucleo: NucleoInstance
+  ): {
+    events: CombatEvent[];
+    effectLogEntry?: UndoableEnemyActionLogEntry['effect'];
+    cooldownBefore: number;
+  } {
+    const events: CombatEvent[] = [];
+
+    const index = this.nucleoPool.findIndex((n) => n.id === nucleo.id);
+    this.nucleoPool = [...this.nucleoPool.slice(0, index), ...this.nucleoPool.slice(index + 1)];
+
+    const def = this.abilityCooldowns.get(abilityId) as AbilityCooldownDefinition;
+    const cooldownBefore = this.remainingCooldowns.get(abilityId) ?? 0;
+    this.remainingCooldowns.set(abilityId, def.baseCooldown);
+
+    const activated: CombatEvent = {
+      type: 'ABILITY_ACTIVATED',
+      abilityId,
+      sourceId,
+      side,
+      nucleoSpent: nucleo,
+    };
+    events.push(activated);
+    this.eventBus.emit(activated);
+
+    let effectLogEntry: UndoableEnemyActionLogEntry['effect'] | undefined;
+    const effectDef = this.abilityEffects.get(abilityId);
+    if (effectDef) {
+      if (effectDef.kind === 'ATTACK') {
+        const leaderDamageBefore = this.leaderDamage;
+        const leaderShieldBefore = this.leaderShield;
+        const effectEvent = this.applyAttackEffect({ abilityId, sourceId, side }, effectDef, nucleo);
+        events.push(effectEvent);
+        this.eventBus.emit(effectEvent);
+
+        if (effectEvent.type === 'ALLY_DAMAGED') {
+          effectLogEntry = {
+            kind: 'ATTACK',
+            target: 'ALLY',
+            allyInstanceId: effectEvent.allyInstanceId,
+            allyLifeBefore: effectEvent.allyLifeBefore,
+            allyLifeAfter: effectEvent.allyLifeAfter,
+            leaderDamageBefore,
+            leaderDamageAfter: this.leaderDamage,
+          };
+        } else {
+          effectLogEntry = {
+            kind: 'ATTACK',
+            target: 'LEADER',
+            leaderDamageBefore,
+            leaderDamageAfter: this.leaderDamage,
+            leaderShieldBefore,
+            leaderShieldAfter: this.leaderShield,
+          };
+        }
+      } else {
+        const scenarioPlotBefore = this.scenarioPlot;
+        const effectEvent = this.applyPlotEffect({ abilityId, sourceId, side }, effectDef);
+        events.push(effectEvent);
+        this.eventBus.emit(effectEvent);
+        effectLogEntry = { kind: 'PLOT', scenarioPlotBefore, scenarioPlotAfter: this.scenarioPlot };
+      }
+    }
+
+    return { events, effectLogEntry, cooldownBefore };
   }
 
   dispatch(command: CombatCommand): CombatCommandResult {
@@ -515,6 +667,10 @@ export class CombatEngine {
         return this.handlePlayAlly(command);
       case 'SET_DAMAGE_REDIRECT':
         return this.handleSetDamageRedirect(command);
+      case 'SUMMON_MINION':
+        return this.handleSummonMinion(command);
+      case 'RESOLVE_MINION_ACTION':
+        return this.handleResolveMinionAction(command);
     }
   }
 
@@ -568,80 +724,26 @@ export class CombatEngine {
 
     // Solo a partir de aquí se muta estado — ninguna validación previa debe tener
     // efectos secundarios.
-    this.nucleoPool = [...this.nucleoPool.slice(0, index), ...this.nucleoPool.slice(index + 1)];
-
-    // NUEVO en H1.4 — activar la habilidad la manda a cooldown completo otra vez
-    // (GDD §2.5: "como recién usada"). Siempre resetea a su CD BASE, nunca a un valor
-    // parcial, sin importar cuánto tiempo llevara disponible.
-    const def = this.abilityCooldowns.get(command.abilityId) as AbilityCooldownDefinition;
-    const cooldownBeforeThisActivation = this.remainingCooldowns.get(command.abilityId) ?? 0; // NUEVO H1.14
-    this.remainingCooldowns.set(command.abilityId, def.baseCooldown);
 
     // NUEVO H1.14
     this.actionsTakenThisTurn += 1;
     this.abilityIdsActivatedThisTurn.add(command.abilityId);
 
-    const events: CombatEvent[] = [];
-
-    const activated: CombatEvent = {
-      type: 'ABILITY_ACTIVATED',
-      abilityId: command.abilityId,
-      sourceId: command.sourceId,
-      side: command.side,
-      nucleoSpent: nucleo,
-    };
-    events.push(activated);
-    this.eventBus.emit(activated);
-
-    // NUEVO H1.14 — captura "antes" para el log de reversión de Contratiempo, SOLO si
-    // side === 'ENEMY' (ver spec §0.4).
-    let effectLogEntry: UndoableEnemyActionLogEntry['effect'] | undefined;
-
-    // NUEVO H1.6 — se resuelve el efecto (si lo hay) INMEDIATAMENTE después de
-    // ABILITY_ACTIVATED, y ANTES de comprobar si el pool quedó vacío (orden elegido
-    // para que el efecto de ESTA activación siempre aparezca antes que un eventual
-    // relanzado de pool causado por ella).
-    const effectDef = this.abilityEffects.get(command.abilityId);
-    if (effectDef) {
-      if (effectDef.kind === 'ATTACK') {
-        const leaderDamageBefore = this.leaderDamage;
-        const leaderShieldBefore = this.leaderShield;
-        const effectEvent = this.applyAttackEffect(command, effectDef, nucleo);
-        events.push(effectEvent);
-        this.eventBus.emit(effectEvent);
-
-        if (effectEvent.type === 'ALLY_DAMAGED') {
-          effectLogEntry = {
-            kind: 'ATTACK',
-            target: 'ALLY',
-            allyInstanceId: effectEvent.allyInstanceId,
-            allyLifeBefore: effectEvent.allyLifeBefore,
-            allyLifeAfter: effectEvent.allyLifeAfter,
-            leaderDamageBefore,
-            leaderDamageAfter: this.leaderDamage,
-          };
-        } else {
-          effectLogEntry = {
-            kind: 'ATTACK',
-            target: 'LEADER',
-            leaderDamageBefore,
-            leaderDamageAfter: this.leaderDamage,
-            leaderShieldBefore,
-            leaderShieldAfter: this.leaderShield,
-          };
-        }
-      } else {
-        const scenarioPlotBefore = this.scenarioPlot;
-        const effectEvent = this.applyPlotEffect(command, effectDef);
-        events.push(effectEvent);
-        this.eventBus.emit(effectEvent);
-        effectLogEntry = { kind: 'PLOT', scenarioPlotBefore, scenarioPlotAfter: this.scenarioPlot };
-      }
-    }
+    // NUEVO H1.16 — porción compartida con `handleResolveMinionAction` (ver spec §4.4
+    // punto 2 y `executeAbilityEffect`): gasta Núcleo, resetea CD, resuelve
+    // `abilityEffects` y arma `effectLogEntry`. Sin cambio de comportamiento para este
+    // camino (Líder/Enemigo mismos).
+    const { events, effectLogEntry, cooldownBefore: cooldownBeforeThisActivation } = this.executeAbilityEffect(
+      command.abilityId,
+      command.sourceId,
+      command.side,
+      nucleo
+    );
 
     // NUEVO H1.14
     if (command.side === 'ENEMY') {
       this.currentEnemyTurnLog.push({
+        origin: 'ABILITY', // NUEVO H1.16
         abilityId: command.abilityId,
         sourceId: command.sourceId,
         cooldownBefore: cooldownBeforeThisActivation,
@@ -729,6 +831,87 @@ export class CombatEngine {
       this.currentEnemyTurnLog = [];
     }
 
+    // NUEVO H1.16 — reset simétrico al de arriba (ver spec §0.3).
+    this.minionActionResolvedThisEnemyTurn = false;
+
+    // NUEVO H1.16 — presencia pasiva de Secuaces (GDD §3.8), leída y aplicada cada vez
+    // que el turno que EMPIEZA es de Enemigo (ver spec §0.7). Se aplica DESPUÉS de la
+    // ventana de Contratiempo de arriba para que quede dentro del `currentEnemyTurnLog`
+    // recién vaciado de ESTE turno de Enemigo (revertible en el PRÓXIMO END_TURN del
+    // Líder).
+    if (this.turnOwner === 'ENEMY') {
+      const attackAmount = this.minionsInPlay.reduce(
+        (sum, m) => sum + (m.passiveEffect.kind === 'ATTACK' ? m.passiveEffect.amount : 0),
+        0
+      );
+      const plotAmount = this.minionsInPlay.reduce(
+        (sum, m) => sum + (m.passiveEffect.kind === 'PLOT' ? m.passiveEffect.amount : 0),
+        0
+      );
+      const arrollarAny = this.minionsInPlay.some(
+        (m) => m.passiveEffect.kind === 'ATTACK' && m.passiveEffect.arrollar === true
+      );
+
+      if (attackAmount > 0) {
+        const target = this.resolveDamageTarget(); // NUEVO H1.15
+        const effectDef = { arrollar: arrollarAny };
+        const source: AbilityActionSource = { sourceId: 'minion-passive', side: 'ENEMY' };
+        const leaderDamageBefore = this.leaderDamage;
+        const leaderShieldBefore = this.leaderShield;
+        const effectEvent = target
+          ? this.applyAttackEffectToAlly(source, effectDef, null, attackAmount, target)
+          : this.applyAttackEffectToLeader(source, effectDef, null, attackAmount);
+        events.push(effectEvent);
+        this.eventBus.emit(effectEvent);
+
+        const effectLogEntry: UndoableEnemyActionLogEntry['effect'] =
+          effectEvent.type === 'ALLY_DAMAGED'
+            ? {
+                kind: 'ATTACK',
+                target: 'ALLY',
+                allyInstanceId: effectEvent.allyInstanceId,
+                allyLifeBefore: effectEvent.allyLifeBefore,
+                allyLifeAfter: effectEvent.allyLifeAfter,
+                leaderDamageBefore,
+                leaderDamageAfter: this.leaderDamage,
+              }
+            : {
+                kind: 'ATTACK',
+                target: 'LEADER',
+                leaderDamageBefore,
+                leaderDamageAfter: this.leaderDamage,
+                leaderShieldBefore,
+                leaderShieldAfter: this.leaderShield,
+              };
+        this.currentEnemyTurnLog.push({
+          origin: 'MINION_PASSIVE',
+          sourceId: 'minion-passive',
+          effect: effectLogEntry,
+        });
+      }
+
+      if (plotAmount > 0) {
+        const scenarioPlotBefore = this.scenarioPlot;
+        this.scenarioPlot = Math.max(0, this.scenarioPlot + plotAmount);
+        this.currentEnemyTurnLog.push({
+          origin: 'MINION_PASSIVE',
+          sourceId: 'minion-passive',
+          effect: { kind: 'PLOT', scenarioPlotBefore, scenarioPlotAfter: this.scenarioPlot },
+        });
+      }
+
+      const passiveEvent: CombatEvent = {
+        type: 'MINION_PASSIVE_EFFECTS_APPLIED',
+        minionCount: this.minionsInPlay.length,
+        attackAmount,
+        plotAmount,
+        leaderDamageAfter: this.leaderDamage,
+        scenarioPlotAfter: this.scenarioPlot,
+      };
+      events.push(passiveEvent);
+      this.eventBus.emit(passiveEvent);
+    }
+
     return ok(events);
   }
 
@@ -771,28 +954,57 @@ export class CombatEngine {
     this.leaderEnergy -= def.energyCost;
     this.actionsTakenThisTurn += 1;
 
+    // NUEVO H1.16 — FIX del bug #25 (QA H1.14, ver spec §0.4): antes de esta historia,
+    // el bucle sobrescribía cada contador con el "antes" de la ÚLTIMA entrada de su tipo
+    // en vez de acumular al de la PRIMERA — código muerto mientras
+    // `revertedEntries.length <= 1` (cierto hasta H1.15), pero `RESOLVE_MINION_ACTION`
+    // (H1.16 §0.3) puede generar una 2ª entrada ATTACK/PLOT de side ENEMY en el mismo
+    // turno. "Primera entrada de cada contador gana" es equivalente a revertir la suma
+    // completa de deltas SIN necesidad de sumarlos explícitamente, porque
+    // `entry[i].xBefore === entry[i-1].xAfter` para toda `i > 0` dentro de esta ventana
+    // (invariante estructural: son mutaciones consecutivas del mismo turno de Enemigo).
+    // Se generaliza a N entradas, no solo 2.
+    let leaderDamageReverted = false;
+    let leaderShieldReverted = false;
+    let scenarioPlotReverted = false;
+    const allyLifeReverted = new Set<CardInstanceId>();
+
     const revertedEntries = [...this.previousEnemyTurnLog];
     for (const entry of revertedEntries) {
-      if (def.undoScope === 'FULL_TURN') {
-        this.remainingCooldowns.set(entry.abilityId, entry.cooldownBefore);
+      // NUEVO H1.16 — el guard `entry.origin === 'ABILITY'` evita tocar
+      // `remainingCooldowns` para entradas `MINION_PLANO_ATTACK`/`MINION_PASSIVE`, que no
+      // tienen `abilityId`/`cooldownBefore` (sin habilidad de catálogo detrás).
+      if (def.undoScope === 'FULL_TURN' && entry.origin === 'ABILITY') {
+        this.remainingCooldowns.set(entry.abilityId as AbilityId, entry.cooldownBefore as number);
       }
       if (!entry.effect) continue;
+
       if (entry.effect.kind === 'ATTACK') {
         // El daño SIEMPRE se revierte, en ambos alcances — GDD: "algunas revierten solo
         // el daño" ya implica que el daño se revierte también en FULL_TURN.
-        this.leaderDamage = entry.effect.leaderDamageBefore;
+        if (!leaderDamageReverted) {
+          this.leaderDamage = entry.effect.leaderDamageBefore;
+          leaderDamageReverted = true;
+        }
         if (entry.effect.target === 'LEADER') {
-          this.leaderShield = entry.effect.leaderShieldBefore;
-        } else {
-          // target === 'ALLY' — NUEVO H1.15, ver spec H1.15 §0.7.
+          if (!leaderShieldReverted) {
+            this.leaderShield = entry.effect.leaderShieldBefore;
+            leaderShieldReverted = true;
+          }
+        } else if (!allyLifeReverted.has(entry.effect.allyInstanceId)) {
+          // target === 'ALLY' — NUEVO H1.15, ver spec H1.15 §0.7. Caso borde H1.16 §0.4:
+          // si el MISMO Aliado es golpeado 2 veces en el turno, solo la PRIMERA aparición
+          // revierte su vida (a la de ANTES del primer golpe) — la 2ª se ignora.
+          allyLifeReverted.add(entry.effect.allyInstanceId);
           const allyEffect = entry.effect;
           this.alliesInPlay = this.alliesInPlay.map((a) =>
             a.instanceId === allyEffect.allyInstanceId ? { ...a, life: allyEffect.allyLifeBefore } : a
           );
         }
-      } else if (def.undoScope === 'FULL_TURN') {
+      } else if (def.undoScope === 'FULL_TURN' && !scenarioPlotReverted) {
         // Trama SOLO se revierte en alcance FULL_TURN — DAMAGE_ONLY nunca la toca.
         this.scenarioPlot = entry.effect.scenarioPlotBefore;
+        scenarioPlotReverted = true;
       }
     }
 
@@ -912,6 +1124,178 @@ export class CombatEngine {
     return ok([event]);
   }
 
+  /** NUEVO H1.16 — ver spec H1.16 §0.3/§4.3. */
+  private handleSummonMinion(
+    command: Extract<CombatCommand, { type: 'SUMMON_MINION' }>
+  ): CombatCommandResult {
+    const def = this.minionDefinitions.get(command.minionDefinitionId);
+    if (!def) {
+      return err({ code: 'MINION_DEFINITION_UNKNOWN', minionDefinitionId: command.minionDefinitionId });
+    }
+
+    if (this.turnOwner !== 'ENEMY') {
+      return err({ code: 'NOT_YOUR_TURN', expected: 'ENEMY', actual: this.turnOwner });
+    }
+
+    // Mutación — sin coste de acción/Núcleo/Energía (ver spec §0.3).
+    const instanceId = this.nextMinionInstanceId();
+    const minion: MinionInPlay = {
+      instanceId,
+      definitionId: command.minionDefinitionId,
+      passiveEffect: def.passiveEffect,
+      planoAttackAmount: def.planoAttackAmount,
+      isDefensor: def.isDefensor,
+      // NUEVO H1.16 — `exactOptionalPropertyTypes`: solo se incluye la clave si la
+      // definición declara una acción especial.
+      ...(def.specialActionAbilityId !== undefined ? { specialActionAbilityId: def.specialActionAbilityId } : {}),
+    };
+    this.minionsInPlay = [...this.minionsInPlay, minion];
+
+    const event: CombatEvent = {
+      type: 'MINION_SUMMONED',
+      minionDefinitionId: command.minionDefinitionId,
+      sourceId: command.sourceId,
+      instanceId,
+      isDefensor: def.isDefensor,
+    };
+    this.eventBus.emit(event);
+
+    return ok([event]);
+  }
+
+  /** NUEVO H1.16 — ver spec H1.16 §0.3/§4.4. Decide Y ejecuta la acción del turno de
+   *  los Secuaces (selección aleatoria con filtro de validez incluida). */
+  private handleResolveMinionAction(
+    command: Extract<CombatCommand, { type: 'RESOLVE_MINION_ACTION' }>
+  ): CombatCommandResult {
+    void command;
+
+    if (this.turnOwner !== 'ENEMY') {
+      return err({ code: 'NOT_YOUR_TURN', expected: 'ENEMY', actual: this.turnOwner });
+    }
+
+    if (this.minionActionResolvedThisEnemyTurn) {
+      return err({ code: 'MINION_ACTION_ALREADY_RESOLVED_THIS_TURN' });
+    }
+
+    // 1. Candidatos de acción especial: CD listo y Núcleo válido (GDD §3.8, "aleatorio
+    //    con filtro de validez — entre los que pueden ejecutar su acción").
+    const specialCandidates = this.minionsInPlay.filter((m) => {
+      if (!m.specialActionAbilityId) return false;
+      const remaining = this.remainingCooldowns.get(m.specialActionAbilityId) ?? 0;
+      if (remaining !== 0) return false;
+      const requirement = this.abilityCoreCosts.get(m.specialActionAbilityId);
+      if (!requirement) return false;
+      return poolHasValidNucleo(requirement, this.nucleoPool);
+    });
+
+    if (specialCandidates.length > 0) {
+      const chosen = this.randomSource.pick(specialCandidates);
+      const abilityId = chosen.specialActionAbilityId as AbilityId;
+      const requirement = this.abilityCoreCosts.get(abilityId) as CoreCostRequirement;
+      const playerColors = derivePlayerColorsFromLeaderAbilities(this.abilityCoreCosts, this.abilityCooldowns);
+      const nucleoDecision = decideEnemyNucleoToSpend(requirement, this.nucleoPool, playerColors, this.randomSource);
+
+      const { events: sharedEvents, effectLogEntry, cooldownBefore } = this.executeAbilityEffect(
+        abilityId,
+        chosen.instanceId,
+        'ENEMY',
+        nucleoDecision.nucleo
+      );
+      const events: CombatEvent[] = [...sharedEvents];
+
+      this.currentEnemyTurnLog.push({
+        origin: 'ABILITY',
+        abilityId,
+        sourceId: chosen.instanceId,
+        cooldownBefore,
+        ...(effectLogEntry ? { effect: effectLogEntry } : {}),
+      });
+
+      if (this.nucleoPool.length === 0) {
+        this.nucleoPool = this.rollNewPool();
+        const refilled: CombatEvent = {
+          type: 'NUCLEO_POOL_ROLLED',
+          pool: [...this.nucleoPool],
+          priorityTurnOwner: this.turnOwner,
+        };
+        events.push(refilled);
+        this.eventBus.emit(refilled);
+      }
+
+      this.minionActionResolvedThisEnemyTurn = true;
+
+      const resolvedEvent: CombatEvent = {
+        type: 'MINION_ACTION_RESOLVED',
+        instanceId: chosen.instanceId,
+        mechanism: 'SPECIAL_ACTION',
+      };
+      events.push(resolvedEvent);
+      this.eventBus.emit(resolvedEvent);
+
+      return ok(events);
+    }
+
+    if (this.minionsInPlay.length > 0) {
+      const chosen = this.randomSource.pick(this.minionsInPlay);
+      const events: CombatEvent[] = [];
+
+      const target = this.resolveDamageTarget(); // NUEVO H1.15
+      const effectDef = { arrollar: false };
+      const source: AbilityActionSource = { sourceId: chosen.instanceId, side: 'ENEMY' };
+      const leaderDamageBefore = this.leaderDamage;
+      const leaderShieldBefore = this.leaderShield;
+      const effectEvent = target
+        ? this.applyAttackEffectToAlly(source, effectDef, null, chosen.planoAttackAmount, target)
+        : this.applyAttackEffectToLeader(source, effectDef, null, chosen.planoAttackAmount);
+      events.push(effectEvent);
+      this.eventBus.emit(effectEvent);
+
+      const effectLogEntry: UndoableEnemyActionLogEntry['effect'] =
+        effectEvent.type === 'ALLY_DAMAGED'
+          ? {
+              kind: 'ATTACK',
+              target: 'ALLY',
+              allyInstanceId: effectEvent.allyInstanceId,
+              allyLifeBefore: effectEvent.allyLifeBefore,
+              allyLifeAfter: effectEvent.allyLifeAfter,
+              leaderDamageBefore,
+              leaderDamageAfter: this.leaderDamage,
+            }
+          : {
+              kind: 'ATTACK',
+              target: 'LEADER',
+              leaderDamageBefore,
+              leaderDamageAfter: this.leaderDamage,
+              leaderShieldBefore,
+              leaderShieldAfter: this.leaderShield,
+            };
+
+      this.currentEnemyTurnLog.push({
+        origin: 'MINION_PLANO_ATTACK',
+        sourceId: chosen.instanceId,
+        effect: effectLogEntry,
+      });
+
+      this.minionActionResolvedThisEnemyTurn = true;
+
+      const resolvedEvent: CombatEvent = {
+        type: 'MINION_ACTION_RESOLVED',
+        instanceId: chosen.instanceId,
+        mechanism: 'PLANO_ATTACK',
+      };
+      events.push(resolvedEvent);
+      this.eventBus.emit(resolvedEvent);
+
+      return ok(events);
+    }
+
+    // minionsInPlay vacío — no es un error (ver spec §0.3 punto 4).
+    const skippedEvent: CombatEvent = { type: 'MINION_ACTION_SKIPPED', reason: 'NO_MINIONS_IN_PLAY' };
+    this.eventBus.emit(skippedEvent);
+    return ok([skippedEvent]);
+  }
+
   subscribe(listener: (event: CombatEvent) => void): Unsubscribe {
     return this.eventBus.subscribe(listener);
   }
@@ -934,6 +1318,7 @@ export class CombatEngine {
       undoableLastEnemyTurn: [...this.previousEnemyTurnLog], // NUEVO H1.14
       alliesInPlay: [...this.alliesInPlay], // NUEVO H1.15
       activeDamageRedirectTargetId: this.activeDamageRedirectTargetId, // NUEVO H1.15
+      minionsInPlay: [...this.minionsInPlay], // NUEVO H1.16
     };
   }
 }
