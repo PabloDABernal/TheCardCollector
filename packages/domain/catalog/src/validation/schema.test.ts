@@ -92,11 +92,21 @@ function scenarioRaw(overrides: Record<string, unknown> = {}): Record<string, un
   return {
     id: 'scenario-1',
     name: 'Escenario de Prueba',
-    plotThresholds: [{ atLeast: 3, description: 'umbral' }],
+    plotThresholds: [
+      { atLeast: 2, description: 'umbral 1' },
+      { atLeast: 4, description: 'umbral 2' },
+      { atLeast: 6, description: 'umbral 3' },
+    ],
     passives: [{ description: 'pasivo' }],
     phases: [
       { phaseNumber: 1, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 1 } },
       { phaseNumber: 2, changeCondition: { kind: 'SCENARIO_PLOT_AT_LEAST', amount: 5 } },
+    ],
+    dramaturgiaDeck: [
+      dramaturgiaCardRaw('dramacard-s1', 'ATTACK'),
+      dramaturgiaCardRaw('dramacard-s2', 'ATTACK'),
+      dramaturgiaCardRaw('dramacard-s3', 'PLOT'),
+      dramaturgiaCardRaw('dramacard-s4', 'PLOT'),
     ],
     ...overrides,
   };
@@ -439,11 +449,12 @@ describe('parseEnemyDefinition', () => {
 // -----------------------------------------------------------------------------
 
 describe('parseScenarioDefinition', () => {
-  it('válido (2 fases, 1+ threshold, 1+ passive) → ok', () => {
+  it('válido (2 fases, 3+ thresholds escalonados, 1+ passive, dramaturgiaDeck) → ok', () => {
     const result = parseScenarioDefinition(scenarioRaw(), 'scenarios[0]');
     expect(result.phases).toHaveLength(2);
-    expect(result.plotThresholds).toHaveLength(1);
+    expect(result.plotThresholds).toHaveLength(3);
     expect(result.passives).toHaveLength(1);
+    expect(result.dramaturgiaDeck).toHaveLength(4);
   });
 
   it('phases[].changeCondition.kind === HEALTH_BELOW_PERCENT → lanza', () => {
@@ -471,6 +482,104 @@ describe('parseScenarioDefinition', () => {
       ],
     });
     expect(() => parseScenarioDefinition(raw, 'scenarios[0]')).toThrow();
+  });
+
+  it('plotThresholds con menos de 3 elementos → lanza', () => {
+    const raw = scenarioRaw({
+      plotThresholds: [
+        { atLeast: 2, description: 'umbral 1' },
+        { atLeast: 4, description: 'umbral 2' },
+      ],
+    });
+    expect(() => parseScenarioDefinition(raw, 'scenarios[0]')).toThrow();
+  });
+
+  it('plotThresholds desordenados (atLeast no ascendente) → lanza', () => {
+    const raw = scenarioRaw({
+      plotThresholds: [
+        { atLeast: 4, description: 'umbral 1' },
+        { atLeast: 2, description: 'umbral 2' },
+        { atLeast: 6, description: 'umbral 3' },
+      ],
+    });
+    expect(() => parseScenarioDefinition(raw, 'scenarios[0]')).toThrow();
+  });
+
+  it('plotThresholds con "atLeast" repetidos → lanza', () => {
+    const raw = scenarioRaw({
+      plotThresholds: [
+        { atLeast: 2, description: 'umbral 1' },
+        { atLeast: 2, description: 'umbral 2' },
+        { atLeast: 6, description: 'umbral 3' },
+      ],
+    });
+    expect(() => parseScenarioDefinition(raw, 'scenarios[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck ausente → lanza', () => {
+    const raw = scenarioRaw();
+    delete (raw as Record<string, unknown>).dramaturgiaDeck;
+    expect(() => parseScenarioDefinition(raw, 'scenarios[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck con menos de 4 cartas → lanza', () => {
+    const raw = scenarioRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-s1', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-s2', 'PLOT'),
+      ],
+    });
+    expect(() => parseScenarioDefinition(raw, 'scenarios[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck con DramaturgiaCardId duplicado → lanza', () => {
+    const raw = scenarioRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-s1', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-s1', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-s3', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-s4', 'PLOT'),
+      ],
+    });
+    expect(() => parseScenarioDefinition(raw, 'scenarios[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck sin ninguna carta ATTACK → lanza', () => {
+    const raw = scenarioRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-s1', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-s2', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-s3', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-s4', 'PLOT'),
+      ],
+    });
+    expect(() => parseScenarioDefinition(raw, 'scenarios[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck sin ninguna carta PLOT → lanza', () => {
+    const raw = scenarioRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-s1', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-s2', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-s3', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-s4', 'ATTACK'),
+      ],
+    });
+    expect(() => parseScenarioDefinition(raw, 'scenarios[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck válido con effectDescription opcional → ok', () => {
+    const raw = scenarioRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-s1', 'ATTACK', { effectDescription: 'Avanza la Trama un paso extra.' }),
+        dramaturgiaCardRaw('dramacard-s2', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-s3', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-s4', 'PLOT'),
+      ],
+    });
+    const result = parseScenarioDefinition(raw, 'scenarios[0]');
+    expect(result.dramaturgiaDeck).toHaveLength(4);
+    expect(result.dramaturgiaDeck[0]?.effectDescription).toBe('Avanza la Trama un paso extra.');
   });
 });
 

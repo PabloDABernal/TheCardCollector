@@ -15,6 +15,10 @@ function readEnemies(): unknown[] {
   return [readJson('./enemies/bestia-base.json'), readJson('./enemies/espectro-base.json')];
 }
 
+function readScenarios(): unknown[] {
+  return [readJson('./scenarios/bosque-encantado-base.json'), readJson('./scenarios/templo-en-ruinas-base.json')];
+}
+
 function buildRawInput(): CatalogRawInput {
   const soldadoCards = readJson('./cards/soldado-base-cards.json') as unknown[];
   const magoCards = readJson('./cards/mago-base-cards.json') as unknown[];
@@ -25,7 +29,7 @@ function buildRawInput(): CatalogRawInput {
     cards: [...soldadoCards, ...magoCards],
     leaders: [soldado, mago],
     enemies: readEnemies(),
-    scenarios: [],
+    scenarios: readScenarios(),
     evolutionTemplates: [],
   };
 }
@@ -153,6 +157,90 @@ describe('Contenido de juguete — Enemigos (H1.10)', () => {
       expect(plotDecision.branch).toBe('PLOT');
       expect(plotDecision.tier).toBe('BASICA');
       expect(plotDecision.abilityId).toBe(expectedPlotAbilityId);
+    }
+  );
+});
+
+describe('Contenido de juguete — Escenarios (H1.11)', () => {
+  it('CatalogLoader.load() resuelve sin lanzar con los 2 Escenarios reales', async () => {
+    const loader = new CatalogLoader(buildRawInput());
+    await expect(loader.load()).resolves.toBeDefined();
+  });
+
+  it.each(['scenario-bosque-encantado-base', 'scenario-templo-en-ruinas-base'])(
+    '%s define exactamente 2 fases numeradas 1-2, ninguna con changeCondition HEALTH_BELOW_PERCENT',
+    async (scenarioId) => {
+      const loader = new CatalogLoader(buildRawInput());
+      await loader.load();
+      const scenario = loader.getScenario(createId<'ScenarioId'>('ScenarioId', scenarioId));
+      expect(scenario.phases.map((p) => p.phaseNumber)).toEqual([1, 2]);
+      for (const phase of scenario.phases) {
+        expect(phase.changeCondition.kind).not.toBe('HEALTH_BELOW_PERCENT');
+      }
+    }
+  );
+
+  it.each(['scenario-bosque-encantado-base', 'scenario-templo-en-ruinas-base'])(
+    '%s define al menos 3 plotThresholds con "atLeast" estrictamente ascendente',
+    async (scenarioId) => {
+      const loader = new CatalogLoader(buildRawInput());
+      await loader.load();
+      const scenario = loader.getScenario(createId<'ScenarioId'>('ScenarioId', scenarioId));
+      expect(scenario.plotThresholds.length).toBeGreaterThanOrEqual(3);
+      const atLeasts = scenario.plotThresholds.map((t) => t.atLeast);
+      const sorted = [...atLeasts].sort((a, b) => a - b);
+      expect(atLeasts).toEqual(sorted);
+      expect(new Set(atLeasts).size).toBe(atLeasts.length); // sin repetidos
+    }
+  );
+
+  it.each(['scenario-bosque-encantado-base', 'scenario-templo-en-ruinas-base'])(
+    '%s tiene un dramaturgiaDeck con al menos 1 carta ATTACK y 1 PLOT',
+    async (scenarioId) => {
+      const loader = new CatalogLoader(buildRawInput());
+      await loader.load();
+      const scenario = loader.getScenario(createId<'ScenarioId'>('ScenarioId', scenarioId));
+      const icons = scenario.dramaturgiaDeck.map((c) => c.icon);
+      expect(icons).toContain('ATTACK');
+      expect(icons).toContain('PLOT');
+    }
+  );
+
+  it('las 2 cartas comunes (dramacard-common-*) son idénticas en ambos Escenarios', async () => {
+    const loader = new CatalogLoader(buildRawInput());
+    await loader.load();
+    const bosque = loader.getScenario(createId<'ScenarioId'>('ScenarioId', 'scenario-bosque-encantado-base'));
+    const templo = loader.getScenario(createId<'ScenarioId'>('ScenarioId', 'scenario-templo-en-ruinas-base'));
+    const commonIn = (deck: typeof bosque.dramaturgiaDeck) =>
+      deck.filter((c) => String(c.id).startsWith('dramacard-common-'));
+    expect(commonIn(bosque.dramaturgiaDeck)).toEqual(commonIn(templo.dramaturgiaDeck));
+  });
+
+  it.each([
+    ['scenario-bosque-encantado-base', 'enemy-bestia-base'],
+    ['scenario-templo-en-ruinas-base', 'enemy-espectro-base'],
+  ] as const)(
+    '%s: cada icon de su dramaturgiaDeck es consumible por decideEnemyAbility (domain/combat, H1.7) del Enemigo %s, sin adaptador',
+    async (scenarioId, enemyId) => {
+      const loader = new CatalogLoader(buildRawInput());
+      await loader.load();
+      const scenario = loader.getScenario(createId<'ScenarioId'>('ScenarioId', scenarioId));
+      const enemy = loader.getEnemy(createId<'EnemyId'>('EnemyId', enemyId));
+
+      const candidates: EnemyAbilityCandidate[] = enemy.abilities.map((a) => ({
+        abilityId: a.id,
+        coreCost: a.coreCost,
+        baseCooldown: a.baseCooldown,
+        remainingCooldown: 0,
+        aiProfile: a.aiProfile,
+      }));
+      const pool: NucleoInstance[] = [];
+      const randomSource = new SeededRandomSource(1);
+
+      for (const card of scenario.dramaturgiaDeck) {
+        const decision = decideEnemyAbility(card.icon, candidates, pool, randomSource);
+        expect(decision.branch).toBe(card.icon);
+      }
     }
   );
 });

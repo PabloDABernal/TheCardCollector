@@ -55,9 +55,19 @@ function scenarioRaw(overrides: Record<string, unknown> = {}): Record<string, un
   return {
     id: 'scenario-1',
     name: 'Escenario de Prueba',
-    plotThresholds: [{ atLeast: 3, description: 'umbral' }],
+    plotThresholds: [
+      { atLeast: 2, description: 'umbral 1' },
+      { atLeast: 4, description: 'umbral 2' },
+      { atLeast: 6, description: 'umbral 3' },
+    ],
     passives: [{ description: 'pasivo' }],
     phases: [{ phaseNumber: 1, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 1 } }],
+    dramaturgiaDeck: [
+      { id: 'dramacard-s1', name: 'Carta S1', icon: 'ATTACK' },
+      { id: 'dramacard-s2', name: 'Carta S2', icon: 'ATTACK' },
+      { id: 'dramacard-s3', name: 'Carta S3', icon: 'PLOT' },
+      { id: 'dramacard-s4', name: 'Carta S4', icon: 'PLOT' },
+    ],
     ...overrides,
   };
 }

@@ -1,0 +1,26 @@
+{
+  "id": "scenario-bosque-encantado-base",
+  "name": "Bosque Encantado Base",
+  "plotThresholds": [
+    { "atLeast": 2, "description": "Escalada 1/5: las sombras se alargan (efecto no ejecutable todavía, ver spec H1.11 §0.3)." },
+    { "atLeast": 4, "description": "Escalada 2/5: las raíces se agitan bajo tus pies." },
+    { "atLeast": 6, "description": "Escalada 3/5: el bosque entero parece observarte." },
+    { "atLeast": 8, "description": "Escalada 4/5: la luz desaparece casi por completo." },
+    { "atLeast": 10, "description": "Escalada 5/5: el corazón del bosque despierta." }
+  ],
+  "passives": [
+    { "description": "Pasivo siempre activo: el follaje denso reduce la visibilidad (no ejecutable todavía, ver spec H1.11 §0.3)." }
+  ],
+  "phases": [
+    { "phaseNumber": 1, "changeCondition": { "kind": "TURN_COUNT_AT_LEAST", "turn": 5 } },
+    { "phaseNumber": 2, "changeCondition": { "kind": "TURN_COUNT_AT_LEAST", "turn": 1 } }
+  ],
+  "dramaturgiaDeck": [
+    { "id": "dramacard-bosque-encantado-base-01", "name": "Raíces Errantes", "icon": "PLOT" },
+    { "id": "dramacard-bosque-encantado-base-02", "name": "Enredadera Viva", "icon": "PLOT", "effectDescription": "Avanza la Trama un paso extra (no ejecutable todavía, ver spec H1.11 §0.3)." },
+    { "id": "dramacard-bosque-encantado-base-03", "name": "Susurro del Follaje", "icon": "PLOT" },
+    { "id": "dramacard-bosque-encantado-base-04", "name": "Emboscada Silvestre", "icon": "ATTACK" },
+    { "id": "dramacard-common-niebla-01", "name": "Niebla Repentina", "icon": "PLOT" },
+    { "id": "dramacard-common-viento-cortante-01", "name": "Viento Cortante", "icon": "ATTACK" }
+  ]
+}

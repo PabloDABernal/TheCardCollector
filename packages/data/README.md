@@ -26,15 +26,41 @@ el loader real (el resto del dominio nunca toca disco — ver `docs/specs/H1.8_c
   construidas a partir de este contenido — demuestra que el dato producido aquí es
   compatible con el motor de IA ya existente sin ningún adaptador.
 
+## Contenido actual (H1.11 — Escenarios de prueba)
+
+- `scenarios/bosque-encantado-base.json`, `scenarios/templo-en-ruinas-base.json`: 1
+  `ScenarioDefinition` cada uno, con 5 `plotThresholds` escalonados (`atLeast`
+  estrictamente ascendente, mínimo exigido 3 — `validatePlotThresholdEscalation`,
+  `domain/catalog`), 2 `phases` (variedad de `changeCondition`: uno por turnos
+  `TURN_COUNT_AT_LEAST`, el otro por Trama acumulada `SCENARIO_PLOT_AT_LEAST` — nunca
+  `HEALTH_BELOW_PERCENT`, el Escenario no tiene vida) y un `dramaturgiaDeck` propio de 6
+  cartas (4 propias del Escenario + 2 "comunes" `dramacard-common-*`).
+- Las cartas `dramacard-common-*` se modelan como entradas normales de
+  `dramaturgiaDeck` (reutilizando `DramaturgiaCardDefinition` de H1.10 sin ningún tipo
+  nuevo) y se **duplican literalmente** (mismo `id`/`name`/`icon`) en los 2 archivos de
+  Escenario de esta historia — no existe todavía una colección propia de "cartas
+  comunes" en `Catalog` (deuda de diseño explícita, ver `docs/specs/H1.11_escenarios_prueba.md`
+  §0.1/§0.4).
+- `load-content.test.ts` extiende el bloque de H1.10: además de cargar los 2 Escenarios
+  vía `CatalogLoader`, verifica que las 2 cartas comunes sean idénticas entre archivos y
+  ejercita `decideEnemyAbility` (`@collector/domain-combat`, H1.7) con el `icon` de cada
+  carta del `dramaturgiaDeck` del Escenario contra las `abilities` reales de un Enemigo
+  real (H1.10) — demuestra que la Dramaturgia del Escenario es "jugable con combate"
+  junto a Enemigos, sin ningún adaptador.
+
 ## Namespacing de ids
 
 Todo id (`LeaderId`, `AbilityId`, `CardId`, `LevelUpOption.id`, `EnemyId`,
-`DramaturgiaCardId`) se prefija con el slug de la entidad que lo posee
-(`soldado-base`/`mago-base`/`bestia-base`/`espectro-base`), p. ej.
-`ability-soldado-base-guardia-firme`, `card-mago-base-01`,
-`ability-bestia-base-zarpazo`, `dramacard-espectro-base-01`. Esto evita colisiones
-cuando historias futuras (H1.11 `scenario-*`, H1.12 cartas comunes) añadan más
-contenido a este mismo paquete — sigue este mismo patrón al añadir nuevos archivos aquí.
+`DramaturgiaCardId`, `ScenarioId`) se prefija con el slug de la entidad que lo posee
+(`soldado-base`/`mago-base`/`bestia-base`/`espectro-base`/`bosque-encantado-base`/
+`templo-en-ruinas-base`), p. ej. `ability-soldado-base-guardia-firme`,
+`card-mago-base-01`, `ability-bestia-base-zarpazo`, `dramacard-espectro-base-01`,
+`dramacard-bosque-encantado-base-01`. Excepción deliberada: las cartas "comunes"
+(`dramacard-common-*`, H1.11) no llevan el slug de ningún Escenario/Enemigo concreto —
+por convención de contenido representan la misma carta compartida, duplicada
+literalmente entre archivos (ver §H1.11 arriba). Esto evita colisiones cuando historias
+futuras añadan más contenido a este mismo paquete — sigue este mismo patrón al añadir
+nuevos archivos aquí.
 
 Nota: `AbilityId` debe ser único en **todo** el catálogo (Líderes + Enemigos combinados,
 `validateGlobalAbilityIdUniqueness` en `domain/catalog`), no solo dentro de un Líder.

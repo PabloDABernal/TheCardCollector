@@ -430,6 +430,26 @@ function parsePassiveEffect(raw: unknown, context: string): ScenarioPassiveEffec
   return { description: raw.description };
 }
 
+/** Exige >= 1 threshold y `atLeast` estrictamente ascendente sin repetidos, en el mismo
+ *  orden del array (GDD §3.6: "efectos variables por umbrales escalados"; criterio de
+ *  aceptación H1.11: "Trama con umbrales escalonados"). No exige ningún tamaño de paso
+ *  concreto (+1, +2...) — eso es balance, no invariante de motor. */
+function validatePlotThresholdEscalation(thresholds: readonly ScenarioPlotThreshold[], context: string): void {
+  if (thresholds.length < 3) {
+    fail(context, 'plotThresholds debe tener al menos 3 umbrales para modelar una escalada (ver spec H1.11 §0.2)');
+  }
+  for (let i = 1; i < thresholds.length; i++) {
+    const current = thresholds[i]!;
+    const previous = thresholds[i - 1]!;
+    if (current.atLeast <= previous.atLeast) {
+      fail(
+        context,
+        `plotThresholds debe tener "atLeast" estrictamente ascendente — el elemento [${i}] (${current.atLeast}) no es mayor que el anterior (${previous.atLeast})`
+      );
+    }
+  }
+}
+
 export function parseScenarioDefinition(raw: unknown, context: string): ScenarioDefinition {
   if (!isRecord(raw)) fail(context, 'se esperaba un objeto');
   if (!isNonEmptyString(raw.id)) fail(context, 'campo "id" ausente o no es un string no vacío');
@@ -437,6 +457,7 @@ export function parseScenarioDefinition(raw: unknown, context: string): Scenario
 
   if (!Array.isArray(raw.plotThresholds)) fail(context, 'campo "plotThresholds" ausente o no es un array');
   const plotThresholds = raw.plotThresholds.map((t, i) => parsePlotThreshold(t, `${context}.plotThresholds[${i}]`));
+  validatePlotThresholdEscalation(plotThresholds, `${context}.plotThresholds`);
 
   if (!Array.isArray(raw.passives)) fail(context, 'campo "passives" ausente o no es un array');
   const passives = raw.passives.map((p, i) => parsePassiveEffect(p, `${context}.passives[${i}]`));
@@ -453,6 +474,8 @@ export function parseScenarioDefinition(raw: unknown, context: string): Scenario
   }
   validatePhaseSequence(phases, `${context}.phases`);
 
+  const dramaturgiaDeck = parseDramaturgiaDeck(raw.dramaturgiaDeck, `${context}.dramaturgiaDeck`);
+
   if (raw.universeSkin !== undefined && typeof raw.universeSkin !== 'string') {
     fail(context, 'campo "universeSkin", si está presente, debe ser un string');
   }
@@ -463,6 +486,7 @@ export function parseScenarioDefinition(raw: unknown, context: string): Scenario
     plotThresholds,
     passives,
     phases,
+    dramaturgiaDeck,
     ...(raw.universeSkin !== undefined ? { universeSkin: raw.universeSkin } : {}),
   };
 }
