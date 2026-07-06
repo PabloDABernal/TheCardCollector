@@ -22,11 +22,12 @@ function readScenarios(): unknown[] {
 function buildRawInput(): CatalogRawInput {
   const soldadoCards = readJson('./cards/soldado-base-cards.json') as unknown[];
   const magoCards = readJson('./cards/mago-base-cards.json') as unknown[];
+  const commonCards = readJson('./cards/common-cards.json') as unknown[];
   const soldado = readJson('./leaders/soldado-base.json');
   const mago = readJson('./leaders/mago-base.json');
 
   return {
-    cards: [...soldadoCards, ...magoCards],
+    cards: [...soldadoCards, ...magoCards, ...commonCards],
     leaders: [soldado, mago],
     enemies: readEnemies(),
     scenarios: readScenarios(),
@@ -80,6 +81,50 @@ describe('Contenido de juguete — Líderes (H1.9)', () => {
       }
     }
   });
+});
+
+describe('Contenido de juguete — Cartas base (H1.12)', () => {
+  it('CatalogLoader.load() resuelve sin lanzar con las 26 CardDefinition reales (20 de H1.9 + 6 comunes)', async () => {
+    const loader = new CatalogLoader(buildRawInput());
+    const catalog = await loader.load();
+    expect(catalog.cards.size).toBe(26);
+  });
+
+  it.each(['EQUIPO', 'ALIADO', 'EVENTO', 'CONTRATIEMPO'] as const)(
+    'el catálogo contiene al menos una CardDefinition de tipo %s',
+    async (cardType) => {
+      const loader = new CatalogLoader(buildRawInput());
+      const catalog = await loader.load();
+      const anyOfType = [...catalog.cards.values()].some((c) => c.type === cardType);
+      expect(anyOfType).toBe(true);
+    }
+  );
+
+  it.each([
+    'ATAQUE', 'ATAQUE_MAS_X', 'ATAQUE_POR_X', 'DEFENSA_X', 'TRAMA_X', 'UMBRAL', 'ARROLLAR',
+  ] as const)('el catálogo instancia al menos una vez la keyword %s', async (keyword) => {
+    const loader = new CatalogLoader(buildRawInput());
+    const catalog = await loader.load();
+    const anyWithKeyword = [...catalog.cards.values()].some((c) =>
+      c.keywords.some((k) => k.keyword === keyword)
+    );
+    expect(anyWithKeyword).toBe(true);
+  });
+
+  it('las 6 cartas comunes NO están referenciadas por ningún cardPoolIds de Líder', async () => {
+    const loader = new CatalogLoader(buildRawInput());
+    await loader.load();
+    const referenced = new Set([
+      ...loader.getLeader(createId<'LeaderId'>('LeaderId', 'leader-soldado-base')).cardPoolIds,
+      ...loader.getLeader(createId<'LeaderId'>('LeaderId', 'leader-mago-base')).cardPoolIds,
+    ] as string[]);
+    for (let i = 1; i <= 6; i++) {
+      expect(referenced.has(`card-common-0${i}`)).toBe(false);
+    }
+  });
+
+  // Heredado de H1.9, sigue en verde sin cambios: pools de 10 por Líder resuelven contra
+  // el catálogo (ahora de 26 cartas en vez de 20) — ver §1.1, no se repite aquí.
 });
 
 describe('Contenido de juguete — Enemigos (H1.10)', () => {

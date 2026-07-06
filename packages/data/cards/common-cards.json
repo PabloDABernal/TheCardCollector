@@ -1,0 +1,14 @@
+[
+  { "id": "card-common-01", "name": "Golpe Llano", "type": "EVENTO", "cost": { "energy": 1 },
+    "keywords": [{ "keyword": "ATAQUE" }] },
+  { "id": "card-common-02", "name": "Puñetazo Directo", "type": "EVENTO", "cost": { "energy": 1 },
+    "keywords": [{ "keyword": "ATAQUE" }, { "keyword": "NEUTRO" }] },
+  { "id": "card-common-03", "name": "Repliegue Táctico", "type": "CONTRATIEMPO", "cost": { "energy": 2 },
+    "keywords": [{ "keyword": "DEFENSA_X", "amount": 2 }] },
+  { "id": "card-common-04", "name": "Giro del Destino", "type": "CONTRATIEMPO", "cost": { "energy": 2 },
+    "keywords": [{ "keyword": "TRAMA_X", "amount": 1 }] },
+  { "id": "card-common-05", "name": "Refuerzo de Fila", "type": "ALIADO", "cost": { "energy": 1 },
+    "keywords": [{ "keyword": "NEUTRO" }] },
+  { "id": "card-common-06", "name": "Brazalete de Viaje", "type": "EQUIPO", "cost": { "energy": 1 },
+    "keywords": [{ "keyword": "DEFENSA_X", "amount": 1 }, { "keyword": "NEUTRO" }] }
+]

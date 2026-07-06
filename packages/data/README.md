@@ -48,6 +48,29 @@ el loader real (el resto del dominio nunca toca disco — ver `docs/specs/H1.8_c
   real (H1.10) — demuestra que la Dramaturgia del Escenario es "jugable con combate"
   junto a Enemigos, sin ningún adaptador.
 
+## Contenido actual (H1.12 — Cartas comunes base)
+
+- `cards/common-cards.json`: 6 `CardDefinition` bajo el namespace `card-common-*`, **sin**
+  ningún `cardPoolIds` de Líder que las referencie — la primera colección de cartas
+  "huérfanas" del catálogo (`validateLeaderCardPools`, `domain/catalog`, solo valida la
+  dirección pool→cards, nunca cards→algún pool, así que el loader ya las soporta sin
+  ningún cambio de código). Modelan un pequeño subconjunto simbólico del "Pool de
+  Comunes de jugador" del GDD §4.1 (independiente de las cartas propias de cada Líder) —
+  no las 50 cartas de lanzamiento, y sin ningún `DeckDefinition`/validación de mazo de 30
+  (fuera de alcance de la Épica E1, ver `docs/specs/H1.12_cartas_base.md` §5).
+  - `card-common-01`/`02` instancian la keyword `ATAQUE` sin sufijo (gap detectado en
+    H1.12: nunca se instanciaba en las 20 cartas de H1.9, que solo usan
+    `ATAQUE_MAS_X`/`ATAQUE_POR_X`).
+  - `card-common-03`/`04` son `CONTRATIEMPO` con keywords (`DEFENSA_X`, `TRAMA_X`)
+    distintas entre sí y de las 2 ya existentes en H1.9 (`Contragolpe`/`Contrahechizo`,
+    ambas `ATAQUE_MAS_X`), dando variedad real de datos para H1.13/H1.14.
+  - `card-common-05`/`06` completan la representación de tipos `ALIADO`/`EQUIPO` en el
+    pool de comunes.
+- `load-content.test.ts` extiende `buildRawInput()` con `common-cards.json` y verifica
+  que el catálogo cargue las 26 `CardDefinition` (20 de H1.9 + 6 comunes), que los 4
+  `CardType` y las keywords citadas por el backlog estén instanciadas, y que las 6
+  cartas comunes no aparezcan en ningún `cardPoolIds` de Líder.
+
 ## Namespacing de ids
 
 Todo id (`LeaderId`, `AbilityId`, `CardId`, `LevelUpOption.id`, `EnemyId`,
@@ -56,11 +79,11 @@ Todo id (`LeaderId`, `AbilityId`, `CardId`, `LevelUpOption.id`, `EnemyId`,
 `templo-en-ruinas-base`), p. ej. `ability-soldado-base-guardia-firme`,
 `card-mago-base-01`, `ability-bestia-base-zarpazo`, `dramacard-espectro-base-01`,
 `dramacard-bosque-encantado-base-01`. Excepción deliberada: las cartas "comunes"
-(`dramacard-common-*`, H1.11) no llevan el slug de ningún Escenario/Enemigo concreto —
-por convención de contenido representan la misma carta compartida, duplicada
-literalmente entre archivos (ver §H1.11 arriba). Esto evita colisiones cuando historias
-futuras añadan más contenido a este mismo paquete — sigue este mismo patrón al añadir
-nuevos archivos aquí.
+(`dramacard-common-*`, H1.11; `card-common-*`, H1.12) no llevan el slug de ningún
+Escenario/Enemigo/Líder concreto — por convención de contenido representan cartas
+compartidas, no ligadas a una única entidad de contenido (ver §H1.11 y §H1.12 arriba).
+Esto evita colisiones cuando historias futuras añadan más contenido a este mismo
+paquete — sigue este mismo patrón al añadir nuevos archivos aquí.
 
 Nota: `AbilityId` debe ser único en **todo** el catálogo (Líderes + Enemigos combinados,
 `validateGlobalAbilityIdUniqueness` en `domain/catalog`), no solo dentro de un Líder.
