@@ -1,0 +1,28 @@
+import type { DramaturgiaCardId } from '@collector/domain-shared';
+import type { EnemyAbilityBranch } from './enemy';
+
+/**
+ * Carta de Dramaturgia propia de un Enemigo (GDD §3.4/§5.2/§5.3). Su ÚNICO dato
+ * ejecutable hoy es `icon` — determina qué rama de `decideEnemyAbility` (domain/combat,
+ * H1.7) se activa al robarse; la habilidad EXACTA que se ejecuta dentro de esa rama la
+ * decide la IA en runtime (firma/básica para ATTACK, mayor-CD/básica para PLOT, GDD
+ * §3.5), nunca esta carta. NO referencia ningún `AbilityId` — deliberado, ver spec H1.10
+ * §0.1.
+ *
+ * `effectDescription` cubre "la carta también resuelve su propio efecto (invocar
+ * secuaz, daño extra, etc.)" (GDD §3.4) como texto libre no ejecutable — mismo patrón
+ * ya usado por `ScenarioPlotThreshold`/`ScenarioPassiveEffect` (catalog/types/scenario.ts)
+ * para mecánicas descritas por el GDD pero cuyo motor ejecutable todavía no existe
+ * (secuaces = H1.16, Combo = H1.14). Ausente = carta sin efecto adicional más allá del
+ * icono (la mayoría del mazo).
+ */
+export interface DramaturgiaCardDefinition {
+  readonly id: DramaturgiaCardId;
+  readonly name: string;
+  /** Reutiliza `EnemyAbilityBranch` (mismo vocabulario cerrado ATTACK|PLOT que ya usa
+   *  `EnemyAbilityAiProfile.branch`, enemy.ts) — el icono de la carta Y la rama de una
+   *  habilidad son el mismo concepto de dominio (⚔️/📜, GDD §3.4), no dos vocabularios
+   *  paralelos que puedan divergir. */
+  readonly icon: EnemyAbilityBranch;
+  readonly effectDescription?: string;
+}

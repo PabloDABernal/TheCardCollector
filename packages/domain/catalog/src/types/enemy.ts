@@ -1,6 +1,7 @@
 import type { EnemyId } from '@collector/domain-shared';
 import type { AbilityDefinition } from './ability';
 import type { PhaseDefinition } from './phase';
+import type { DramaturgiaCardDefinition } from './dramaturgia-card';
 
 /** Espejo estructural de `EnemyAbilityBranch`/`EnemyAbilityTier`/`EnemyAbilityAiProfile`
  *  (domain/combat/types/enemy-ai.ts) — ver spec §0.2. Mismas invariantes de contenido que
@@ -34,5 +35,15 @@ export interface EnemyDefinition {
   /** GDD §3.4: "Tope blando de vida: ningún enemigo supera 100HP". Validado como
    *  entero > 0 y <= 100 — ver §3.4. */
   readonly maxHealth: number;
+  /**
+   * NUEVO H1.10. El mazo de Dramaturgia PROPIO de este Enemigo (GDD §5.2: "8 cartas de
+   * Enemigo (4 tipos × 2 copias) + 2 únicas" = 10 en el contenido "real" de LCG). Esta
+   * historia NO exige cardinalidad 10 — ver spec H1.10 §0.5 para el tamaño mínimo
+   * elegido para contenido "de juguete". Es SOLO la porción de Enemigo del mazo completo
+   * de 30 (GDD §5.3): las 10 cartas de Escenario y las 10 comunes son H1.11; el
+   * ensamblaje del mazo de combate de 30 cartas (shuffle/robo/descarte) es H1.18 — ver
+   * spec H1.10 §0.3.
+   */
+  readonly dramaturgiaDeck: readonly DramaturgiaCardDefinition[];
   readonly universeSkin?: string;
 }

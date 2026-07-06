@@ -16,6 +16,10 @@ export type CardId = Brand<string, 'CardId'>;
 /** NUEVO H1.8. Id de una `EvolutionTemplate` de catálogo (GDD §7.2). */
 export type EvolutionTemplateId = Brand<string, 'EvolutionTemplateId'>;
 
+/** NUEVO H1.10. Id de una `DramaturgiaCardDefinition` — carta del mazo de Dramaturgia
+ *  propio de un Enemigo (ver `domain/catalog/types/dramaturgia-card.ts`). */
+export type DramaturgiaCardId = Brand<string, 'DramaturgiaCardId'>;
+
 // helper de construcción, evita castear "as" repartido por todo el código
 export function createId<B extends string>(brand: B, value: string): Brand<string, B> {
   return value as Brand<string, B>;

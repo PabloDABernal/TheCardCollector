@@ -42,6 +42,12 @@ function enemyRaw(overrides: Record<string, unknown> = {}): Record<string, unkno
     ],
     phases: [{ phaseNumber: 1, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 1 } }],
     maxHealth: 50,
+    dramaturgiaDeck: [
+      { id: 'dramacard-1', name: 'Carta 1', icon: 'ATTACK' },
+      { id: 'dramacard-2', name: 'Carta 2', icon: 'ATTACK' },
+      { id: 'dramacard-3', name: 'Carta 3', icon: 'PLOT' },
+      { id: 'dramacard-4', name: 'Carta 4', icon: 'PLOT' },
+    ],
     ...overrides,
   };
 }

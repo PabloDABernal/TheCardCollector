@@ -63,6 +63,10 @@ function enemyAbilityRaw(
   return abilityRaw({ id, aiProfile: { branch, tier }, ...overrides });
 }
 
+function dramaturgiaCardRaw(id: string, icon: 'ATTACK' | 'PLOT', overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return { id, name: `Carta ${id}`, icon, ...overrides };
+}
+
 function enemyRaw(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: 'enemy-1',
@@ -74,6 +78,12 @@ function enemyRaw(overrides: Record<string, unknown> = {}): Record<string, unkno
     ],
     phases: [{ phaseNumber: 1, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 1 } }],
     maxHealth: 50,
+    dramaturgiaDeck: [
+      dramaturgiaCardRaw('dramacard-1', 'ATTACK'),
+      dramaturgiaCardRaw('dramacard-2', 'ATTACK'),
+      dramaturgiaCardRaw('dramacard-3', 'PLOT'),
+      dramaturgiaCardRaw('dramacard-4', 'PLOT'),
+    ],
     ...overrides,
   };
 }
@@ -355,6 +365,72 @@ describe('parseEnemyDefinition', () => {
 
   it('maxHealth > 100 → lanza', () => {
     expect(() => parseEnemyDefinition(enemyRaw({ maxHealth: 101 }), 'enemies[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck ausente → lanza', () => {
+    const raw = enemyRaw();
+    delete (raw as Record<string, unknown>).dramaturgiaDeck;
+    expect(() => parseEnemyDefinition(raw, 'enemies[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck con menos de 4 cartas → lanza', () => {
+    const raw = enemyRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-1', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-2', 'PLOT'),
+      ],
+    });
+    expect(() => parseEnemyDefinition(raw, 'enemies[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck con DramaturgiaCardId duplicado → lanza', () => {
+    const raw = enemyRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-1', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-1', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-3', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-4', 'PLOT'),
+      ],
+    });
+    expect(() => parseEnemyDefinition(raw, 'enemies[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck sin ninguna carta ATTACK → lanza', () => {
+    const raw = enemyRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-1', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-2', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-3', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-4', 'PLOT'),
+      ],
+    });
+    expect(() => parseEnemyDefinition(raw, 'enemies[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck sin ninguna carta PLOT → lanza', () => {
+    const raw = enemyRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-1', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-2', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-3', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-4', 'ATTACK'),
+      ],
+    });
+    expect(() => parseEnemyDefinition(raw, 'enemies[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck válido con effectDescription opcional → ok', () => {
+    const raw = enemyRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-1', 'ATTACK', { effectDescription: 'Invoca un secuaz menor.' }),
+        dramaturgiaCardRaw('dramacard-2', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-3', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-4', 'PLOT'),
+      ],
+    });
+    const result = parseEnemyDefinition(raw, 'enemies[0]');
+    expect(result.dramaturgiaDeck).toHaveLength(4);
+    expect(result.dramaturgiaDeck[0]?.effectDescription).toBe('Invoca un secuaz menor.');
   });
 });
 

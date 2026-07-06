@@ -19,6 +19,7 @@ import type {
 import { CATALOG_ABILITY_BASE_COOLDOWN_MIN } from '../types/ability';
 import type { LeaderDefinition, LevelUpEffectSpec, LevelUpOption } from '../types/leader';
 import type { EnemyAbilityAiProfile, EnemyAbilityDefinition, EnemyDefinition } from '../types/enemy';
+import type { DramaturgiaCardDefinition } from '../types/dramaturgia-card';
 import type { PhaseChangeCondition, PhaseDefinition } from '../types/phase';
 import type { ScenarioDefinition, ScenarioPassiveEffect, ScenarioPlotThreshold } from '../types/scenario';
 import type { EvolutionEffectSpec, EvolutionTemplate, EvolutionTemplateTarget } from '../types/evolution-template';
@@ -299,6 +300,59 @@ function validatePhaseSequence(phases: readonly PhaseDefinition[], context: stri
   if (!isSequential) fail(context, 'phases debe numerarse 1..N sin huecos ni duplicados');
 }
 
+function parseDramaturgiaCardDefinition(raw: unknown, context: string): DramaturgiaCardDefinition {
+  if (!isRecord(raw)) fail(context, 'se esperaba un objeto');
+  if (!isNonEmptyString(raw.id)) fail(context, 'campo "id" ausente o no es un string no vacío');
+  if (!isNonEmptyString(raw.name)) fail(context, 'campo "name" ausente o no es un string no vacío');
+  if (raw.icon !== 'ATTACK' && raw.icon !== 'PLOT') {
+    fail(context, `campo "icon" debe ser ATTACK|PLOT, recibido ${String(raw.icon)}`);
+  }
+  if (raw.effectDescription !== undefined && typeof raw.effectDescription !== 'string') {
+    fail(context, 'campo "effectDescription", si está presente, debe ser un string');
+  }
+  return {
+    id: createId<'DramaturgiaCardId'>('DramaturgiaCardId', raw.id) as DramaturgiaCardDefinition['id'],
+    name: raw.name,
+    icon: raw.icon,
+    ...(raw.effectDescription !== undefined ? { effectDescription: raw.effectDescription } : {}),
+  };
+}
+
+/** Valida `dramaturgiaDeck` de una `EnemyDefinition` (spec H1.10 §0.2): mínimo 4
+ *  cartas, ids únicos dentro del mazo, y al menos 1 carta ATTACK y 1 PLOT (para que el
+ *  mazo, una vez barajado/robado en H1.18, pueda ejercitar ambas ramas de
+ *  `decideEnemyAbility`). Validación enteramente local — no hay referencia cruzada que
+ *  resolver contra otra colección del `Catalog`. */
+function parseDramaturgiaDeck(raw: unknown, context: string): readonly DramaturgiaCardDefinition[] {
+  if (!Array.isArray(raw)) fail(context, 'campo "dramaturgiaDeck" ausente o no es un array');
+  const dramaturgiaDeck = raw.map((c, i) => parseDramaturgiaCardDefinition(c, `${context}[${i}]`));
+
+  if (dramaturgiaDeck.length < 4) {
+    fail(context, 'dramaturgiaDeck debe tener al menos 4 cartas (mínimo de contenido de prueba, ver spec H1.10 §0.5)');
+  }
+
+  const seenIds = new Set<string>();
+  for (const card of dramaturgiaDeck) {
+    if (seenIds.has(card.id)) {
+      fail(context, `dramaturgiaDeck contiene un DramaturgiaCardId duplicado: "${card.id}"`);
+    }
+    seenIds.add(card.id);
+  }
+
+  const countByIcon = new Map<string, number>();
+  for (const card of dramaturgiaDeck) {
+    countByIcon.set(card.icon, (countByIcon.get(card.icon) ?? 0) + 1);
+  }
+  if ((countByIcon.get('ATTACK') ?? 0) === 0) {
+    fail(context, 'dramaturgiaDeck debe incluir al menos 1 carta con icon ATTACK (GDD §3.4, el icono ⚔️ debe poder salir)');
+  }
+  if ((countByIcon.get('PLOT') ?? 0) === 0) {
+    fail(context, 'dramaturgiaDeck debe incluir al menos 1 carta con icon PLOT (GDD §3.4, el icono 📜 debe poder salir)');
+  }
+
+  return dramaturgiaDeck;
+}
+
 export function parseEnemyDefinition(raw: unknown, context: string): EnemyDefinition {
   if (!isRecord(raw)) fail(context, 'se esperaba un objeto');
   if (!isNonEmptyString(raw.id)) fail(context, 'campo "id" ausente o no es un string no vacío');
@@ -342,6 +396,8 @@ export function parseEnemyDefinition(raw: unknown, context: string): EnemyDefini
     fail(context, 'campo "maxHealth" debe ser un entero > 0 y <= 100 (GDD §3.4, "tope blando de vida")');
   }
 
+  const dramaturgiaDeck = parseDramaturgiaDeck(raw.dramaturgiaDeck, `${context}.dramaturgiaDeck`);
+
   if (raw.universeSkin !== undefined && typeof raw.universeSkin !== 'string') {
     fail(context, 'campo "universeSkin", si está presente, debe ser un string');
   }
@@ -352,6 +408,7 @@ export function parseEnemyDefinition(raw: unknown, context: string): EnemyDefini
     abilities,
     phases,
     maxHealth: raw.maxHealth,
+    dramaturgiaDeck,
     ...(raw.universeSkin !== undefined ? { universeSkin: raw.universeSkin } : {}),
   };
 }

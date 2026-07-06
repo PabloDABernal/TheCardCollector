@@ -2,5 +2,5 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "rootDir": ".", "outDir": "dist", "types": ["node"] },
   "include": ["*.ts"],
-  "references": [{ "path": "../domain/catalog" }, { "path": "../domain/shared" }]
+  "references": [{ "path": "../domain/catalog" }, { "path": "../domain/shared" }, { "path": "../domain/combat" }]
 }
