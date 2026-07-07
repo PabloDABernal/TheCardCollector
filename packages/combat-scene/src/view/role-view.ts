@@ -8,6 +8,7 @@ const ROLE_SIZE = { width: 200, height: 200 };
 const LEADER_COLOR = 0x2980b9; // azul
 const ENEMY_COLOR = 0xc0392b; // rojo
 const SCENARIO_COLOR = 0x8e44ad; // violeta
+const SCENARIO_ALERT_COLOR = 0xc0392b; // NUEVO H2.11 — mismo rojo de alerta que ENEMY_COLOR
 const HUD_TEXT_OFFSET_Y = 120;
 
 export interface RoleView {
@@ -66,12 +67,17 @@ export function createEnemyRoleView(scene: Phaser.Scene): RoleView {
   };
 }
 
-/** Crea (una única vez) el Rectangle + Text de rol del Escenario, nombrado `FOCUS_ID_SCENARIO`. */
+/** Crea (una única vez) el Rectangle + Text de rol del Escenario, nombrado `FOCUS_ID_SCENARIO`.
+ *  NUEVO H2.11: resaltado persistente de umbral de Trama — cambia `fillColor` del tile a
+ *  `SCENARIO_ALERT_COLOR` mientras `scenarioPlot >= scenarioPlotDefeatThreshold`, evaluado en cada
+ *  `update()` de forma idempotente (spec §1.9). */
 export function createScenarioRoleView(scene: Phaser.Scene): RoleView {
-  const { text } = createRoleTile(scene, SCENARIO_POSITION, SCENARIO_COLOR, FOCUS_ID_SCENARIO);
+  const { rect, text } = createRoleTile(scene, SCENARIO_POSITION, SCENARIO_COLOR, FOCUS_ID_SCENARIO);
 
   return {
     update(snapshot: CombatStateSnapshot, ctx: BoardViewContext): void {
+      const atThreshold = snapshot.scenarioPlot >= ctx.scenarioPlotDefeatThreshold;
+      rect.setFillStyle(atThreshold ? SCENARIO_ALERT_COLOR : SCENARIO_COLOR); // NUEVO H2.11
       text.setText(
         `Escenario — Trama ${snapshot.scenarioPlot}/${ctx.scenarioPlotDefeatThreshold} | ` +
           `Fase ${snapshot.scenarioPhase.phaseNumber}/${snapshot.scenarioPhase.totalPhases}`,

@@ -33,6 +33,7 @@ interface TestRegistry {
   cardFlip: JuiceRecipe;
   hitImpact: JuiceRecipe;
   screenShake: JuiceRecipe;
+  floatingNumber: JuiceRecipe;
 }
 
 function createTestRegistry(): { registry: TestRegistry; callOrder: string[] } {
@@ -53,6 +54,7 @@ function createTestRegistry(): { registry: TestRegistry; callOrder: string[] } {
       cardFlip: fnRecipe('cardFlip'),
       hitImpact: fnRecipe('hitImpact'),
       screenShake: fnRecipe('screenShake'),
+      floatingNumber: fnRecipe('floatingNumber'),
     },
     callOrder,
   };
@@ -114,10 +116,13 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
+    await Promise.resolve();
 
     expect(registry.hitImpact.play).toHaveBeenCalledTimes(1);
     expect(registry.screenShake.play).toHaveBeenCalledTimes(1);
-    expect(callOrder).toEqual(['hitImpact', 'screenShake']);
+    // H2.11: floatingNumber (parallel, primer step) resuelve antes de que hitImpact/screenShake
+    // arranquen — no altera su orden relativo entre sí.
+    expect(callOrder).toEqual(['floatingNumber', 'hitImpact', 'screenShake']);
 
     const [, hitImpactTarget] = (registry.hitImpact.play as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(hitImpactTarget.focusId).toBe('leader');

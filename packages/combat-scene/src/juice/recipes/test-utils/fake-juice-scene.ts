@@ -52,6 +52,18 @@ export interface FakeParticleEmitter {
   destroy(): void;
 }
 
+/** H2.11 — superficie fake mínima de `scene.add.text` que `floating-number.ts` consume
+ *  (`x`/`y`/`setOrigin`, y las propiedades que el tween muta directamente: `y`/`alpha`). */
+export interface FakeJuiceText {
+  x: number;
+  y: number;
+  alpha: number;
+  text: string;
+  destroyed: boolean;
+  setOrigin(x: number, y?: number): FakeJuiceText;
+  destroy(): void;
+}
+
 export interface CreateFakeJuiceSceneOptions {
   /** Por defecto `true` (modo "auto-complete", §1.2): cada `tweens.add`/`tweens.chain`/
    *  `time.delayedCall` creado se resuelve en el siguiente microtask sin necesidad de llamar
@@ -72,6 +84,9 @@ export interface FakeJuiceScene {
   readonly recordedShakes: RecordedShake[];
   readonly recordedParticles: RecordedParticles[];
   readonly recordedDelayedCalls: RecordedDelayedCall[];
+  /** H2.11 — todo `Phaser.GameObjects.Text` creado vía `scene.add.text` (`floatingNumber`), en
+   *  orden de creación. */
+  readonly recordedTexts: FakeJuiceText[];
   /** Espía de cada asignación a `scene.tweens.timeScale` (hitStop embebido de `hitImpact`,
    *  spec §3.3 punto 4) — en orden cronológico de asignación. */
   readonly timeScaleAssignments: number[];
@@ -135,6 +150,23 @@ function createFakeRectangle(
   return rect;
 }
 
+function createFakeText(x: number, y: number, initialText: string): FakeJuiceText {
+  const text: FakeJuiceText = {
+    x,
+    y,
+    alpha: 1,
+    text: initialText,
+    destroyed: false,
+    setOrigin() {
+      return text;
+    },
+    destroy() {
+      text.destroyed = true;
+    },
+  };
+  return text;
+}
+
 export function createFakeJuiceScene(options: CreateFakeJuiceSceneOptions = {}): FakeJuiceScene {
   const autoComplete = options.autoComplete ?? true;
 
@@ -142,6 +174,7 @@ export function createFakeJuiceScene(options: CreateFakeJuiceSceneOptions = {}):
   const recordedShakes: RecordedShake[] = [];
   const recordedParticles: RecordedParticles[] = [];
   const recordedDelayedCalls: RecordedDelayedCall[] = [];
+  const recordedTexts: FakeJuiceText[] = [];
   const timeScaleAssignments: number[] = [];
   const tweenEntries: TweenEntry[] = [];
   const byName = new Map<string, FakeJuiceRectangle>();
@@ -227,6 +260,11 @@ export function createFakeJuiceScene(options: CreateFakeJuiceSceneOptions = {}):
       ): FakeJuiceRectangle {
         return createFakeRectangle(x ?? 0, y ?? 0, width ?? 0, height ?? 0, fillColor ?? 0x000000, registerByName);
       },
+      text(x?: number, y?: number, value?: string): FakeJuiceText {
+        const label = createFakeText(x ?? 0, y ?? 0, value ?? '');
+        recordedTexts.push(label);
+        return label;
+      },
       particles(
         x?: number,
         y?: number,
@@ -296,6 +334,7 @@ export function createFakeJuiceScene(options: CreateFakeJuiceSceneOptions = {}):
     recordedShakes,
     recordedParticles,
     recordedDelayedCalls,
+    recordedTexts,
     timeScaleAssignments,
     completeTween,
     runDelayedCall,

@@ -16,14 +16,21 @@ export const JUICE_CONFIG: JuiceConfig = {
   TURN_ENDED: [],
   COOLDOWNS_TICKED: [{ recipeId: 'cooldownReady', mode: 'parallel' }], // NUEVO H2.10 (antes: [])
   LEADER_DAMAGED: [
+    { recipeId: 'floatingNumber', mode: 'parallel' }, // NUEVO H2.11 — antes de hitImpact, spec §1.8
     { recipeId: 'hitImpact', mode: 'sequential' },
     { recipeId: 'screenShake', mode: 'sequential' },
   ],
-  SCENARIO_PLOT_CHANGED: [{ recipeId: 'hitImpact', mode: 'sequential' }],
+  SCENARIO_PLOT_CHANGED: [
+    { recipeId: 'floatingNumber', mode: 'parallel' }, // NUEVO H2.11
+    { recipeId: 'hitImpact', mode: 'sequential' },
+  ],
   COMBO_TRIGGERED: [],
   CONTRATIEMPO_PLAYED: [{ recipeId: 'cardFlip', mode: 'parallel' }],
   ALLY_ENTERED_PLAY: [{ recipeId: 'cardFlip', mode: 'parallel' }],
-  ALLY_DAMAGED: [{ recipeId: 'hitImpact', mode: 'sequential' }],
+  ALLY_DAMAGED: [
+    { recipeId: 'floatingNumber', mode: 'parallel' }, // NUEVO H2.11
+    { recipeId: 'hitImpact', mode: 'sequential' },
+  ],
   DAMAGE_REDIRECT_SET: [],
   MINION_SUMMONED: [{ recipeId: 'cardFlip', mode: 'parallel' }],
   MINION_ACTION_RESOLVED: [],
@@ -33,6 +40,7 @@ export const JUICE_CONFIG: JuiceConfig = {
   LEADER_LEVELED_UP: [],
   CARD_PLAYED: [{ recipeId: 'cardFlip', mode: 'parallel' }],
   ENEMY_DAMAGED: [
+    { recipeId: 'floatingNumber', mode: 'parallel' }, // NUEVO H2.11
     { recipeId: 'hitImpact', mode: 'sequential' },
     { recipeId: 'screenShake', mode: 'sequential' },
   ],
