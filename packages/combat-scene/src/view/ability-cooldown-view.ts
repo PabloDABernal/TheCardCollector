@@ -68,6 +68,16 @@ function colorFor(remaining: number, baseCooldown: number): number {
   return interpolateColor(COLOR_ACTIVE, COLOR_READY, progressOf(remaining, baseCooldown));
 }
 
+/** Fix H2.10 (bug reportado por Reviewer): réplica local de `Phaser.Math.Easing.Sine.Out` (no se
+ *  puede importar `phaser` como valor en este módulo, ver comentario de `interpolateColor` — se
+ *  carga también en tests con `@vitest-environment node`). El tween de `scaleX` (barra) usa
+ *  `ease: 'Sine.easeOut'`; el color debe interpolarse con el mismo easing sobre el mismo progreso
+ *  para que ambos avancen sincronizados durante los 250ms — usar `tween.progress` (lineal) crudo
+ *  para el color, mientras la barra avanza con Sine.easeOut, producía una ligera desincronía. */
+function sineEaseOut(t: number): number {
+  return Math.sin((t * Math.PI) / 2);
+}
+
 function labelFor(ability: AbilityViewData, remaining: number): string {
   return remaining === 0 ? `${ability.name} LISTA` : `${ability.name} ${remaining}/${ability.baseCooldown}`;
 }
@@ -141,7 +151,7 @@ export function createAbilityCooldownView(
           duration: PROGRESS_TWEEN_DURATION_MS,
           ease: 'Sine.easeOut',
           onUpdate: (tween: Phaser.Tweens.Tween) => {
-            entry.iconFill.setFillStyle(interpolateColor(oldColor, newColor, tween.progress));
+            entry.iconFill.setFillStyle(interpolateColor(oldColor, newColor, sineEaseOut(tween.progress)));
           },
           onComplete: () => {
             entry.iconFill.setFillStyle(newColor);
