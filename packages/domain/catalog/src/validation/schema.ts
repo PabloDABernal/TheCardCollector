@@ -9,7 +9,7 @@ import {
 } from '@collector/domain-shared';
 import type { CardDefinition, CardType } from '../types/card';
 import type { KeywordInstance } from '../types/keyword';
-import { KEYWORDS_REQUIRING_AMOUNT, type KeywordId } from '../types/keyword';
+import { CONTRATIEMPO_SCOPE_KEYWORDS, KEYWORDS_REQUIRING_AMOUNT, type KeywordId } from '../types/keyword';
 import type {
   AbilityDefinition,
   CatalogAbilityEffect,
@@ -19,6 +19,7 @@ import type {
 import { CATALOG_ABILITY_BASE_COOLDOWN_MIN } from '../types/ability';
 import type { LeaderDefinition, LevelUpEffectSpec, LevelUpOption } from '../types/leader';
 import type { EnemyAbilityAiProfile, EnemyAbilityDefinition, EnemyDefinition } from '../types/enemy';
+import type { DramaturgiaCardDefinition } from '../types/dramaturgia-card';
 import type { PhaseChangeCondition, PhaseDefinition } from '../types/phase';
 import type { ScenarioDefinition, ScenarioPassiveEffect, ScenarioPlotThreshold } from '../types/scenario';
 import type { EvolutionEffectSpec, EvolutionTemplate, EvolutionTemplateTarget } from '../types/evolution-template';
@@ -27,6 +28,8 @@ const CARD_TYPES: readonly CardType[] = ['EQUIPO', 'ALIADO', 'EVENTO', 'CONTRATI
 const KEYWORD_IDS: readonly KeywordId[] = [
   'ATAQUE', 'ATAQUE_MAS_X', 'ATAQUE_POR_X', 'CAOS', 'TRAMA_X', 'DEFENSA_X',
   'UMBRAL', 'COMBO', 'ARROLLAR', 'DEFENSOR', 'BERSERKER', 'NEUTRO',
+  'DESHACER_DANO', 'DESHACER_TURNO', // NUEVO H1.14
+  'VIDA_X', // NUEVO H1.15
 ];
 
 // ---------------------------------------------------------------------------
@@ -49,6 +52,39 @@ export function parseCardDefinition(raw: unknown, context: string): CardDefiniti
   const keywords: KeywordInstance[] = raw.keywords.map((k, i) =>
     parseKeywordInstance(k, `${context}.keywords[${i}]`)
   );
+
+  // NUEVO H1.14 — GDD §2.7, ver spec §0.5: exactamente 1 keyword de alcance si y solo si
+  // type === 'CONTRATIEMPO'.
+  const scopeKeywords = keywords.filter((k) => CONTRATIEMPO_SCOPE_KEYWORDS.includes(k.keyword));
+  if (raw.type === 'CONTRATIEMPO') {
+    if (scopeKeywords.length !== 1) {
+      fail(
+        context,
+        `type CONTRATIEMPO exige exactamente 1 keyword de alcance (${CONTRATIEMPO_SCOPE_KEYWORDS.join('|')}), encontradas ${scopeKeywords.length} (GDD §2.7)`
+      );
+    }
+  } else if (scopeKeywords.length > 0) {
+    fail(
+      context,
+      `keyword(s) ${scopeKeywords.map((k) => k.keyword).join(',')} solo son válidas en cartas type CONTRATIEMPO (GDD §2.7), pero esta carta es type ${String(raw.type)}`
+    );
+  }
+
+  // NUEVO H1.15 — GDD §3.7, ver spec §0.5: exactamente 1 VIDA_X si y solo si type === 'ALIADO'.
+  const lifeKeywords = keywords.filter((k) => k.keyword === 'VIDA_X');
+  if (raw.type === 'ALIADO') {
+    if (lifeKeywords.length !== 1) {
+      fail(
+        context,
+        `type ALIADO exige exactamente 1 keyword VIDA_X, encontradas ${lifeKeywords.length} (GDD §3.7)`
+      );
+    }
+  } else if (lifeKeywords.length > 0) {
+    fail(
+      context,
+      `keyword VIDA_X solo es válida en cartas type ALIADO (GDD §3.7), pero esta carta es type ${String(raw.type)}`
+    );
+  }
 
   if (raw.universeSkin !== undefined && typeof raw.universeSkin !== 'string') {
     fail(context, 'campo "universeSkin", si está presente, debe ser un string');
@@ -226,6 +262,11 @@ export function parseLeaderDefinition(raw: unknown, context: string): LeaderDefi
   if (!Array.isArray(raw.levelUpOptions)) fail(context, 'campo "levelUpOptions" ausente o no es un array');
   const levelUpOptions = raw.levelUpOptions.map((o, i) => parseLevelUpOption(o, `${context}.levelUpOptions[${i}]`));
 
+  // NUEVO H1.18 — mismo criterio que EnemyDefinition.maxHealth (ver spec H1.18 §0.3).
+  if (!isPositiveInteger(raw.maxHealth) || raw.maxHealth > 100) {
+    fail(context, 'campo "maxHealth" debe ser un entero > 0 y <= 100 (GDD §3.4, "tope blando de vida")');
+  }
+
   if (raw.universeSkin !== undefined && typeof raw.universeSkin !== 'string') {
     fail(context, 'campo "universeSkin", si está presente, debe ser un string');
   }
@@ -236,6 +277,7 @@ export function parseLeaderDefinition(raw: unknown, context: string): LeaderDefi
     baseAbilities: baseAbilities as unknown as LeaderDefinition['baseAbilities'],
     cardPoolIds,
     levelUpOptions,
+    maxHealth: raw.maxHealth,
     ...(raw.universeSkin !== undefined ? { universeSkin: raw.universeSkin } : {}),
   };
 }
@@ -299,6 +341,59 @@ function validatePhaseSequence(phases: readonly PhaseDefinition[], context: stri
   if (!isSequential) fail(context, 'phases debe numerarse 1..N sin huecos ni duplicados');
 }
 
+function parseDramaturgiaCardDefinition(raw: unknown, context: string): DramaturgiaCardDefinition {
+  if (!isRecord(raw)) fail(context, 'se esperaba un objeto');
+  if (!isNonEmptyString(raw.id)) fail(context, 'campo "id" ausente o no es un string no vacío');
+  if (!isNonEmptyString(raw.name)) fail(context, 'campo "name" ausente o no es un string no vacío');
+  if (raw.icon !== 'ATTACK' && raw.icon !== 'PLOT') {
+    fail(context, `campo "icon" debe ser ATTACK|PLOT, recibido ${String(raw.icon)}`);
+  }
+  if (raw.effectDescription !== undefined && typeof raw.effectDescription !== 'string') {
+    fail(context, 'campo "effectDescription", si está presente, debe ser un string');
+  }
+  return {
+    id: createId<'DramaturgiaCardId'>('DramaturgiaCardId', raw.id) as DramaturgiaCardDefinition['id'],
+    name: raw.name,
+    icon: raw.icon,
+    ...(raw.effectDescription !== undefined ? { effectDescription: raw.effectDescription } : {}),
+  };
+}
+
+/** Valida `dramaturgiaDeck` de una `EnemyDefinition` (spec H1.10 §0.2): mínimo 4
+ *  cartas, ids únicos dentro del mazo, y al menos 1 carta ATTACK y 1 PLOT (para que el
+ *  mazo, una vez barajado/robado en H1.18, pueda ejercitar ambas ramas de
+ *  `decideEnemyAbility`). Validación enteramente local — no hay referencia cruzada que
+ *  resolver contra otra colección del `Catalog`. */
+function parseDramaturgiaDeck(raw: unknown, context: string): readonly DramaturgiaCardDefinition[] {
+  if (!Array.isArray(raw)) fail(context, 'campo "dramaturgiaDeck" ausente o no es un array');
+  const dramaturgiaDeck = raw.map((c, i) => parseDramaturgiaCardDefinition(c, `${context}[${i}]`));
+
+  if (dramaturgiaDeck.length < 4) {
+    fail(context, 'dramaturgiaDeck debe tener al menos 4 cartas (mínimo de contenido de prueba, ver spec H1.10 §0.5)');
+  }
+
+  const seenIds = new Set<string>();
+  for (const card of dramaturgiaDeck) {
+    if (seenIds.has(card.id)) {
+      fail(context, `dramaturgiaDeck contiene un DramaturgiaCardId duplicado: "${card.id}"`);
+    }
+    seenIds.add(card.id);
+  }
+
+  const countByIcon = new Map<string, number>();
+  for (const card of dramaturgiaDeck) {
+    countByIcon.set(card.icon, (countByIcon.get(card.icon) ?? 0) + 1);
+  }
+  if ((countByIcon.get('ATTACK') ?? 0) === 0) {
+    fail(context, 'dramaturgiaDeck debe incluir al menos 1 carta con icon ATTACK (GDD §3.4, el icono ⚔️ debe poder salir)');
+  }
+  if ((countByIcon.get('PLOT') ?? 0) === 0) {
+    fail(context, 'dramaturgiaDeck debe incluir al menos 1 carta con icon PLOT (GDD §3.4, el icono 📜 debe poder salir)');
+  }
+
+  return dramaturgiaDeck;
+}
+
 export function parseEnemyDefinition(raw: unknown, context: string): EnemyDefinition {
   if (!isRecord(raw)) fail(context, 'se esperaba un objeto');
   if (!isNonEmptyString(raw.id)) fail(context, 'campo "id" ausente o no es un string no vacío');
@@ -342,6 +437,8 @@ export function parseEnemyDefinition(raw: unknown, context: string): EnemyDefini
     fail(context, 'campo "maxHealth" debe ser un entero > 0 y <= 100 (GDD §3.4, "tope blando de vida")');
   }
 
+  const dramaturgiaDeck = parseDramaturgiaDeck(raw.dramaturgiaDeck, `${context}.dramaturgiaDeck`);
+
   if (raw.universeSkin !== undefined && typeof raw.universeSkin !== 'string') {
     fail(context, 'campo "universeSkin", si está presente, debe ser un string');
   }
@@ -352,6 +449,7 @@ export function parseEnemyDefinition(raw: unknown, context: string): EnemyDefini
     abilities,
     phases,
     maxHealth: raw.maxHealth,
+    dramaturgiaDeck,
     ...(raw.universeSkin !== undefined ? { universeSkin: raw.universeSkin } : {}),
   };
 }
@@ -373,6 +471,26 @@ function parsePassiveEffect(raw: unknown, context: string): ScenarioPassiveEffec
   return { description: raw.description };
 }
 
+/** Exige >= 3 thresholds y `atLeast` estrictamente ascendente sin repetidos, en el mismo
+ *  orden del array (GDD §3.6: "efectos variables por umbrales escalados"; criterio de
+ *  aceptación H1.11: "Trama con umbrales escalonados"). No exige ningún tamaño de paso
+ *  concreto (+1, +2...) — eso es balance, no invariante de motor. */
+function validatePlotThresholdEscalation(thresholds: readonly ScenarioPlotThreshold[], context: string): void {
+  if (thresholds.length < 3) {
+    fail(context, 'plotThresholds debe tener al menos 3 umbrales para modelar una escalada (ver spec H1.11 §0.2)');
+  }
+  for (let i = 1; i < thresholds.length; i++) {
+    const current = thresholds[i]!;
+    const previous = thresholds[i - 1]!;
+    if (current.atLeast <= previous.atLeast) {
+      fail(
+        context,
+        `plotThresholds debe tener "atLeast" estrictamente ascendente — el elemento [${i}] (${current.atLeast}) no es mayor que el anterior (${previous.atLeast})`
+      );
+    }
+  }
+}
+
 export function parseScenarioDefinition(raw: unknown, context: string): ScenarioDefinition {
   if (!isRecord(raw)) fail(context, 'se esperaba un objeto');
   if (!isNonEmptyString(raw.id)) fail(context, 'campo "id" ausente o no es un string no vacío');
@@ -380,6 +498,7 @@ export function parseScenarioDefinition(raw: unknown, context: string): Scenario
 
   if (!Array.isArray(raw.plotThresholds)) fail(context, 'campo "plotThresholds" ausente o no es un array');
   const plotThresholds = raw.plotThresholds.map((t, i) => parsePlotThreshold(t, `${context}.plotThresholds[${i}]`));
+  validatePlotThresholdEscalation(plotThresholds, `${context}.plotThresholds`);
 
   if (!Array.isArray(raw.passives)) fail(context, 'campo "passives" ausente o no es un array');
   const passives = raw.passives.map((p, i) => parsePassiveEffect(p, `${context}.passives[${i}]`));
@@ -396,6 +515,8 @@ export function parseScenarioDefinition(raw: unknown, context: string): Scenario
   }
   validatePhaseSequence(phases, `${context}.phases`);
 
+  const dramaturgiaDeck = parseDramaturgiaDeck(raw.dramaturgiaDeck, `${context}.dramaturgiaDeck`);
+
   if (raw.universeSkin !== undefined && typeof raw.universeSkin !== 'string') {
     fail(context, 'campo "universeSkin", si está presente, debe ser un string');
   }
@@ -406,6 +527,7 @@ export function parseScenarioDefinition(raw: unknown, context: string): Scenario
     plotThresholds,
     passives,
     phases,
+    dramaturgiaDeck,
     ...(raw.universeSkin !== undefined ? { universeSkin: raw.universeSkin } : {}),
   };
 }

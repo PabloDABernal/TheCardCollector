@@ -3,6 +3,11 @@
   "references": [
     { "path": "packages/domain/shared" },
     { "path": "packages/domain/catalog" },
-    { "path": "packages/domain/combat" }
+    { "path": "packages/domain/combat" },
+    { "path": "packages/data" },
+    { "path": "packages/cli" },
+    { "path": "packages/combat-scene" },
+    { "path": "packages/ui-shared" },
+    { "path": "apps/shell" }
   ]
 }

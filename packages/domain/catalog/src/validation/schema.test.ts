@@ -50,6 +50,7 @@ function leaderRaw(overrides: Record<string, unknown> = {}): Record<string, unkn
     ],
     cardPoolIds: [],
     levelUpOptions: [],
+    maxHealth: 30,
     ...overrides,
   };
 }
@@ -63,6 +64,10 @@ function enemyAbilityRaw(
   return abilityRaw({ id, aiProfile: { branch, tier }, ...overrides });
 }
 
+function dramaturgiaCardRaw(id: string, icon: 'ATTACK' | 'PLOT', overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return { id, name: `Carta ${id}`, icon, ...overrides };
+}
+
 function enemyRaw(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: 'enemy-1',
@@ -74,6 +79,12 @@ function enemyRaw(overrides: Record<string, unknown> = {}): Record<string, unkno
     ],
     phases: [{ phaseNumber: 1, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 1 } }],
     maxHealth: 50,
+    dramaturgiaDeck: [
+      dramaturgiaCardRaw('dramacard-1', 'ATTACK'),
+      dramaturgiaCardRaw('dramacard-2', 'ATTACK'),
+      dramaturgiaCardRaw('dramacard-3', 'PLOT'),
+      dramaturgiaCardRaw('dramacard-4', 'PLOT'),
+    ],
     ...overrides,
   };
 }
@@ -82,11 +93,21 @@ function scenarioRaw(overrides: Record<string, unknown> = {}): Record<string, un
   return {
     id: 'scenario-1',
     name: 'Escenario de Prueba',
-    plotThresholds: [{ atLeast: 3, description: 'umbral' }],
+    plotThresholds: [
+      { atLeast: 2, description: 'umbral 1' },
+      { atLeast: 4, description: 'umbral 2' },
+      { atLeast: 6, description: 'umbral 3' },
+    ],
     passives: [{ description: 'pasivo' }],
     phases: [
       { phaseNumber: 1, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 1 } },
       { phaseNumber: 2, changeCondition: { kind: 'SCENARIO_PLOT_AT_LEAST', amount: 5 } },
+    ],
+    dramaturgiaDeck: [
+      dramaturgiaCardRaw('dramacard-s1', 'ATTACK'),
+      dramaturgiaCardRaw('dramacard-s2', 'ATTACK'),
+      dramaturgiaCardRaw('dramacard-s3', 'PLOT'),
+      dramaturgiaCardRaw('dramacard-s4', 'PLOT'),
     ],
     ...overrides,
   };
@@ -149,6 +170,68 @@ describe('parseCardDefinition', () => {
 
   it('keyword que NO exige amount pero lo incluye → lanza', () => {
     const raw = cardRaw({ keywords: [{ keyword: 'ARROLLAR', amount: 1 }] });
+    expect(() => parseCardDefinition(raw, 'cards[0]')).toThrow();
+  });
+
+  // ---------------------------------------------------------------------------
+  // NUEVO H1.14 — validación cruzada CONTRATIEMPO ↔ keyword de alcance (spec §0.5/§6.2)
+  // ---------------------------------------------------------------------------
+
+  it('type CONTRATIEMPO con keyword DESHACER_DANO → ok', () => {
+    const raw = cardRaw({ type: 'CONTRATIEMPO', keywords: [{ keyword: 'DESHACER_DANO' }] });
+    const result = parseCardDefinition(raw, 'cards[0]');
+    expect(result.keywords).toEqual([{ keyword: 'DESHACER_DANO' }]);
+  });
+
+  it('type CONTRATIEMPO con keyword DESHACER_TURNO → ok', () => {
+    const raw = cardRaw({ type: 'CONTRATIEMPO', keywords: [{ keyword: 'DESHACER_TURNO' }] });
+    const result = parseCardDefinition(raw, 'cards[0]');
+    expect(result.keywords).toEqual([{ keyword: 'DESHACER_TURNO' }]);
+  });
+
+  it('type CONTRATIEMPO sin ninguna keyword de alcance → lanza', () => {
+    const raw = cardRaw({ type: 'CONTRATIEMPO', keywords: [{ keyword: 'NEUTRO' }] });
+    expect(() => parseCardDefinition(raw, 'cards[0]')).toThrow();
+  });
+
+  it('type CONTRATIEMPO con las dos keywords de alcance a la vez → lanza', () => {
+    const raw = cardRaw({
+      type: 'CONTRATIEMPO',
+      keywords: [{ keyword: 'DESHACER_DANO' }, { keyword: 'DESHACER_TURNO' }],
+    });
+    expect(() => parseCardDefinition(raw, 'cards[0]')).toThrow();
+  });
+
+  it('keyword DESHACER_DANO en una carta type EVENTO (no CONTRATIEMPO) → lanza', () => {
+    const raw = cardRaw({ type: 'EVENTO', keywords: [{ keyword: 'DESHACER_DANO' }] });
+    expect(() => parseCardDefinition(raw, 'cards[0]')).toThrow();
+  });
+
+  // ---------------------------------------------------------------------------
+  // NUEVO H1.15 — validación cruzada ALIADO ↔ keyword VIDA_X (spec §0.5/§6.2)
+  // ---------------------------------------------------------------------------
+
+  it('type ALIADO con keyword VIDA_X → ok', () => {
+    const raw = cardRaw({ type: 'ALIADO', keywords: [{ keyword: 'VIDA_X', amount: 5 }] });
+    const result = parseCardDefinition(raw, 'cards[0]');
+    expect(result.keywords).toEqual([{ keyword: 'VIDA_X', amount: 5 }]);
+  });
+
+  it('type ALIADO sin keyword VIDA_X → lanza', () => {
+    const raw = cardRaw({ type: 'ALIADO', keywords: [{ keyword: 'NEUTRO' }] });
+    expect(() => parseCardDefinition(raw, 'cards[0]')).toThrow();
+  });
+
+  it('type ALIADO con 2 keywords VIDA_X → lanza', () => {
+    const raw = cardRaw({
+      type: 'ALIADO',
+      keywords: [{ keyword: 'VIDA_X', amount: 5 }, { keyword: 'VIDA_X', amount: 3 }],
+    });
+    expect(() => parseCardDefinition(raw, 'cards[0]')).toThrow();
+  });
+
+  it('keyword VIDA_X en una carta type EVENTO (no ALIADO) → lanza', () => {
+    const raw = cardRaw({ type: 'EVENTO', keywords: [{ keyword: 'VIDA_X', amount: 5 }] });
     expect(() => parseCardDefinition(raw, 'cards[0]')).toThrow();
   });
 });
@@ -356,6 +439,72 @@ describe('parseEnemyDefinition', () => {
   it('maxHealth > 100 → lanza', () => {
     expect(() => parseEnemyDefinition(enemyRaw({ maxHealth: 101 }), 'enemies[0]')).toThrow();
   });
+
+  it('dramaturgiaDeck ausente → lanza', () => {
+    const raw = enemyRaw();
+    delete (raw as Record<string, unknown>).dramaturgiaDeck;
+    expect(() => parseEnemyDefinition(raw, 'enemies[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck con menos de 4 cartas → lanza', () => {
+    const raw = enemyRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-1', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-2', 'PLOT'),
+      ],
+    });
+    expect(() => parseEnemyDefinition(raw, 'enemies[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck con DramaturgiaCardId duplicado → lanza', () => {
+    const raw = enemyRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-1', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-1', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-3', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-4', 'PLOT'),
+      ],
+    });
+    expect(() => parseEnemyDefinition(raw, 'enemies[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck sin ninguna carta ATTACK → lanza', () => {
+    const raw = enemyRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-1', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-2', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-3', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-4', 'PLOT'),
+      ],
+    });
+    expect(() => parseEnemyDefinition(raw, 'enemies[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck sin ninguna carta PLOT → lanza', () => {
+    const raw = enemyRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-1', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-2', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-3', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-4', 'ATTACK'),
+      ],
+    });
+    expect(() => parseEnemyDefinition(raw, 'enemies[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck válido con effectDescription opcional → ok', () => {
+    const raw = enemyRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-1', 'ATTACK', { effectDescription: 'Invoca un secuaz menor.' }),
+        dramaturgiaCardRaw('dramacard-2', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-3', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-4', 'PLOT'),
+      ],
+    });
+    const result = parseEnemyDefinition(raw, 'enemies[0]');
+    expect(result.dramaturgiaDeck).toHaveLength(4);
+    expect(result.dramaturgiaDeck[0]?.effectDescription).toBe('Invoca un secuaz menor.');
+  });
 });
 
 // -----------------------------------------------------------------------------
@@ -363,11 +512,12 @@ describe('parseEnemyDefinition', () => {
 // -----------------------------------------------------------------------------
 
 describe('parseScenarioDefinition', () => {
-  it('válido (2 fases, 1+ threshold, 1+ passive) → ok', () => {
+  it('válido (2 fases, 3+ thresholds escalonados, 1+ passive, dramaturgiaDeck) → ok', () => {
     const result = parseScenarioDefinition(scenarioRaw(), 'scenarios[0]');
     expect(result.phases).toHaveLength(2);
-    expect(result.plotThresholds).toHaveLength(1);
+    expect(result.plotThresholds).toHaveLength(3);
     expect(result.passives).toHaveLength(1);
+    expect(result.dramaturgiaDeck).toHaveLength(4);
   });
 
   it('phases[].changeCondition.kind === HEALTH_BELOW_PERCENT → lanza', () => {
@@ -395,6 +545,104 @@ describe('parseScenarioDefinition', () => {
       ],
     });
     expect(() => parseScenarioDefinition(raw, 'scenarios[0]')).toThrow();
+  });
+
+  it('plotThresholds con menos de 3 elementos → lanza', () => {
+    const raw = scenarioRaw({
+      plotThresholds: [
+        { atLeast: 2, description: 'umbral 1' },
+        { atLeast: 4, description: 'umbral 2' },
+      ],
+    });
+    expect(() => parseScenarioDefinition(raw, 'scenarios[0]')).toThrow();
+  });
+
+  it('plotThresholds desordenados (atLeast no ascendente) → lanza', () => {
+    const raw = scenarioRaw({
+      plotThresholds: [
+        { atLeast: 4, description: 'umbral 1' },
+        { atLeast: 2, description: 'umbral 2' },
+        { atLeast: 6, description: 'umbral 3' },
+      ],
+    });
+    expect(() => parseScenarioDefinition(raw, 'scenarios[0]')).toThrow();
+  });
+
+  it('plotThresholds con "atLeast" repetidos → lanza', () => {
+    const raw = scenarioRaw({
+      plotThresholds: [
+        { atLeast: 2, description: 'umbral 1' },
+        { atLeast: 2, description: 'umbral 2' },
+        { atLeast: 6, description: 'umbral 3' },
+      ],
+    });
+    expect(() => parseScenarioDefinition(raw, 'scenarios[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck ausente → lanza', () => {
+    const raw = scenarioRaw();
+    delete (raw as Record<string, unknown>).dramaturgiaDeck;
+    expect(() => parseScenarioDefinition(raw, 'scenarios[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck con menos de 4 cartas → lanza', () => {
+    const raw = scenarioRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-s1', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-s2', 'PLOT'),
+      ],
+    });
+    expect(() => parseScenarioDefinition(raw, 'scenarios[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck con DramaturgiaCardId duplicado → lanza', () => {
+    const raw = scenarioRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-s1', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-s1', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-s3', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-s4', 'PLOT'),
+      ],
+    });
+    expect(() => parseScenarioDefinition(raw, 'scenarios[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck sin ninguna carta ATTACK → lanza', () => {
+    const raw = scenarioRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-s1', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-s2', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-s3', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-s4', 'PLOT'),
+      ],
+    });
+    expect(() => parseScenarioDefinition(raw, 'scenarios[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck sin ninguna carta PLOT → lanza', () => {
+    const raw = scenarioRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-s1', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-s2', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-s3', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-s4', 'ATTACK'),
+      ],
+    });
+    expect(() => parseScenarioDefinition(raw, 'scenarios[0]')).toThrow();
+  });
+
+  it('dramaturgiaDeck válido con effectDescription opcional → ok', () => {
+    const raw = scenarioRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-s1', 'ATTACK', { effectDescription: 'Avanza la Trama un paso extra.' }),
+        dramaturgiaCardRaw('dramacard-s2', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-s3', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-s4', 'PLOT'),
+      ],
+    });
+    const result = parseScenarioDefinition(raw, 'scenarios[0]');
+    expect(result.dramaturgiaDeck).toHaveLength(4);
+    expect(result.dramaturgiaDeck[0]?.effectDescription).toBe('Avanza la Trama un paso extra.');
   });
 });
 

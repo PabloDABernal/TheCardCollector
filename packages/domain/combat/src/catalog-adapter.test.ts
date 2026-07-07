@@ -1,0 +1,160 @@
+import { readFileSync } from 'node:fs';
+import { describe, it, expect } from 'vitest';
+import { createId, SeededRandomSource } from '@collector/domain-shared';
+import type { LeaderId, EnemyId, ScenarioId } from '@collector/domain-shared';
+import { CatalogLoader } from '@collector/domain-catalog';
+import type { CatalogRawInput } from '@collector/domain-catalog';
+import { CombatEngine } from './combat-engine';
+import { buildCombatEngineConfig } from './catalog-adapter';
+
+/**
+ * Smoke test obligatorio (spec H1.19 §2.3) — mismo patrón de lectura de
+ * `packages/data/**` que `packages/data/load-content.test.ts` (duplicado localmente
+ * para no crear una dependencia `domain-combat -> data`, prohibida por boundaries).
+ */
+function readJson(relativePath: string): unknown {
+  return JSON.parse(readFileSync(new URL(relativePath, import.meta.url), 'utf-8'));
+}
+
+function buildRawInput(): CatalogRawInput {
+  const soldadoCards = readJson('../../../data/cards/soldado-base-cards.json') as unknown[];
+  const magoCards = readJson('../../../data/cards/mago-base-cards.json') as unknown[];
+  const commonCards = readJson('../../../data/cards/common-cards.json') as unknown[];
+  const soldado = readJson('../../../data/leaders/soldado-base.json');
+  const mago = readJson('../../../data/leaders/mago-base.json');
+  const bestia = readJson('../../../data/enemies/bestia-base.json');
+  const espectro = readJson('../../../data/enemies/espectro-base.json');
+  const bosque = readJson('../../../data/scenarios/bosque-encantado-base.json');
+  const templo = readJson('../../../data/scenarios/templo-en-ruinas-base.json');
+
+  return {
+    cards: [...soldadoCards, ...magoCards, ...commonCards],
+    leaders: [soldado, mago],
+    enemies: [bestia, espectro],
+    scenarios: [bosque, templo],
+    evolutionTemplates: [],
+  };
+}
+
+describe('buildCombatEngineConfig (H1.19) — smoke test con contenido real de packages/data', () => {
+  it('no lanza para leader-soldado-base + enemy-bestia-base + scenario-bosque-encantado-base, y permite construir un CombatEngine', async () => {
+    const loader = new CatalogLoader(buildRawInput());
+    const catalog = await loader.load();
+
+    const leader = loader.getLeader(createId<'LeaderId'>('LeaderId', 'leader-soldado-base') as LeaderId);
+    const enemy = loader.getEnemy(createId<'EnemyId'>('EnemyId', 'enemy-bestia-base') as EnemyId);
+    const scenario = loader.getScenario(
+      createId<'ScenarioId'>('ScenarioId', 'scenario-bosque-encantado-base') as ScenarioId
+    );
+
+    const config = buildCombatEngineConfig({
+      catalog,
+      leader,
+      enemy,
+      scenario,
+      randomSource: new SeededRandomSource(1),
+    });
+
+    expect(() => new CombatEngine(config)).not.toThrow();
+  });
+
+  it.each(['leader-soldado-base', 'leader-mago-base'])(
+    '%s: playableCards + allyCards + contratiempoCards suman exactamente 10 (tamaño de cardPoolIds)',
+    async (leaderId) => {
+      const loader = new CatalogLoader(buildRawInput());
+      const catalog = await loader.load();
+      const leader = loader.getLeader(createId<'LeaderId'>('LeaderId', leaderId) as LeaderId);
+      const enemy = loader.getEnemy(createId<'EnemyId'>('EnemyId', 'enemy-bestia-base') as EnemyId);
+      const scenario = loader.getScenario(
+        createId<'ScenarioId'>('ScenarioId', 'scenario-bosque-encantado-base') as ScenarioId
+      );
+
+      const config = buildCombatEngineConfig({
+        catalog,
+        leader,
+        enemy,
+        scenario,
+        randomSource: new SeededRandomSource(1),
+      });
+
+      const total = config.playableCards!.size + config.allyCards!.size + config.contratiempoCards!.size;
+      expect(total).toBe(10);
+    }
+  );
+
+  it.each(['leader-soldado-base', 'leader-mago-base'])(
+    '%s: al menos una carta resuelve a ATTACK_ENEMY, y jugarla contra el motor sube enemyDamage',
+    async (leaderId) => {
+      const loader = new CatalogLoader(buildRawInput());
+      const catalog = await loader.load();
+      const leader = loader.getLeader(createId<'LeaderId'>('LeaderId', leaderId) as LeaderId);
+      const enemy = loader.getEnemy(createId<'EnemyId'>('EnemyId', 'enemy-bestia-base') as EnemyId);
+      const scenario = loader.getScenario(
+        createId<'ScenarioId'>('ScenarioId', 'scenario-bosque-encantado-base') as ScenarioId
+      );
+
+      const config = buildCombatEngineConfig({
+        catalog,
+        leader,
+        enemy,
+        scenario,
+        randomSource: new SeededRandomSource(1),
+      });
+
+      const attackCardEntry = [...config.playableCards!.entries()].find(
+        ([, def]) => def.effect?.kind === 'ATTACK_ENEMY'
+      );
+      expect(attackCardEntry).toBeDefined();
+      const [cardId] = attackCardEntry!;
+
+      const engine = new CombatEngine(config);
+      const snapshot = engine.getSnapshot();
+      const nucleo = snapshot.nucleoPool[0]!;
+
+      const result = engine.dispatch({
+        type: 'PLAY_CARD',
+        cardId,
+        sourceId: 'leader',
+        nucleoInstanceId: nucleo.id,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(engine.getSnapshot().enemyDamage).toBeGreaterThan(0);
+    }
+  );
+
+  it.each([
+    ['leader-soldado-base', 'enemy-bestia-base', 'scenario-bosque-encantado-base'],
+    ['leader-soldado-base', 'enemy-espectro-base', 'scenario-templo-en-ruinas-base'],
+    ['leader-mago-base', 'enemy-bestia-base', 'scenario-bosque-encantado-base'],
+    ['leader-mago-base', 'enemy-espectro-base', 'scenario-templo-en-ruinas-base'],
+  ] as const)(
+    '%s x %s x %s: enemyAbilityAiProfiles/dramaturgiaDeck quedan pobladas y el primer END_TURN dispara la IA sin lanzar',
+    async (leaderId, enemyId, scenarioId) => {
+      const loader = new CatalogLoader(buildRawInput());
+      const catalog = await loader.load();
+      const leader = loader.getLeader(createId<'LeaderId'>('LeaderId', leaderId) as LeaderId);
+      const enemy = loader.getEnemy(createId<'EnemyId'>('EnemyId', enemyId) as EnemyId);
+      const scenario = loader.getScenario(createId<'ScenarioId'>('ScenarioId', scenarioId) as ScenarioId);
+
+      const config = buildCombatEngineConfig({
+        catalog,
+        leader,
+        enemy,
+        scenario,
+        randomSource: new SeededRandomSource(1),
+      });
+
+      expect(config.enemyAbilityAiProfiles!.size).toBeGreaterThan(0);
+      expect(config.dramaturgiaDeck!.length).toBeGreaterThan(0);
+
+      const engine = new CombatEngine(config);
+      const result = engine.dispatch({ type: 'END_TURN' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.some((e) => e.type === 'ABILITY_ACTIVATED' && e.side === 'ENEMY')).toBe(true);
+      }
+    }
+  );
+});

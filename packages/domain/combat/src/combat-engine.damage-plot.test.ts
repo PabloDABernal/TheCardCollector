@@ -24,7 +24,7 @@ function effects(entries: [AbilityId, AbilityEffectDefinition][]): Map<AbilityId
 
 describe('CombatEngine — H1.6: Ataque del Enemigo solo afecta leaderDamage, nunca scenarioPlot', () => {
   it('activar ENEMY_ATTACK (formula VALUE, sin escudo) suma el valor del Núcleo a leaderDamage; scenarioPlot no se mueve', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([ENEMY_ATTACK]),
       abilityCooldowns: cooldowns([[ENEMY_ATTACK, { side: 'ENEMY', baseCooldown: 1 }]]),
@@ -46,7 +46,7 @@ describe('CombatEngine — H1.6: Ataque del Enemigo solo afecta leaderDamage, nu
 
 describe('CombatEngine — H1.6: Trama del Enemigo solo afecta scenarioPlot, nunca leaderDamage', () => {
   it('activar ENEMY_PLOT (amount fijo=3) sube scenarioPlot en 3; leaderDamage no se mueve', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(2),
       abilityCoreCosts: costs([ENEMY_PLOT]),
       abilityCooldowns: cooldowns([[ENEMY_PLOT, { side: 'ENEMY', baseCooldown: 1 }]]),
@@ -66,7 +66,7 @@ describe('CombatEngine — H1.6: Trama del Enemigo solo afecta scenarioPlot, nun
   });
 
   it('el valor del Núcleo gastado NO influye en la magnitud de Trama (no está alimentada por Umbral, ver spec §0.3)', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(2),
       abilityCoreCosts: costs([ENEMY_PLOT]),
       abilityCooldowns: cooldowns([[ENEMY_PLOT, { side: 'ENEMY', baseCooldown: 1 }]]),
@@ -83,7 +83,7 @@ describe('CombatEngine — H1.6: Trama del Enemigo solo afecta scenarioPlot, nun
 
 describe('CombatEngine — H1.6: una habilidad nunca hace ambas cosas (Ataque y Trama a la vez)', () => {
   it('activar una habilidad ATTACK deja scenarioPlot en 0 Y activar una habilidad PLOT deja leaderDamage en 0, en el mismo engine', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(3),
       abilityCoreCosts: costs([ENEMY_ATTACK, ENEMY_PLOT]),
       abilityCooldowns: cooldowns([
@@ -103,6 +103,13 @@ describe('CombatEngine — H1.6: una habilidad nunca hace ambas cosas (Ataque y 
     expect(engine.getSnapshot().leaderDamage).toBe(n1.value);
     expect(engine.getSnapshot().scenarioPlot).toBe(0); // ATTACK no tocó Trama
 
+    // H1.14: ENEMY_BASE_ACTIONS_PER_TURN es 1 — una 2ª ACTIVATE_ABILITY de ENEMY en el
+    // MISMO turno se rechazaría con NO_ACTIONS_REMAINING. Se avanza un ciclo completo de
+    // turno (ENEMY -> LEADER -> ENEMY) para que la 2ª activación sea la única acción de
+    // su propio turno de ENEMY, preservando el propósito original del test.
+    engine.dispatch({ type: 'END_TURN' });
+    engine.dispatch({ type: 'END_TURN' });
+
     const n2 = engine.getSnapshot().nucleoPool[0]!;
     engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ENEMY_PLOT, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: n2.id });
     expect(engine.getSnapshot().scenarioPlot).toBe(2);
@@ -112,7 +119,7 @@ describe('CombatEngine — H1.6: una habilidad nunca hace ambas cosas (Ataque y 
 
 describe('CombatEngine — H1.6: criterio de aceptación literal — "algo" bloquea daño pero no Trama (leaderShield, GDD §2.8, ver spec §0.1)', () => {
   it('con leaderShield=4 (>= NUCLEO_VALUE_MAX), un ataque VALUE queda totalmente absorbido: leaderDamage sigue en 0; una Trama posterior SÍ sube y NO consume leaderShield', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(4),
       abilityCoreCosts: costs([ENEMY_ATTACK, ENEMY_PLOT]),
       abilityCooldowns: cooldowns([
@@ -140,6 +147,12 @@ describe('CombatEngine — H1.6: criterio de aceptación literal — "algo" bloq
     const shieldAfterAttack = afterAttack.leaderShield;
     expect(shieldAfterAttack).toBe(4 - attackNucleo.value); // escudo consumido según el ataque
 
+    // H1.14: ENEMY_BASE_ACTIONS_PER_TURN es 1 — se avanza un ciclo completo de turno
+    // (ENEMY -> LEADER -> ENEMY) para que la 2ª activación sea la única acción de su
+    // propio turno de ENEMY, preservando el propósito original del test.
+    engine.dispatch({ type: 'END_TURN' });
+    engine.dispatch({ type: 'END_TURN' });
+
     // 2) La MISMA fuente de bloqueo NO frena Trama: scenarioPlot sube su magnitud
     //    completa y leaderShield permanece intacto.
     const plotNucleo = engine.getSnapshot().nucleoPool[0]!;
@@ -155,7 +168,7 @@ describe('CombatEngine — H1.6: criterio de aceptación literal — "algo" bloq
 
 describe('CombatEngine — H1.6: Arrollar (GDD §2.8) — exceso pasa a leaderDamage solo si la habilidad lo declara', () => {
   it('sin arrollar: exceso sobre leaderShield se pierde, leaderDamage no sube', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(5),
       abilityCoreCosts: costs([ENEMY_ATTACK]),
       abilityCooldowns: cooldowns([[ENEMY_ATTACK, { side: 'ENEMY', baseCooldown: 1 }]]),
@@ -174,7 +187,7 @@ describe('CombatEngine — H1.6: Arrollar (GDD §2.8) — exceso pasa a leaderDa
   });
 
   it('con arrollar: true, el exceso sobre leaderShield SÍ pasa a leaderDamage', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(5),
       abilityCoreCosts: costs([ENEMY_ATTACK_ARROLLAR]),
       abilityCooldowns: cooldowns([[ENEMY_ATTACK_ARROLLAR, { side: 'ENEMY', baseCooldown: 1 }]]),
@@ -195,7 +208,7 @@ describe('CombatEngine — H1.6: Arrollar (GDD §2.8) — exceso pasa a leaderDa
 
 describe('CombatEngine — H1.6: bidireccionalidad de Trama (GDD §12: "Enemigo sube, jugador baja")', () => {
   it('una habilidad PLOT de side LEADER resta de scenarioPlot', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(6),
       abilityCoreCosts: costs([ENEMY_PLOT, LEADER_ANTI_PLOT]),
       abilityCooldowns: cooldowns([
@@ -223,7 +236,7 @@ describe('CombatEngine — H1.6: bidireccionalidad de Trama (GDD §12: "Enemigo 
   });
 
   it('scenarioPlot satura en 0, nunca queda negativo', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(7),
       abilityCoreCosts: costs([LEADER_ANTI_PLOT]),
       abilityCooldowns: cooldowns([[LEADER_ANTI_PLOT, { side: 'LEADER', baseCooldown: 1 }]]),
@@ -239,7 +252,7 @@ describe('CombatEngine — H1.6: bidireccionalidad de Trama (GDD §12: "Enemigo 
 
 describe('CombatEngine — H1.6: eventos LEADER_DAMAGED / SCENARIO_PLOT_CHANGED', () => {
   it('ACTIVATE_ABILITY de una ATTACK emite [ABILITY_ACTIVATED, LEADER_DAMAGED] en ese orden', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(8),
       abilityCoreCosts: costs([ENEMY_ATTACK]),
       abilityCooldowns: cooldowns([[ENEMY_ATTACK, { side: 'ENEMY', baseCooldown: 1 }]]),
@@ -266,7 +279,7 @@ describe('CombatEngine — H1.6: eventos LEADER_DAMAGED / SCENARIO_PLOT_CHANGED'
   });
 
   it('ACTIVATE_ABILITY de una PLOT emite [ABILITY_ACTIVATED, SCENARIO_PLOT_CHANGED] en ese orden', () => {
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(9),
       abilityCoreCosts: costs([ENEMY_PLOT]),
       abilityCooldowns: cooldowns([[ENEMY_PLOT, { side: 'ENEMY', baseCooldown: 1 }]]),
@@ -293,7 +306,7 @@ describe('CombatEngine — H1.6: eventos LEADER_DAMAGED / SCENARIO_PLOT_CHANGED'
 
   it('una habilidad sin entrada en abilityEffects no emite LEADER_DAMAGED ni SCENARIO_PLOT_CHANGED (comportamiento idéntico a H1.3-H1.5)', () => {
     const NO_EFFECT: AbilityId = createId<'AbilityId'>('AbilityId', 'no-effect');
-    const engine = new CombatEngine({
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(10),
       abilityCoreCosts: costs([NO_EFFECT]),
       abilityCooldowns: cooldowns([[NO_EFFECT, { side: 'LEADER', baseCooldown: 1 }]]),
@@ -318,7 +331,7 @@ describe('CombatEngine — H1.6: eventos LEADER_DAMAGED / SCENARIO_PLOT_CHANGED'
 describe('CombatEngine — H1.6: validación de configuración (fallos rápidos del constructor)', () => {
   it('lanza si abilityEffects tiene una clave ausente en abilityCoreCosts/abilityCooldowns', () => {
     const GHOST: AbilityId = createId<'AbilityId'>('AbilityId', 'ghost-ability');
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -328,7 +341,7 @@ describe('CombatEngine — H1.6: validación de configuración (fallos rápidos 
 
   it('lanza si una habilidad ATTACK pertenece a side LEADER (H1.6 solo modela daño Enemigo→Líder, ver spec §0.5)', () => {
     const LEADER_ATTACK: AbilityId = createId<'AbilityId'>('AbilityId', 'leader-attack-not-supported');
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([LEADER_ATTACK]),
       abilityCooldowns: cooldowns([[LEADER_ATTACK, { side: 'LEADER', baseCooldown: 1 }]]),
@@ -337,7 +350,7 @@ describe('CombatEngine — H1.6: validación de configuración (fallos rápidos 
   });
 
   it('lanza si initialLeaderShield es negativo', () => {
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -346,7 +359,7 @@ describe('CombatEngine — H1.6: validación de configuración (fallos rápidos 
   });
 
   it('lanza si initialLeaderShield excede LEADER_SHIELD_MAX (5)', () => {
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -355,7 +368,7 @@ describe('CombatEngine — H1.6: validación de configuración (fallos rápidos 
   });
 
   it('lanza si initialLeaderShield no es entero', () => {
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -364,7 +377,7 @@ describe('CombatEngine — H1.6: validación de configuración (fallos rápidos 
   });
 
   it('abilityEffects omitido por completo (undefined) es válido — equivale a Map vacío', () => {
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -373,7 +386,7 @@ describe('CombatEngine — H1.6: validación de configuración (fallos rápidos 
 
   it('lanza si un efecto PLOT tiene amount negativo (hallado por QA: rompería el piso 0 de scenarioPlot)', () => {
     const NEGATIVE_PLOT: AbilityId = createId<'AbilityId'>('AbilityId', 'negative-plot');
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([NEGATIVE_PLOT]),
       abilityCooldowns: cooldowns([[NEGATIVE_PLOT, { side: 'ENEMY', baseCooldown: 1 }]]),
@@ -383,7 +396,7 @@ describe('CombatEngine — H1.6: validación de configuración (fallos rápidos 
 
   it('lanza si un efecto ATTACK tiene baseFormula ADD/MULTIPLY con amount negativo (hallado por QA: rompería leaderShield >= 0)', () => {
     const NEGATIVE_ATTACK: AbilityId = createId<'AbilityId'>('AbilityId', 'negative-attack');
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([NEGATIVE_ATTACK]),
       abilityCooldowns: cooldowns([[NEGATIVE_ATTACK, { side: 'ENEMY', baseCooldown: 1 }]]),
@@ -393,7 +406,7 @@ describe('CombatEngine — H1.6: validación de configuración (fallos rápidos 
 
   it('lanza si un efecto ATTACK tiene bonusFormula con amount negativo', () => {
     const NEGATIVE_BONUS: AbilityId = createId<'AbilityId'>('AbilityId', 'negative-bonus');
-    expect(() => new CombatEngine({
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([NEGATIVE_BONUS]),
       abilityCooldowns: cooldowns([[NEGATIVE_BONUS, { side: 'ENEMY', baseCooldown: 1 }]]),

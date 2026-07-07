@@ -1,6 +1,13 @@
 import type { NucleoInstance } from './nucleo';
 import type { TurnState } from './turn';
 import type { AbilityCooldownSnapshot } from './cooldown';
+import type { ActionsStateSnapshot } from './action';
+import type { UndoableEnemyActionLogEntry } from './contratiempo';
+import type { AllyInPlay } from './ally';
+import type { MinionInPlay } from './minion';
+import type { CardInstanceId } from '@collector/domain-shared';
+import type { LeaderState } from './leader-state'; // NUEVO H1.17
+import type { CombatOutcome, DefeatReason } from './combat-status'; // NUEVO H1.18
 
 /**
  * Slice de H1.3 de `CombatStateSnapshot` (architecture_stack.md §2.2). Historias
@@ -47,4 +54,51 @@ export interface CombatStateSnapshot {
    * Escenario, no al Enemigo (decisions.md) — el propio nombre del campo lo refleja.
    */
   readonly scenarioPlot: number;
+
+  /** NUEVO H1.14. */
+  readonly leaderEnergy: number;
+
+  /** NUEVO H1.14. Acciones del `turnOwner` ACTUAL. */
+  readonly actions: ActionsStateSnapshot;
+
+  /**
+   * NUEVO H1.14. Ventana de Contratiempo vigente AHORA MISMO (vacía si no aplica — ni
+   * hay turno de Enemigo previo, ni ya se jugó un Contratiempo este ciclo). Ver spec §0.4.
+   */
+  readonly undoableLastEnemyTurn: readonly UndoableEnemyActionLogEntry[];
+
+  /** NUEVO H1.15. Incluye Aliados muertos (`life === 0`, ver spec H1.15 §0.6) — filtrar
+   *  en el consumidor si se necesita solo "vivos". Orden estable = orden de entrada en mesa. */
+  readonly alliesInPlay: readonly AllyInPlay[];
+
+  /** NUEVO H1.15. Postura de redirección vigente ahora mismo (`null` = ninguna) — ver
+   *  spec H1.15 §0.3/§0.4. Puede apuntar a un Aliado que en la práctica será ignorado si
+   *  hay un Berserker vivo (consultar `alliesInPlay` para saberlo, igual que hace el motor). */
+  readonly activeDamageRedirectTargetId: CardInstanceId | null;
+
+  /** NUEVO H1.16. Nunca se eliminan entradas (ver spec §0.1 — sin mecanismo de "matar"
+   *  Secuaces en esta historia). Orden estable = orden de invocación. */
+  readonly minionsInPlay: readonly MinionInPlay[];
+
+  /** NUEVO H1.17. `level` derivado de `levelUpsSpent` — ver spec H1.17 §0.6. */
+  readonly leaderState: LeaderState;
+
+  /** NUEVO H1.17. Fase activa del Enemigo ahora mismo. `totalPhases === 0` si
+   *  `CombatEngineConfig.enemyPhases` se omitió (sin tracking de fase para este lado). */
+  readonly enemyPhase: { readonly phaseNumber: number; readonly totalPhases: number };
+
+  /** NUEVO H1.17. Análogo para el Escenario. */
+  readonly scenarioPhase: { readonly phaseNumber: number; readonly totalPhases: number };
+
+  /** NUEVO H1.17. Daño acumulado sobre el Enemigo — "dato en reposo" hasta H1.18 (ver
+   *  spec §0.3): ningún comando de esta historia lo muta. Solo alimenta la evaluación
+   *  de `HEALTH_BELOW_PERCENT`. */
+  readonly enemyDamage: number;
+
+  /** NUEVO H1.18. Ver spec §0.6. `'IN_PROGRESS'` hasta que se cumple una condición de
+   *  victoria o derrota; a partir de ahí, permanece fijo (nunca vuelve a `'IN_PROGRESS'`). */
+  readonly status: 'IN_PROGRESS' | CombatOutcome;
+
+  /** NUEVO H1.18. Presente solo si `status === 'DEFEAT'`. */
+  readonly defeatReason?: DefeatReason;
 }

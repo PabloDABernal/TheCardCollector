@@ -1,0 +1,26 @@
+{
+  "id": "scenario-templo-en-ruinas-base",
+  "name": "Templo en Ruinas Base",
+  "plotThresholds": [
+    { "atLeast": 3, "description": "Escalada 1/5: el polvo antiguo se remueve (efecto no ejecutable todavía, ver spec H1.11 §0.3)." },
+    { "atLeast": 6, "description": "Escalada 2/5: los grabados del templo brillan tenuemente." },
+    { "atLeast": 9, "description": "Escalada 3/5: las columnas tiemblan." },
+    { "atLeast": 12, "description": "Escalada 4/5: el sello antiguo se agrieta." },
+    { "atLeast": 15, "description": "Escalada 5/5: el templo despierta por completo." }
+  ],
+  "passives": [
+    { "description": "Pasivo siempre activo: las trampas ancestrales del templo están activas desde el inicio (no ejecutable todavía, ver spec H1.11 §0.3)." }
+  ],
+  "phases": [
+    { "phaseNumber": 1, "changeCondition": { "kind": "SCENARIO_PLOT_AT_LEAST", "amount": 6 } },
+    { "phaseNumber": 2, "changeCondition": { "kind": "TURN_COUNT_AT_LEAST", "turn": 1 } }
+  ],
+  "dramaturgiaDeck": [
+    { "id": "dramacard-templo-en-ruinas-base-01", "name": "Trampa de Presión", "icon": "ATTACK" },
+    { "id": "dramacard-templo-en-ruinas-base-02", "name": "Bloque Deslizante", "icon": "ATTACK" },
+    { "id": "dramacard-templo-en-ruinas-base-03", "name": "Guardián de Piedra", "icon": "ATTACK", "effectDescription": "Invoca un secuaz menor de piedra (no ejecutable todavía, ver spec H1.11 §0.3 — H1.16)." },
+    { "id": "dramacard-templo-en-ruinas-base-04", "name": "Grabado Maldito", "icon": "PLOT" },
+    { "id": "dramacard-common-niebla-01", "name": "Niebla Repentina", "icon": "PLOT" },
+    { "id": "dramacard-common-viento-cortante-01", "name": "Viento Cortante", "icon": "ATTACK" }
+  ]
+}

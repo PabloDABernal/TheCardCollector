@@ -2,25 +2,38 @@
   "name": "the-collector",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20.0.0", "npm": ">=10.0.0" },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
   "workspaces": [
     "packages/domain/*",
-    "packages/data"
+    "packages/data",
+    "packages/cli",
+    "packages/combat-scene",
+    "packages/ui-shared",
+    "apps/shell"
   ],
   "scripts": {
     "build": "tsc -b",
     "build:clean": "tsc -b --clean",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint .",
-    "typecheck": "tsc -b --pretty"
+    "typecheck": "tsc -b --pretty",
+    "play-combat": "tsx packages/cli/src/main.ts"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
-    "vitest": "^2.0.0",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^2.1.9",
     "eslint": "^9.0.0",
-    "typescript-eslint": "^8.0.0",
     "eslint-plugin-boundaries": "^4.0.0",
-    "vite-tsconfig-paths": "^6.0.0"
+    "jsdom": "^29.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vite-tsconfig-paths": "^6.0.0",
+    "vitest": "^2.0.0"
   }
 }

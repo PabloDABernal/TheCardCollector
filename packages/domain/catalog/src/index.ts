@@ -4,6 +4,7 @@ export * from './types/keyword';
 export * from './types/card';
 export * from './types/leader';
 export * from './types/enemy';
+export * from './types/dramaturgia-card';
 export * from './types/scenario';
 export * from './types/evolution-template';
 export * from './types/catalog';

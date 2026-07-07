@@ -15,10 +15,10 @@ export default tseslint.config(
         { type: 'domain-catalog', pattern: 'packages/domain/catalog/**' },
         { type: 'domain-combat', pattern: 'packages/domain/combat/**' },
         { type: 'data', pattern: 'packages/data/**' },
-        // entradas futuras (no crear aún en H1.1, dejar documentado el patrón):
-        { type: 'combat-scene', pattern: 'packages/combat-scene/**' },
-        { type: 'ui-shared', pattern: 'packages/ui-shared/**' },
-        { type: 'shell', pattern: 'apps/shell/**' }
+        { type: 'cli', pattern: 'packages/cli/**' }, // NUEVO H1.19 — ver spec §0.1
+        { type: 'combat-scene', pattern: 'packages/combat-scene/**' }, // NUEVO H2.1
+        { type: 'ui-shared', pattern: 'packages/ui-shared/**' }, // NUEVO H2.1
+        { type: 'shell', pattern: 'apps/shell/**' } // NUEVO H2.2
       ]
     },
     rules: {
@@ -29,6 +29,7 @@ export default tseslint.config(
           { from: 'domain-catalog', allow: ['domain-shared', 'data'] },
           { from: 'domain-combat', allow: ['domain-shared', 'domain-catalog'] },
           { from: 'data', allow: [] },
+          { from: 'cli', allow: ['domain-shared', 'domain-catalog', 'domain-combat'] }, // NUEVO H1.19
           { from: 'combat-scene', allow: ['domain-shared', 'domain-catalog', 'domain-combat'] },
           { from: 'ui-shared', allow: [] },
           { from: 'shell', allow: ['domain-shared', 'domain-catalog', 'domain-combat', 'combat-scene', 'ui-shared'] }
