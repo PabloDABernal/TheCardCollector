@@ -50,7 +50,17 @@ function flashTint(scene: Phaser.Scene, gameObject: Phaser.GameObjects.Rectangle
 
 /** H2.5 spec §3.3 punto 4 — hitStop embebido: pausa `scene.tweens.timeScale` (no `scene.time`,
  *  para que el propio temporizador de reanudación no se autocongele) durante `durationMs`,
- *  reanudado vía `setTimeout` de JavaScript plano. Se ejecuta ANTES de lanzar el punch. */
+ *  reanudado vía `setTimeout` de JavaScript plano. Se ejecuta ANTES de lanzar el punch.
+ *
+ *  LIMITACIÓN CONOCIDA (deuda documentada, no corregida en H2.5): este hitStop NO es reentrante —
+ *  no lleva contador de referencias sobre `scene.tweens.timeScale`. Si dos `hitImpact` corren en
+ *  paralelo (p.ej. `ALLY_DAMAGED` y `LEADER_DAMAGED` casi simultáneos, ambos disparados de forma
+ *  fire-and-forget por `EffectsDirector.attach`), el `setTimeout` del primero en terminar restaura
+ *  `timeScale` a `1` aunque el segundo hitStop debiera seguir activo, acortando su duración
+ *  efectiva. No hay fuga de estado permanente en el camino actual (siempre queda en `1` al final),
+ *  pero el diseño no soporta hitImpact solapados. Si esto se vuelve un problema real, la solución
+ *  es un contador de referencias (incrementar al entrar, decrementar en el timeout, solo restaurar
+ *  a `1` cuando llega a 0) — no implementado todavía. */
 function applyHitStop(scene: Phaser.Scene, durationMs: number): void {
   scene.tweens.timeScale = 0;
   setTimeout(() => {

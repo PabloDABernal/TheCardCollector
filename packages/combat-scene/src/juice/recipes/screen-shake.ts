@@ -22,20 +22,18 @@ function clamp(value: number, min: number, max: number): number {
  * Spec §3.4: intensidad proporcional a `appliedDamage` en `LEADER_DAMAGED`/`ENEMY_DAMAGED`, fija en
  * cualquier otro tipo de evento (p.ej. `PHASE_CHANGED`, beat narrativo sin monto).
  *
- * Desviación respecto a la spec (documentada, ver entrega): `LEADER_DAMAGED` expone
- * `appliedDamage` tal cual (`events.ts`), pero `ENEMY_DAMAGED` NO tiene ese campo en el contrato
- * de dominio actual (`rawAmount`, `bonusActivated`, `bonusResolvedValue?`, `enemyDamageAfter`, sin
- * `appliedDamage`). Se usa `bonusActivated ? (bonusResolvedValue ?? rawAmount) : rawAmount` como
- * monto equivalente de daño aplicado — mismo criterio que `resolveAbilityUmbral` usa para calcular
- * el valor final resuelto. Queda pendiente de confirmación por Architect/Coordinator si la
- * intención era otra.
+ * `ENEMY_DAMAGED` no expone `appliedDamage` (`events.ts`); usa `rawAmount`, que es el único monto
+ * que el motor realmente suma a `enemyDamage` (`combat-engine.ts`, `resolution.baseResolvedValue`).
+ * `bonusResolvedValue` es el resultado de una `bonusFormula` independiente que puede NO representar
+ * daño (ej. "roba una carta", ver `umbral.ts`) y que el motor no añade a `enemyDamage` — por eso NO
+ * se usa aquí, ni siquiera cuando `bonusActivated` es `true`.
  */
 function resolveDamageAmount(event: CombatEvent): number | null {
   switch (event.type) {
     case 'LEADER_DAMAGED':
       return event.appliedDamage;
     case 'ENEMY_DAMAGED':
-      return event.bonusActivated ? event.bonusResolvedValue ?? event.rawAmount : event.rawAmount;
+      return event.rawAmount;
     default:
       return null;
   }

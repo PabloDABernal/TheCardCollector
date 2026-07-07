@@ -18,8 +18,9 @@ export default defineConfig({
     // de nuevos binarios de Chromium desde cdn.playwright.dev (política de red del entorno) — se
     // apunta al Chromium ya preinstalado en la imagen en vez de forzar `playwright install`. En un
     // entorno sin esa restricción, esta línea es innecesaria (usar el Chromium gestionado por
-    // Playwright por defecto).
-    launchOptions: { executablePath: '/opt/pw-browsers/chromium' },
+    // Playwright por defecto). Configurable vía `PW_CHROMIUM_PATH` para no romper en máquinas de
+    // desarrollo sin esa ruta exacta.
+    launchOptions: { executablePath: process.env['PW_CHROMIUM_PATH'] ?? '/opt/pw-browsers/chromium' },
   },
   webServer: {
     command: 'npm run dev',
