@@ -19,16 +19,21 @@ const game = new Phaser.Game({
              // escena listada directamente en `scene: [...]` de la config del Game).
 });
 
-game.scene.add('CombatScene', CombatScene);
+// H2.7 QA — `game.scene.add()` puede devolver `null` si se llama antes de que Phaser termine su
+// arranque interno (asíncrono pese a que `new Phaser.Game(...)` parezca síncrono). Hay que esperar
+// el evento READY del propio Game antes de tocar el SceneManager; solo entonces registrar el
+// listener de CREATE (antes de `start()`, ya que init→preload→create corren síncronos cuando
+// preload() no dispara carga asíncrona, como aquí) para no perder el evento.
+game.events.once(Phaser.Core.Events.READY, () => {
+  const scene = game.scene.add('CombatScene', CombatScene, false);
+  if (!scene) {
+    throw new Error('main.ts: game.scene.add() no devolvió la escena "CombatScene" recién añadida');
+  }
 
-void buildDefaultCombatBridge().then((bridge) => {
-  game.scene.start('CombatScene', { bridge });
-  const scene = game.scene.getScene('CombatScene');
-
-  // H2.7 spec §4.2 — verificación visual manual complementaria, no gate de CI: un `Rectangle` de prueba
-  // interactivo y un overlay de debug que muestra el último `PointerGesture` detectado, para poder probar
-  // tap/drag/long-press sobre *algo* concreto antes de que H2.8 aporte sprites reales. Se elimina del
-  // harness cuando H2.8 exista.
+  // H2.7 spec §4.2 — verificación visual manual complementaria, no gate de CI: un `Rectangle` de
+  // prueba interactivo y un overlay de debug que muestra el último `PointerGesture` detectado, para
+  // poder probar tap/drag/long-press sobre *algo* concreto antes de que H2.8 aporte sprites reales.
+  // Se elimina del harness cuando H2.8 exista.
   scene.events.once(Phaser.Scenes.Events.CREATE, () => {
     const debugRect = scene.add.rectangle(
       COMBAT_SCENE_VIEWPORT.width / 2,
@@ -49,5 +54,9 @@ void buildDefaultCombatBridge().then((bridge) => {
     inputAdapter.subscribe((gesture) => {
       debugText.setText(`InputAdapter (H2.7): ${JSON.stringify(gesture)}`);
     });
+  });
+
+  void buildDefaultCombatBridge().then((bridge) => {
+    game.scene.start('CombatScene', { bridge });
   });
 });
