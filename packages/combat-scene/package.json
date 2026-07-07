@@ -9,16 +9,18 @@
     "dev": "vite",
     "prebuild": "node scripts/sync-data.mjs",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify:visual": "playwright test e2e/"
   },
   "dependencies": {
-    "@collector/domain-shared": "*",
+    "@collector/combat-bridge": "*",
     "@collector/domain-catalog": "*",
     "@collector/domain-combat": "*",
-    "@collector/combat-bridge": "*",
+    "@collector/domain-shared": "*",
     "phaser": "^3.80.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "vite": "^5.0.0"
   }
 }

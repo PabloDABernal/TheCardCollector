@@ -1,11 +1,14 @@
 import type { JuiceRecipeRegistry } from '../juice-recipe';
-import { diceRollStub, cardFlipStub, hitImpactStub, screenShakeStub } from './stub-recipes';
+import { diceRoll } from './dice-roll';
+import { cardFlip } from './card-flip';
+import { hitImpact } from './hit-impact';
+import { screenShake } from './screen-shake';
 
-/** H2.4 spec §5 — registro id→implementación stub. H2.5 sustituye este archivo para exportar
- *  un `RECIPE_REGISTRY` real con los mismos 4 ids; `JUICE_CONFIG`/`EffectsDirector` no cambian. */
-export const STUB_RECIPE_REGISTRY: JuiceRecipeRegistry = {
-  diceRoll: diceRollStub,
-  cardFlip: cardFlipStub,
-  hitImpact: hitImpactStub,
-  screenShake: screenShakeStub,
+/** H2.5 spec §4 — registro id→implementación real (sustituye `STUB_RECIPE_REGISTRY` de H2.4).
+ *  `JUICE_CONFIG`/`EffectsDirector` no cambian: mismos 4 ids. */
+export const RECIPE_REGISTRY: JuiceRecipeRegistry = {
+  diceRoll,
+  cardFlip,
+  hitImpact,
+  screenShake,
 };
