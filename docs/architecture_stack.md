@@ -168,6 +168,12 @@ packages/combat-scene/juice/
 
 ### 3.2 Contratos
 
+> **Nota (H2.4):** los contratos de `JuiceRecipe`/`EffectsDirector`/`JuiceConfig` mostrados a continuación
+> usan nombres de evento de un sketch previo a H1.3 (`CORE_ROLLED`, `DAMAGE_DEALT`, `PLOT_CHANGED`). El
+> contrato vigente, contra el `CombatEvent` real (23 variantes, `packages/domain/combat/src/types/events.ts`),
+> vive en `docs/specs/H2.4_effects_director.md` §2-§4 — mismo tipo de enmienda que H2.3 §0.3 aplicó a la
+> ubicación de `CombatBridge`.
+
 ```
 // packages/combat-scene/juice
 interface JuiceRecipe<Params = unknown> {

@@ -15,6 +15,7 @@
     "@collector/domain-shared": "*",
     "@collector/domain-catalog": "*",
     "@collector/domain-combat": "*",
+    "@collector/combat-bridge": "*",
     "phaser": "^3.80.0"
   },
   "devDependencies": {
