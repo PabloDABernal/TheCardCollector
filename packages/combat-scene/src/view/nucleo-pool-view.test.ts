@@ -143,6 +143,49 @@ describe('createNucleoPoolView — syncFromSnapshot (H2.12)', () => {
     expect(() => completeTween(recordedTweens.indexOf(rollTweens[0]!))).not.toThrow();
   });
 
+  it('regresión H2.12: gastar el ÚLTIMO Núcleo (pool vaciado) y relanzar en el siguiente render SÍ anima el "dado rodando" (previousPool `[]` real, no confundido con el primer render `null`)', () => {
+    const { scene, rectangles, recordedTweens, completeTween } = createFakeBoardScene({ autoComplete: false });
+    const view = createNucleoPoolView(scene);
+
+    // Render 1: montaje inicial con Núcleos (previousPool pasa de `null` a este array).
+    view.syncFromSnapshot(
+      createMockSnapshot({
+        nucleoPool: [{ id: mockNucleoInstanceId('n1'), color: 'AGRESION', value: 2 }],
+      }),
+    );
+    const n1Rect = rectangles.find((r) => r.getData('targetId') === 'n1')!;
+    expect(n1Rect.destroyed).toBe(false);
+
+    // Render 2 (evento ABILITY_ACTIVATED del motor): se gasta el único/último Núcleo del pool —
+    // el pool queda vacío `[]`. Debe entrar en el caso "parcial" y hacer fade+shrink de n1.
+    view.syncFromSnapshot(createMockSnapshot({ nucleoPool: [] }));
+    expect(n1Rect.destroyed).toBe(false); // sigue vivo, tween de fade en curso
+    completeTween(0);
+    expect(n1Rect.destroyed).toBe(true);
+
+    // Render 3 (evento NUCLEO_POOL_ROLLED del motor, mismo dispatch): el pool se rellena con 6
+    // Núcleos nuevos. `previousPool` es `[]` (real, dejado por el render 2) — NO debe tratarse
+    // como "primer render" (`createStaticTile` sin animación); debe entrar en "relanzado completo"
+    // y crear los 6 tiles con `createRollingTile` (tween de angle/scale + particleBurst).
+    const newPool = Array.from({ length: 6 }, (_, i) => ({
+      id: mockNucleoInstanceId(`new-${i}`),
+      color: 'CAOS' as const,
+      value: i % 5,
+    }));
+    view.syncFromSnapshot(createMockSnapshot({ nucleoPool: newPool }));
+
+    const newRects = newPool.map((n) => rectangles.find((r) => r.getData('targetId') === String(n.id))!);
+    expect(newRects.every((r) => r !== undefined && !r.destroyed)).toBe(true);
+
+    const rollTweens = recordedTweens.filter((t) => t.config['angle'] !== undefined);
+    expect(rollTweens).toHaveLength(6);
+    for (const tween of rollTweens) {
+      expect(tween.config['scale']).toEqual({ from: 1.2, to: 1 });
+      expect(tween.config['duration']).toBe(500);
+      expect(tween.config['ease']).toBe('Cubic.easeOut');
+    }
+  });
+
   it('reposicionamiento sin tween: pool de 3 ids, se retira el del medio (índice 1) → los 2 supervivientes se reposicionan de forma inmediata', () => {
     const { scene, rectangles, recordedTweens } = createFakeBoardScene({ autoComplete: false });
     const view = createNucleoPoolView(scene);

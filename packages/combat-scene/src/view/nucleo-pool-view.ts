@@ -41,7 +41,12 @@ function tileX(index: number): number {
  *  persistentes, ver spec H2.12 §1.1/§1.2. */
 export function createNucleoPoolView(scene: Phaser.Scene): NucleoPoolView {
   const tiles = new Map<NucleoInstanceId, NucleoTile>();
-  let previousPool: readonly NucleoInstance[] = [];
+  // H2.12 fix: `null` (nunca se ha llamado a `syncFromSnapshot` todavía) es el ÚNICO estado que
+  // representa "primer render/montaje inicial de la escena". Un array vacío `[]` es un estado
+  // real y distinto: significa que un render anterior ya vació el pool por una retirada genuina
+  // (p. ej. gastar el último Núcleo) — y por tanto un `newPool` no vacío que llegue justo después
+  // de un `previousPool === []` es un relanzado completo (con animación), no un primer montaje.
+  let previousPool: readonly NucleoInstance[] | null = null;
 
   function createStaticTile(nucleo: NucleoInstance, index: number): NucleoTile {
     const x = tileX(index);
@@ -116,7 +121,7 @@ export function createNucleoPoolView(scene: Phaser.Scene): NucleoPoolView {
   return {
     syncFromSnapshot(snapshot: CombatStateSnapshot): void {
       const newPool = snapshot.nucleoPool;
-      const previousIds = new Set(previousPool.map((n) => n.id));
+      const previousIds = new Set((previousPool ?? []).map((n) => n.id));
       const newIds = new Set(newPool.map((n) => n.id));
 
       // Relanzado completo (H2.12 spec §1.2 punto 3): sin intersección de ids entre anterior y
@@ -124,12 +129,15 @@ export function createNucleoPoolView(scene: Phaser.Scene): NucleoPoolView {
       // relanzarlo en el mismo dispatch (§4 del diagrama) — un `newPool` vacío es siempre el caso
       // "parcial" de retirada real (p. ej. el Núcleo gastado deja el pool momentáneamente sin
       // fichas antes del segundo evento de relanzado), no un relanzado sin dados nuevos.
-      const isRelaunch =
-        previousPool.length > 0 && newPool.length > 0 && previousPool.every((n) => !newIds.has(n.id));
+      // H2.12 fix: cuando `previousPool` es `[]` (vaciado real, no montaje inicial), `.every()`
+      // sobre un array vacío es vacuously `true` — así que este mismo cálculo ya clasifica
+      // correctamente ese caso como relanzado (no requiere `previousPool.length > 0`).
+      const isRelaunch = previousPool !== null && newPool.length > 0 && previousPool.every((n) => !newIds.has(n.id));
 
-      if (previousPool.length === 0) {
+      if (previousPool === null) {
         // Caso primer render (H2.12 spec §1.2 punto 4): comportamiento idéntico al actual (H2.8),
-        // sin animación — no hay "roll" que animar la primera vez que se monta la escena.
+        // sin animación — no hay "roll" que animar la primera vez que se monta la escena. Distinto
+        // de un `previousPool` vacío `[]` dejado por una retirada real (ver fix H2.12 arriba).
         newPool.forEach((nucleo, index) => {
           tiles.set(nucleo.id, createStaticTile(nucleo, index));
         });
