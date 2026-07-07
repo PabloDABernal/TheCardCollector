@@ -1,0 +1,11 @@
+[
+  "cards/soldado-base-cards.json",
+  "cards/mago-base-cards.json",
+  "cards/common-cards.json",
+  "leaders/soldado-base.json",
+  "leaders/mago-base.json",
+  "enemies/bestia-base.json",
+  "enemies/espectro-base.json",
+  "scenarios/bosque-encantado-base.json",
+  "scenarios/templo-en-ruinas-base.json"
+]

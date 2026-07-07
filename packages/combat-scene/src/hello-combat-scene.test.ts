@@ -6,8 +6,12 @@
 // `import.meta.url` deja de resolver a una URL `file://` real (Vitest la reescribe a un
 // path `/@fs/...` de estilo navegador), rompiendo la resolución de rutas de
 // `readFileSync` en `load-raw-content.ts`.
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { buildHelloCombatResult } from './scenes/build-hello-engine';
+import RELATIVE_PATHS from './sync-data-files.json';
 
 /**
  * Verificación funcional automatizada de H2.1 (spec §4.2) — sin levantar un navegador
@@ -35,5 +39,26 @@ describe('HelloCombatScene — construcción real de CombatEngine (H2.1)', () =>
       expect(nucleo.value).toBeGreaterThanOrEqual(1);
       expect(nucleo.value).toBeLessThanOrEqual(4);
     }
+  });
+});
+
+/**
+ * Guardrail de H2.1 (deuda detectada por Reviewer): `public/data` es una copia física
+ * de los 9 JSON reales de `packages/data`, sin ningún mecanismo hasta ahora que impida
+ * que se desincronicen. Este test compara contenido JSON parseado (no bytes crudos, para
+ * tolerar diferencias de fin de línea/espacios sin significado) de cada uno de los 9
+ * archivos y FALLA si `packages/data` y `public/data` divergen — señal de que alguien
+ * editó el JSON fuente sin correr `node packages/combat-scene/scripts/sync-data.mjs`
+ * (enganchado como `predev`/`prebuild` en `package.json`).
+ */
+describe('Sincronización packages/data <-> public/data (guardrail H2.1)', () => {
+  const here = fileURLToPath(import.meta.url);
+  const dataDir = join(dirname(here), '..', '..', 'data');
+  const publicDataDir = join(dirname(here), '..', 'public', 'data');
+
+  it.each(RELATIVE_PATHS)('%s: la copia en public/data coincide con la fuente de verdad en packages/data', (relativePath) => {
+    const source = JSON.parse(readFileSync(join(dataDir, relativePath), 'utf-8'));
+    const copy = JSON.parse(readFileSync(join(publicDataDir, relativePath), 'utf-8'));
+    expect(copy).toEqual(source);
   });
 });
