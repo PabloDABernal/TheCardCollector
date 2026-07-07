@@ -65,7 +65,7 @@ const NUCLEO_ID_2 = createId<'NucleoInstanceId'>('NucleoInstanceId', 'nucleo-2')
 const ALLY_INSTANCE_ID = createId<'CardInstanceId'>('CardInstanceId', 'ally-1') as CardInstanceId;
 
 describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
-  it('NUCLEO_POOL_ROLLED: dispara diceRoll una única vez, con target.focusId undefined', async () => {
+  it('NUCLEO_POOL_ROLLED: no dispara ningún step (H2.12 — JUICE_CONFIG.NUCLEO_POOL_ROLLED es [], el "dado rodando" ahora vive en nucleo-pool-view.ts/BoardView, no en EffectsDirector)', async () => {
     const { bridge, emit } = createMockSceneBridge();
     const { registry } = createTestRegistry();
     const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry);
@@ -84,11 +84,7 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(registry.diceRoll.play).toHaveBeenCalledTimes(1);
-    const [, target] = (registry.diceRoll.play as ReturnType<typeof vi.fn>).mock.calls[0]!;
-    expect(target.event).toBe(event);
-    expect(target.focusId).toBeUndefined();
-
+    expect(registry.diceRoll.play).not.toHaveBeenCalled();
     expect(registry.cardFlip.play).not.toHaveBeenCalled();
     expect(registry.hitImpact.play).not.toHaveBeenCalled();
     expect(registry.screenShake.play).not.toHaveBeenCalled();

@@ -77,7 +77,7 @@ describe('BoardView — render (H2.8)', () => {
     expect(scenarioRect!.y).toBe(PLACEHOLDER_POSITIONS.scenario!.y);
   });
 
-  it('render() llamado dos veces con el mismo snapshot no duplica roles ni tiles de mano; solo el pool de Núcleos se recrea', () => {
+  it('render() llamado dos veces con el mismo snapshot no duplica roles ni tiles de mano; el pool de Núcleos conserva la misma referencia (H2.12: ya no se recrea si el id se mantiene)', () => {
     const { scene, rectangles } = createFakeBoardScene();
     const ctx = createMockContext();
     const boardView = createBoardView(scene, ctx);
@@ -110,10 +110,35 @@ describe('BoardView — render (H2.8)', () => {
     expect(handTilesAfterSecond).toHaveLength(handTilesAfterFirst.length);
     expect(handTilesAfterSecond).toHaveLength(2);
 
-    // El primer Núcleo fue destruido tras el segundo render; solo el creado en la segunda pasada sigue vivo.
+    // H2.12 §1.5: un id presente en ambos snapshots CONSERVA la misma referencia — nunca se
+    // destruye/recrea (contrato invertido respecto a H2.8, que destruía-y-recreaba siempre).
     expect(nucleoRectsAfterFirst).toHaveLength(1);
     expect(nucleoRectsAlive).toHaveLength(1);
-    expect(nucleoRectsAlive[0]).not.toBe(nucleoRectsAfterFirst[0]);
+    expect(nucleoRectsAlive[0]).toBe(nucleoRectsAfterFirst[0]);
+  });
+
+  it('H2.12: render() con pool [n1] y luego pool [] (n1 retirado) anima fade+shrink antes de destruir — n1 sigue vivo hasta completar el tween', () => {
+    const { scene, rectangles, completeTween } = createFakeBoardScene({ autoComplete: false });
+    const ctx = createMockContext();
+    const boardView = createBoardView(scene, ctx);
+
+    const snapshotWithNucleo = createMockSnapshot({
+      nucleoPool: [{ id: mockNucleoInstanceId('n1'), color: 'CAOS', value: 4 }],
+    });
+    boardView.render(snapshotWithNucleo);
+
+    const n1Rect = rectangles.find((r) => r.getData('targetId') === 'n1')!;
+    expect(n1Rect).toBeDefined();
+    expect(n1Rect.destroyed).toBe(false);
+
+    boardView.render(createMockSnapshot({ nucleoPool: [] }));
+
+    // El tween de fade+shrink está registrado pero aún no completó — n1 sigue vivo.
+    expect(n1Rect.destroyed).toBe(false);
+
+    completeTween(0);
+
+    expect(n1Rect.destroyed).toBe(true);
   });
 
   it('un AllyInPlay/MinionInPlay produce un tile con su instanceId real; un segundo render no crea un segundo tile', () => {

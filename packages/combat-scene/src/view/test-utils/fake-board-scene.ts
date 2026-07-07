@@ -50,11 +50,24 @@ export interface FakeText {
   destroy(): void;
 }
 
+export interface CreateFakeBoardSceneOptions {
+  /** Por defecto `true` (comportamiento histórico, H2.10): cada `tweens.add` se resuelve de forma
+   *  SÍNCRONA (aplica las propiedades finales sobre `targets`, invoca `onUpdate`/`onComplete` en el
+   *  acto). Poner `false` (H2.12, `nucleo-pool-view.test.ts`) para tests que necesitan verificar el
+   *  estado INTERMEDIO de una animación (p. ej. un sprite todavía vivo a mitad de un fade-out de
+   *  300ms) y controlar manualmente cuándo completa cada tween vía `completeTween(index)`. */
+  readonly autoComplete?: boolean;
+}
+
 export interface FakeBoardScene {
   readonly scene: Phaser.Scene;
   readonly rectangles: FakeRectangle[];
   readonly texts: FakeText[];
   readonly recordedTweens: RecordedFakeTween[];
+  /** H2.12 — dispara manualmente el `onComplete` (y aplica las propiedades finales) de la tween en
+   *  la posición `index` (orden de creación). No-op si `autoComplete` es `true` (ya se resolvió al
+   *  crearla) o si el tween ya fue completado/matado. */
+  completeTween(index: number): void;
 }
 
 function createFakeRectangle(
@@ -152,14 +165,46 @@ function createFakeText(x: number, y: number, initialText: string): FakeText {
   return text;
 }
 
-export function createFakeBoardScene(): FakeBoardScene {
+interface FakeTweenEntry {
+  readonly targets: unknown[];
+  readonly config: Record<string, unknown>;
+  resolved: boolean;
+}
+
+export function createFakeBoardScene(options: CreateFakeBoardSceneOptions = {}): FakeBoardScene {
+  const autoComplete = options.autoComplete ?? true;
+
   const rectangles: FakeRectangle[] = [];
   const texts: FakeText[] = [];
   const recordedTweens: RecordedFakeTween[] = [];
+  const tweenEntries: FakeTweenEntry[] = [];
   const byName = new Map<string, FakeRectangle>();
 
   function registerByName(name: string, rect: FakeRectangle): void {
     byName.set(name, rect);
+  }
+
+  function resolveTween(index: number): void {
+    const entry = tweenEntries[index];
+    if (!entry || entry.resolved) {
+      return;
+    }
+    entry.resolved = true;
+
+    const reservedKeys = new Set(['targets', 'duration', 'ease', 'onUpdate', 'onComplete']);
+    const propKeys = Object.keys(entry.config).filter((key) => !reservedKeys.has(key));
+
+    const onUpdate = entry.config['onUpdate'] as ((tween: { progress: number }) => void) | undefined;
+    onUpdate?.({ progress: 1 });
+
+    for (const target of entry.targets) {
+      for (const key of propKeys) {
+        (target as Record<string, unknown>)[key] = entry.config[key];
+      }
+    }
+
+    const onComplete = entry.config['onComplete'] as (() => void) | undefined;
+    onComplete?.();
   }
 
   const fakeScene = {
@@ -174,33 +219,56 @@ export function createFakeBoardScene(): FakeBoardScene {
         texts.push(text);
         return text;
       },
+      // H2.12 — `add.particles`/`time.delayedCall`, mínimo necesario para `spawnDieParticleBurst`
+      // (`nucleo-roll-animation.ts`) invocado desde `nucleo-pool-view.ts` en el caso "relanzado
+      // completo". No se registra en ninguna colección expuesta: los tests de `nucleo-pool-view.ts`
+      // verifican la tween de `angle`/`scale`, no el remate de partículas (ya cubierto por
+      // `dice-roll.test.ts` vía `FakeJuiceScene`).
+      particles() {
+        return {
+          explode() {
+            /* no-op fake */
+          },
+          destroy() {
+            /* no-op fake */
+          },
+        };
+      },
     },
-    // H2.10 — `tweens.add` fake, resuelto SÍNCRONAMENTE: aplica de inmediato las propiedades
-    // numéricas del `config` (p.ej. `scaleX`) sobre el/los `targets`, invoca `onUpdate` una vez con
-    // `{ progress: 1 }` (mismo contrato que `Phaser.Tweens.Tween`, solo el campo que
-    // `ability-cooldown-view.ts` consume) y finalmente `onComplete`. Simplificación deliberada frente
-    // a `FakeJuiceScene` (que sí simula timing async): estos tests solo verifican el estado
-    // final/la configuración solicitada, no la temporización del tween.
+    // H2.10 — `tweens.add` fake. Por defecto (`autoComplete: true`) se resuelve SÍNCRONAMENTE:
+    // aplica de inmediato las propiedades numéricas del `config` (p.ej. `scaleX`) sobre el/los
+    // `targets`, invoca `onUpdate` una vez con `{ progress: 1 }` (mismo contrato que
+    // `Phaser.Tweens.Tween`, solo el campo que `ability-cooldown-view.ts` consume) y finalmente
+    // `onComplete`. H2.12: con `autoComplete: false`, la tween queda pendiente hasta que el test
+    // llame `completeTween(index)` a mano — necesario para verificar el estado intermedio de una
+    // animación (p. ej. un Núcleo gastado todavía vivo a mitad de su fade-out de 300ms).
     tweens: {
       add(config: Record<string, unknown>): unknown {
+        const targets = Array.isArray(config['targets']) ? config['targets'] : [config['targets']];
+        const index = tweenEntries.push({ targets, config, resolved: false }) - 1;
         recordedTweens.push({ config });
 
-        const reservedKeys = new Set(['targets', 'duration', 'ease', 'onUpdate', 'onComplete']);
-        const targets = Array.isArray(config['targets']) ? config['targets'] : [config['targets']];
-        const propKeys = Object.keys(config).filter((key) => !reservedKeys.has(key));
-
-        const onUpdate = config['onUpdate'] as ((tween: { progress: number }) => void) | undefined;
-        onUpdate?.({ progress: 1 });
-
-        for (const target of targets) {
-          for (const key of propKeys) {
-            (target as Record<string, unknown>)[key] = config[key];
-          }
+        if (autoComplete) {
+          resolveTween(index);
         }
 
-        const onComplete = config['onComplete'] as (() => void) | undefined;
-        onComplete?.();
-
+        return {};
+      },
+      // H2.12 — `killTweensOf(target)`: marca como resuelto (sin invocar `onComplete`, mismo
+      // contrato que `Phaser.Tweens.TweenManager.killTweensOf`) cualquier tween pendiente cuyos
+      // `targets` incluyan `target`. Usado por `nucleo-pool-view.ts` para no dejar un tween huérfano
+      // corriendo sobre un sprite ya destruido (relanzado completo a mitad de un fade-out).
+      killTweensOf(target: unknown): void {
+        tweenEntries.forEach((entry) => {
+          if (!entry.resolved && entry.targets.includes(target)) {
+            entry.resolved = true;
+          }
+        });
+      },
+    },
+    time: {
+      delayedCall(_delayMs: number, callback: () => void): unknown {
+        callback();
         return {};
       },
     },
@@ -216,5 +284,6 @@ export function createFakeBoardScene(): FakeBoardScene {
     rectangles,
     texts,
     recordedTweens,
+    completeTween: resolveTween,
   };
 }

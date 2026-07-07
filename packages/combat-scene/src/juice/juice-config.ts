@@ -11,8 +11,14 @@ export type JuiceConfig = Record<CombatEvent['type'], JuiceStep[]>;
  * `docs/specs/H2.4_effects_director.md` §4 para el razonamiento de cada entrada.
  */
 export const JUICE_CONFIG: JuiceConfig = {
-  NUCLEO_POOL_ROLLED: [{ recipeId: 'diceRoll', mode: 'parallel' }],
-  ABILITY_ACTIVATED: [],
+  NUCLEO_POOL_ROLLED: [], // H2.12 — antes: [{ recipeId: 'diceRoll', mode: 'parallel' }].
+                          // El "dado rodando" ahora anima el sprite REAL en nucleo-pool-view.ts
+                          // (BoardView), no un placeholder efímero de EffectsDirector — ver spec
+                          // H2.12 §0.1/§1.1 (el canal hud siempre entrega antes que el canal scene,
+                          // así que ninguna receta llegaría a tiempo sobre el sprite real).
+  ABILITY_ACTIVATED: [], // sin cambio — la animación de "Núcleo gastado" tampoco pasa por juice
+                         // (mismo razonamiento, §1.1); `nucleo-pool-view.ts` la resuelve internamente
+                         // leyendo el diff de snapshot, no el evento.
   TURN_ENDED: [],
   COOLDOWNS_TICKED: [{ recipeId: 'cooldownReady', mode: 'parallel' }], // NUEVO H2.10 (antes: [])
   LEADER_DAMAGED: [

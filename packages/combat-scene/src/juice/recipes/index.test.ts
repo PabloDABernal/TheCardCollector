@@ -73,11 +73,13 @@ describe('RECIPE_REGISTRY + EffectsDirector — integración de secuencia (H2.5 
     expect(fake.recordedShakes).toHaveLength(1);
   });
 
-  it('NUCLEO_POOL_ROLLED: diceRoll real crea tweens con el RECIPE_REGISTRY real', async () => {
+  it('NUCLEO_POOL_ROLLED: ningún step se dispara (H2.12 — JUICE_CONFIG.NUCLEO_POOL_ROLLED es [], diceRoll ya no está mapeada; el "dado rodando" ahora vive en nucleo-pool-view.ts/BoardView)', async () => {
     const { bridge, emit } = createMockSceneBridge();
     const fake = createFakeJuiceScene();
     const director = createEffectsDirector(JUICE_CONFIG, RECIPE_REGISTRY);
     director.attach(bridge, fake.scene as unknown as Phaser.Scene);
+
+    expect(JUICE_CONFIG.NUCLEO_POOL_ROLLED).toEqual([]);
 
     emit({
       type: 'NUCLEO_POOL_ROLLED',
@@ -89,7 +91,7 @@ describe('RECIPE_REGISTRY + EffectsDirector — integración de secuencia (H2.5 
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(fake.recordedTweens).toHaveLength(1);
+    expect(fake.recordedTweens).toHaveLength(0);
   });
 
   it('H2.10: JUICE_CONFIG.COOLDOWNS_TICKED apunta a cooldownReady, registrado en RECIPE_REGISTRY', () => {

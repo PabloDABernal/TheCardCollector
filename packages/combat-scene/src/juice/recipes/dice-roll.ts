@@ -1,44 +1,19 @@
-import type Phaser from 'phaser';
 import type { JuiceRecipe } from '../juice-recipe';
 import { DEFAULT_PLACEHOLDER_POSITION } from './placeholder';
 // H2.8 spec §6 — tabla fija color→hex extraída a `view/nucleo-colors.ts` para que `nucleo-pool-view.ts`
 // la reutilice sin duplicar el literal; sin cambio de valores/comportamiento respecto a H2.5.
 import { NUCLEO_COLOR_HEX } from '../../view/nucleo-colors';
+// H2.12 spec §1.3 — matemática pura de "dado rodando" extraída a `view/nucleo-roll-animation.ts` para
+// que `nucleo-pool-view.ts` la reutilice sin duplicarla; sin cambio de comportamiento para esta receta.
+import { rotationDegreesFor, spawnDieParticleBurst } from '../../view/nucleo-roll-animation';
 
 const DIE_SIZE = 64;
 const DIE_SEPARATION_PX = 80;
 const TWEEN_DURATION_MS = 500;
-/** `once: true` + destrucción diferida (spec §3.1 punto 3) — el emitter no bloquea la Promise. */
-const PARTICLE_DESTROY_DELAY_MS = 300;
-const PARTICLE_QUANTITY = 8;
-/** Textura base 1×1 que Phaser registra siempre internamente, sin necesitar un asset propio
- *  (spec §3.1 punto 3). */
-const PARTICLE_TEXTURE_KEY = '__WHITE';
 
 export interface DiceRollParams {
   /** Posición base del pool en pantalla; por defecto el layout fijo de §2 si no se pasa. */
   readonly poolOrigin?: { x: number; y: number };
-}
-
-/** Rotación "vistosa" (2-3 vueltas, spec §3.1 punto 2) determinista a partir del valor del Núcleo
- *  (1-4, GDD) — sin aleatoriedad real: 2 vueltas completas + una fracción de vuelta adicional
- *  proporcional al valor. */
-function rotationDegreesFor(nucleoValue: number): number {
-  const clampedValue = Math.min(Math.max(nucleoValue, 0), 4);
-  return 360 * (2 + clampedValue / 4);
-}
-
-function spawnParticleBurst(scene: Phaser.Scene, x: number, y: number, tint: number): void {
-  const emitter = scene.add.particles(x, y, PARTICLE_TEXTURE_KEY, {
-    speed: { min: 50, max: 120 },
-    lifespan: 250,
-    quantity: PARTICLE_QUANTITY,
-    scale: { start: 0.4, end: 0 },
-    tint,
-    emitting: false,
-  });
-  emitter.explode(PARTICLE_QUANTITY, x, y);
-  scene.time.delayedCall(PARTICLE_DESTROY_DELAY_MS, () => emitter.destroy());
 }
 
 /** H2.5 spec §3.1 — dados rodando + `particleBurst` embebido. Dispara con `NUCLEO_POOL_ROLLED`;
@@ -71,7 +46,7 @@ export const diceRoll: JuiceRecipe<DiceRollParams> = {
           duration: TWEEN_DURATION_MS,
           ease: 'Cubic.easeOut',
           onComplete: () => {
-            spawnParticleBurst(scene, die.x, die.y, tint);
+            spawnDieParticleBurst(scene, die.x, die.y, tint);
             die.destroy();
             resolve();
           },
