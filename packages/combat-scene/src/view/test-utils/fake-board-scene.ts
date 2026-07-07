@@ -28,10 +28,12 @@ export interface FakeText {
   x: number;
   y: number;
   text: string;
+  alpha: number;
   destroyed: boolean;
   setOrigin(x: number, y: number): FakeText;
   setPosition(x: number, y: number): FakeText;
   setText(value: string): FakeText;
+  setAlpha(alpha: number): FakeText;
   destroy(): void;
 }
 
@@ -95,6 +97,7 @@ function createFakeText(x: number, y: number, initialText: string): FakeText {
     x,
     y,
     text: initialText,
+    alpha: 1,
     destroyed: false,
     setOrigin() {
       return text;
@@ -106,6 +109,10 @@ function createFakeText(x: number, y: number, initialText: string): FakeText {
     },
     setText(value: string) {
       text.text = value;
+      return text;
+    },
+    setAlpha(alpha: number) {
+      text.alpha = alpha;
       return text;
     },
     destroy() {

@@ -173,4 +173,26 @@ describe('BoardView — render (H2.8)', () => {
     expect(cheapTile.alpha).toBeLessThan(1);
     expect(expensiveTile.alpha).toBeLessThan(1);
   });
+
+  it('el Text de cada tile de mano recibe la misma alpha que su Rectangle (fix Reviewer: opacidad inconsistente)', () => {
+    const { scene, rectangles, texts } = createFakeBoardScene();
+    const ctx = createMockContext();
+    const boardView = createBoardView(scene, ctx);
+
+    const cheapCard = ctx.leaderCardPool[0]!;
+    const expensiveCard = ctx.leaderCardPool[1]!;
+
+    boardView.render(createMockSnapshot({ leaderEnergy: 3 }));
+
+    const cheapTile = rectangles.find((r) => r.name === cardTileName(cheapCard.cardId))!;
+    const expensiveTile = rectangles.find((r) => r.name === cardTileName(expensiveCard.cardId))!;
+    const cheapText = texts.find((t) => t.text.startsWith(cheapCard.name))!;
+    const expensiveText = texts.find((t) => t.text.startsWith(expensiveCard.name))!;
+
+    expect(cheapText).toBeDefined();
+    expect(expensiveText).toBeDefined();
+    expect(cheapText.alpha).toBe(cheapTile.alpha);
+    expect(expensiveText.alpha).toBe(expensiveTile.alpha);
+    expect(expensiveText.alpha).toBeLessThan(1);
+  });
 });

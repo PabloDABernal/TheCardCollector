@@ -66,4 +66,25 @@ describe('cardFlip', () => {
 
     expect(second).toBe(first);
   });
+
+  it('sin focusId (DRAMATURGIA_CARD_DRAWN): destruye el placeholder efímero al terminar el flip, sin acumular huérfanos entre disparos repetidos', async () => {
+    const fake = createFakeJuiceScene();
+    const target: JuiceTarget = {
+      event: { type: 'DRAMATURGIA_CARD_DRAWN', icon: 'ATTACK' },
+    };
+
+    await cardFlip.play(fake.scene, target, {});
+    const firstRectangle = fake.recordedTweens[0]?.targets;
+
+    await cardFlip.play(fake.scene, target, {});
+    const secondRectangle = fake.recordedTweens[1]?.targets;
+
+    expect(firstRectangle).toBeDefined();
+    expect(secondRectangle).toBeDefined();
+    // Cada disparo crea (y destruye) su propio placeholder efímero — nunca se reutiliza por
+    // nombre porque nunca se le asigna uno (sin focusId no hay bajo qué nombre buscarlo).
+    expect(secondRectangle).not.toBe(firstRectangle);
+    expect((firstRectangle as { destroyed: boolean }).destroyed).toBe(true);
+    expect((secondRectangle as { destroyed: boolean }).destroyed).toBe(true);
+  });
 });

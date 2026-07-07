@@ -23,6 +23,7 @@ export interface CardHandView {
 interface HandTile {
   readonly cardData: HandCardViewData;
   readonly rect: Phaser.GameObjects.Rectangle;
+  readonly text: Phaser.GameObjects.Text;
 }
 
 /** Crea (una única vez) un tile por carta de `ctx.leaderCardPool`, en fila centrada sobre
@@ -49,14 +50,16 @@ export function createCardHandView(scene: Phaser.Scene, ctx: BoardViewContext): 
     });
     text.setOrigin(0.5, 0.5);
 
-    return { cardData, rect };
+    return { cardData, rect, text };
   });
 
   return {
     update(snapshot: CombatStateSnapshot): void {
       for (const tile of tiles) {
         const affordable = snapshot.leaderEnergy >= tile.cardData.energyCost;
-        tile.rect.setAlpha(affordable ? ALPHA_AFFORDABLE : ALPHA_UNAFFORDABLE);
+        const alpha = affordable ? ALPHA_AFFORDABLE : ALPHA_UNAFFORDABLE;
+        tile.rect.setAlpha(alpha);
+        tile.text.setAlpha(alpha);
       }
     },
   };
