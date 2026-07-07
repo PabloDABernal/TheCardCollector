@@ -24,6 +24,8 @@ function createMockContext(overrides: Partial<BoardViewContext> = {}): BoardView
       { cardId: mockCardId('card-cheap'), name: 'Carta Barata', energyCost: 1, cardType: 'EVENTO', requiresNucleoInstance: false },
       { cardId: mockCardId('card-expensive'), name: 'Carta Cara', energyCost: 5, cardType: 'EQUIPO', requiresNucleoInstance: false },
     ],
+    leaderAbilities: [],
+    enemyAbilities: [],
     ...overrides,
   };
 }

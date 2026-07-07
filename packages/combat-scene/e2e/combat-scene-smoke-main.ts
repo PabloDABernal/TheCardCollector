@@ -8,7 +8,7 @@ import { createCombatBridge } from '@collector/combat-bridge';
 import type { CombatBridge } from '@collector/combat-bridge';
 import { CombatScene, COMBAT_SCENE_VIEWPORT } from '../src/scenes/CombatScene';
 import type { DefaultCombatSetup } from '../src/default-combat-setup';
-import type { BoardViewContext, HandCardViewData } from '../src/view';
+import type { BoardViewContext, HandCardViewData, AbilityViewData } from '../src/view';
 
 declare global {
   interface Window {
@@ -99,12 +99,25 @@ async function buildHarnessCombatSetup(): Promise<DefaultCombatSetup> {
     };
   });
 
+  const leaderAbilities: AbilityViewData[] = leader.baseAbilities.map((ability) => ({
+    abilityId: ability.id,
+    name: ability.name,
+    baseCooldown: ability.baseCooldown,
+  }));
+  const enemyAbilities: AbilityViewData[] = enemy.abilities.map((ability) => ({
+    abilityId: ability.id,
+    name: ability.name,
+    baseCooldown: ability.baseCooldown,
+  }));
+
   const boardContext: BoardViewContext = {
     nameLookup,
     leaderMaxHealth: config.leaderMaxHealth,
     enemyMaxHealth: config.enemyMaxHealth,
     scenarioPlotDefeatThreshold: config.scenarioPlotDefeatThreshold,
     leaderCardPool,
+    leaderAbilities,
+    enemyAbilities,
   };
 
   return { bridge, boardContext };

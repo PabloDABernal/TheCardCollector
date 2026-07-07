@@ -43,13 +43,10 @@ export function createLeaderRoleView(scene: Phaser.Scene): RoleView {
 
   return {
     update(snapshot: CombatStateSnapshot, ctx: BoardViewContext): void {
-      const cdLine = snapshot.cooldowns
-        .filter((c) => c.side === 'LEADER')
-        .map((c) => `${ctx.nameLookup.abilityName(c.abilityId)}:${c.remaining}`)
-        .join(' ');
+      // Línea "CD: ..." retirada (H2.10) — ahora la muestran los iconos de ability-cooldown-view.
       text.setText(
         `Líder — Daño ${snapshot.leaderDamage}/${ctx.leaderMaxHealth} | Escudo ${snapshot.leaderShield} | ` +
-          `Energía ${snapshot.leaderEnergy} | Nivel ${snapshot.leaderState.level}\nCD: ${cdLine}`,
+          `Energía ${snapshot.leaderEnergy} | Nivel ${snapshot.leaderState.level}`,
       );
     },
   };
@@ -61,13 +58,9 @@ export function createEnemyRoleView(scene: Phaser.Scene): RoleView {
 
   return {
     update(snapshot: CombatStateSnapshot, ctx: BoardViewContext): void {
-      const cdLine = snapshot.cooldowns
-        .filter((c) => c.side === 'ENEMY')
-        .map((c) => `${ctx.nameLookup.abilityName(c.abilityId)}:${c.remaining}`)
-        .join(' ');
+      // Línea "CD: ..." retirada (H2.10) — ahora la muestran los iconos de ability-cooldown-view.
       text.setText(
-        `Enemigo — Daño ${snapshot.enemyDamage}/${ctx.enemyMaxHealth} | Fase ${snapshot.enemyPhase.phaseNumber}/${snapshot.enemyPhase.totalPhases}\n` +
-          `CD: ${cdLine}`,
+        `Enemigo — Daño ${snapshot.enemyDamage}/${ctx.enemyMaxHealth} | Fase ${snapshot.enemyPhase.phaseNumber}/${snapshot.enemyPhase.totalPhases}`,
       );
     },
   };

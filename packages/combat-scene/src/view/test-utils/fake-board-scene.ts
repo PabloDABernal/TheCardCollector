@@ -12,6 +12,8 @@ export interface FakeRectangle {
   height: number;
   fillColor: number;
   alpha: number;
+  scaleX: number;
+  scaleY: number;
   name: string;
   readonly data: Map<string, unknown>;
   destroyed: boolean;
@@ -21,7 +23,18 @@ export interface FakeRectangle {
   setInteractive(): FakeRectangle;
   setData(key: string, value: unknown): FakeRectangle;
   getData(key: string): unknown;
+  setOrigin(x: number, y?: number): FakeRectangle;
+  setScale(x: number, y?: number): FakeRectangle;
+  setFillStyle(color?: number, alpha?: number): FakeRectangle;
   destroy(): void;
+}
+
+/** H2.10 — superficie mínima de `scene.tweens.add` que `ability-cooldown-view.ts` consume
+ *  (`scaleX` + `onUpdate`/`onComplete`). Se resuelve de forma SÍNCRONA (a diferencia de
+ *  `FakeJuiceScene`, que ofrece `autoComplete`/microtask): no hace falta controlar temporización
+ *  fina en estos tests, solo el estado final tras `update()`. */
+export interface RecordedFakeTween {
+  readonly config: Record<string, unknown>;
 }
 
 export interface FakeText {
@@ -41,6 +54,7 @@ export interface FakeBoardScene {
   readonly scene: Phaser.Scene;
   readonly rectangles: FakeRectangle[];
   readonly texts: FakeText[];
+  readonly recordedTweens: RecordedFakeTween[];
 }
 
 function createFakeRectangle(
@@ -58,6 +72,8 @@ function createFakeRectangle(
     height,
     fillColor,
     alpha: 1,
+    scaleX: 1,
+    scaleY: 1,
     name: '',
     data: new Map<string, unknown>(),
     destroyed: false,
@@ -84,6 +100,20 @@ function createFakeRectangle(
     },
     getData(key: string) {
       return rect.data.get(key);
+    },
+    setOrigin() {
+      return rect;
+    },
+    setScale(x: number, y?: number) {
+      rect.scaleX = x;
+      rect.scaleY = y ?? x;
+      return rect;
+    },
+    setFillStyle(color?: number) {
+      if (color !== undefined) {
+        rect.fillColor = color;
+      }
+      return rect;
     },
     destroy() {
       rect.destroyed = true;
@@ -125,6 +155,7 @@ function createFakeText(x: number, y: number, initialText: string): FakeText {
 export function createFakeBoardScene(): FakeBoardScene {
   const rectangles: FakeRectangle[] = [];
   const texts: FakeText[] = [];
+  const recordedTweens: RecordedFakeTween[] = [];
   const byName = new Map<string, FakeRectangle>();
 
   function registerByName(name: string, rect: FakeRectangle): void {
@@ -144,6 +175,35 @@ export function createFakeBoardScene(): FakeBoardScene {
         return text;
       },
     },
+    // H2.10 — `tweens.add` fake, resuelto SÍNCRONAMENTE: aplica de inmediato las propiedades
+    // numéricas del `config` (p.ej. `scaleX`) sobre el/los `targets`, invoca `onUpdate` una vez con
+    // `{ progress: 1 }` (mismo contrato que `Phaser.Tweens.Tween`, solo el campo que
+    // `ability-cooldown-view.ts` consume) y finalmente `onComplete`. Simplificación deliberada frente
+    // a `FakeJuiceScene` (que sí simula timing async): estos tests solo verifican el estado
+    // final/la configuración solicitada, no la temporización del tween.
+    tweens: {
+      add(config: Record<string, unknown>): unknown {
+        recordedTweens.push({ config });
+
+        const reservedKeys = new Set(['targets', 'duration', 'ease', 'onUpdate', 'onComplete']);
+        const targets = Array.isArray(config['targets']) ? config['targets'] : [config['targets']];
+        const propKeys = Object.keys(config).filter((key) => !reservedKeys.has(key));
+
+        const onUpdate = config['onUpdate'] as ((tween: { progress: number }) => void) | undefined;
+        onUpdate?.({ progress: 1 });
+
+        for (const target of targets) {
+          for (const key of propKeys) {
+            (target as Record<string, unknown>)[key] = config[key];
+          }
+        }
+
+        const onComplete = config['onComplete'] as (() => void) | undefined;
+        onComplete?.();
+
+        return {};
+      },
+    },
     children: {
       getByName(name: string): FakeRectangle | null {
         return byName.get(name) ?? null;
@@ -155,5 +215,6 @@ export function createFakeBoardScene(): FakeBoardScene {
     scene: fakeScene as unknown as Phaser.Scene,
     rectangles,
     texts,
+    recordedTweens,
   };
 }

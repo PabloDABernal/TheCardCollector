@@ -14,7 +14,7 @@ export const JUICE_CONFIG: JuiceConfig = {
   NUCLEO_POOL_ROLLED: [{ recipeId: 'diceRoll', mode: 'parallel' }],
   ABILITY_ACTIVATED: [],
   TURN_ENDED: [],
-  COOLDOWNS_TICKED: [],
+  COOLDOWNS_TICKED: [{ recipeId: 'cooldownReady', mode: 'parallel' }], // NUEVO H2.10 (antes: [])
   LEADER_DAMAGED: [
     { recipeId: 'hitImpact', mode: 'sequential' },
     { recipeId: 'screenShake', mode: 'sequential' },

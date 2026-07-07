@@ -7,7 +7,7 @@ import { CombatEngine, buildCombatEngineConfig, cardHasAttackEffect } from '@col
 import { createCombatBridge } from '@collector/combat-bridge';
 import { CombatScene, COMBAT_SCENE_VIEWPORT } from './scenes/CombatScene';
 import type { DefaultCombatSetup } from './default-combat-setup';
-import type { BoardViewContext, HandCardViewData } from './view';
+import type { BoardViewContext, HandCardViewData, AbilityViewData } from './view';
 
 // H2.9 spec §1.4 — `main.ts` (harness standalone de `combat-scene`, playground de iteración
 // rápida sin levantar `apps/shell` completo) pierde su import de `buildDefaultCombatBridge`
@@ -83,12 +83,25 @@ async function buildHarnessCombatSetup(): Promise<DefaultCombatSetup> {
     };
   });
 
+  const leaderAbilities: AbilityViewData[] = leader.baseAbilities.map((ability) => ({
+    abilityId: ability.id,
+    name: ability.name,
+    baseCooldown: ability.baseCooldown,
+  }));
+  const enemyAbilities: AbilityViewData[] = enemy.abilities.map((ability) => ({
+    abilityId: ability.id,
+    name: ability.name,
+    baseCooldown: ability.baseCooldown,
+  }));
+
   const boardContext: BoardViewContext = {
     nameLookup,
     leaderMaxHealth: config.leaderMaxHealth,
     enemyMaxHealth: config.enemyMaxHealth,
     scenarioPlotDefeatThreshold: config.scenarioPlotDefeatThreshold,
     leaderCardPool,
+    leaderAbilities,
+    enemyAbilities,
   };
 
   return { bridge, boardContext };

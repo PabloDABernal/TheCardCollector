@@ -7,6 +7,8 @@ import { createCardHandView } from './card-hand-view';
 import { createAlliesView } from './allies-view';
 import { createMinionsView } from './minions-view';
 import { createNucleoPoolView } from './nucleo-pool-view';
+import { createAbilityCooldownView } from './ability-cooldown-view';
+import { LEADER_ABILITIES_ROW_Y, ENEMY_ABILITIES_ROW_Y } from './board-layout';
 
 export interface BoardView {
   /** Idempotente — puede llamarse tantas veces como se quiera con el mismo snapshot sin cambiar el
@@ -30,6 +32,8 @@ export function createBoardView(scene: Phaser.Scene, ctx: BoardViewContext): Boa
   const alliesView = createAlliesView(scene);
   const minionsView = createMinionsView(scene);
   const nucleoPoolView = createNucleoPoolView(scene);
+  const leaderAbilitiesView = createAbilityCooldownView(scene, ctx.leaderAbilities, 'LEADER', LEADER_ABILITIES_ROW_Y, true);
+  const enemyAbilitiesView = createAbilityCooldownView(scene, ctx.enemyAbilities, 'ENEMY', ENEMY_ABILITIES_ROW_Y, false);
 
   return {
     render(snapshot: CombatStateSnapshot): void {
@@ -40,6 +44,8 @@ export function createBoardView(scene: Phaser.Scene, ctx: BoardViewContext): Boa
       alliesView.syncFromSnapshot(snapshot);
       minionsView.syncFromSnapshot(snapshot);
       nucleoPoolView.syncFromSnapshot(snapshot);
+      leaderAbilitiesView.update(snapshot);
+      enemyAbilitiesView.update(snapshot);
     },
   };
 }

@@ -1,5 +1,5 @@
 import type { NameLookup } from '@collector/domain-catalog';
-import type { CardId } from '@collector/domain-shared';
+import type { AbilityId, CardId } from '@collector/domain-shared';
 
 /**
  * Dato mínimo de una carta del pool fijo del Líder (spec H2.8 §0.1) necesario para pintar su tile de
@@ -21,6 +21,14 @@ export interface HandCardViewData {
   readonly requiresNucleoInstance: boolean;
 }
 
+/** NUEVO H2.10. Dato mínimo de una habilidad (Líder o Enemigo) necesario para pintar su icono de CD —
+ *  mismo espíritu de "resuelto una vez desde catálogo" que `HandCardViewData` (H2.8 §0.1). */
+export interface AbilityViewData {
+  readonly abilityId: AbilityId;
+  readonly name: string;
+  readonly baseCooldown: number;
+}
+
 /**
  * Contexto de presentación resuelto UNA VEZ contra el catálogo (mismo momento/lugar que
  * `buildCombatEngineConfig`, ver `build-default-combat-bridge.ts`) — análogo directo a
@@ -35,4 +43,8 @@ export interface BoardViewContext {
   /** Pool fijo completo del Líder (spec §0.1), en el mismo orden que `leader.cardPoolIds` — orden
    *  estable para que el layout de mano (§3.3) no "salte" entre renders. */
   readonly leaderCardPool: readonly HandCardViewData[];
+  /** NUEVO H2.10. Las 4 `baseAbilities` del Líder (spec §2.4/§2.5), resueltas una vez desde catálogo. */
+  readonly leaderAbilities: readonly AbilityViewData[];
+  /** NUEVO H2.10. Las 4 `abilities` del Enemigo (spec §2.4/§2.5), resueltas una vez desde catálogo. */
+  readonly enemyAbilities: readonly AbilityViewData[];
 }

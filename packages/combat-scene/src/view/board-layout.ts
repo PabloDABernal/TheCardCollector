@@ -16,3 +16,8 @@ export const NUCLEO_POOL_ROW_Y = 1450;
 export const ALLIES_ROW_Y = 1300;
 export const MINIONS_ROW_Y = 500;
 export const TILE_SEPARATION_PX = 140;
+
+// H2.10 spec §2.3 — fila de iconos de CD de habilidad, debajo del tile de rol y su HUD de texto.
+export const LEADER_ABILITIES_ROW_Y = LEADER_POSITION.y + 180;
+export const ENEMY_ABILITIES_ROW_Y = ENEMY_POSITION.y + 180;
+export const ABILITY_ICON_SEPARATION_PX = 100;

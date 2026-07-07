@@ -3,7 +3,7 @@ import type { LeaderId, EnemyId, ScenarioId } from '@collector/domain-shared';
 import { CatalogLoader, buildNameLookup } from '@collector/domain-catalog';
 import { CombatEngine, buildCombatEngineConfig, cardHasAttackEffect } from '@collector/domain-combat';
 import { createCombatBridge } from '@collector/combat-bridge';
-import type { BoardViewContext, HandCardViewData, DefaultCombatSetup } from '@collector/combat-scene';
+import type { BoardViewContext, HandCardViewData, AbilityViewData, DefaultCombatSetup } from '@collector/combat-scene';
 import { loadRawContent } from './load-raw-content';
 
 // Mismos 3 ids de contenido 2×2×2 que `build-default-combat-bridge.ts` (retirado, H2.9 spec §1.3)
@@ -46,12 +46,25 @@ export async function buildCombatSetup(): Promise<DefaultCombatSetup> {
     };
   });
 
+  const leaderAbilities: AbilityViewData[] = leader.baseAbilities.map((ability) => ({
+    abilityId: ability.id,
+    name: ability.name,
+    baseCooldown: ability.baseCooldown,
+  }));
+  const enemyAbilities: AbilityViewData[] = enemy.abilities.map((ability) => ({
+    abilityId: ability.id,
+    name: ability.name,
+    baseCooldown: ability.baseCooldown,
+  }));
+
   const boardContext: BoardViewContext = {
     nameLookup,
     leaderMaxHealth: config.leaderMaxHealth,
     enemyMaxHealth: config.enemyMaxHealth,
     scenarioPlotDefeatThreshold: config.scenarioPlotDefeatThreshold,
     leaderCardPool,
+    leaderAbilities, // NUEVO H2.10
+    enemyAbilities, // NUEVO H2.10
   };
 
   return { bridge, boardContext };

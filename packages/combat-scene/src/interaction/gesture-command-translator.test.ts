@@ -57,6 +57,8 @@ function createMockContext(): BoardViewContext {
     enemyMaxHealth: 40,
     scenarioPlotDefeatThreshold: 10,
     leaderCardPool,
+    leaderAbilities: [],
+    enemyAbilities: [],
   };
 }
 

@@ -11,5 +11,5 @@
 // tocarlos directamente (spec §0.1).
 export { CombatScene, COMBAT_SCENE_VIEWPORT } from './scenes/CombatScene';
 export type { CombatSceneInitData } from './scenes/CombatScene';
-export type { BoardViewContext, HandCardViewData } from './view';
+export type { BoardViewContext, HandCardViewData, AbilityViewData } from './view';
 export type { DefaultCombatSetup } from './default-combat-setup';

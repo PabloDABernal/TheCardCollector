@@ -13,6 +13,7 @@ import type Phaser from 'phaser';
 import { createEffectsDirector } from '../effects-director';
 import { JUICE_CONFIG } from '../juice-config';
 import { RECIPE_REGISTRY } from './index';
+import { cooldownReady } from './cooldown-ready';
 import { createFakeJuiceScene } from './test-utils/fake-juice-scene';
 
 const NUCLEO_ID_1 = createId<'NucleoInstanceId'>('NucleoInstanceId', 'nucleo-1') as NucleoInstanceId;
@@ -86,5 +87,11 @@ describe('RECIPE_REGISTRY + EffectsDirector — integración de secuencia (H2.5 
     await Promise.resolve();
 
     expect(fake.recordedTweens).toHaveLength(1);
+  });
+
+  it('H2.10: JUICE_CONFIG.COOLDOWNS_TICKED apunta a cooldownReady, registrado en RECIPE_REGISTRY', () => {
+    expect(JUICE_CONFIG.COOLDOWNS_TICKED).toEqual([{ recipeId: 'cooldownReady', mode: 'parallel' }]);
+    expect(RECIPE_REGISTRY['cooldownReady']).toBe(cooldownReady);
+    expect(RECIPE_REGISTRY['cooldownReady']?.id).toBe('cooldownReady');
   });
 });
