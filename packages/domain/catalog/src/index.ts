@@ -12,3 +12,4 @@ export * from './validation/primitives';
 export * from './validation/schema';
 export * from './validation/cross-reference';
 export * from './catalog-loader';
+export * from './name-lookup'; // NUEVO — H2.8 (movido de packages/cli)

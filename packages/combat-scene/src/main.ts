@@ -56,7 +56,7 @@ game.events.once(Phaser.Core.Events.READY, () => {
     });
   });
 
-  void buildDefaultCombatBridge().then((bridge) => {
-    game.scene.start('CombatScene', { bridge });
+  void buildDefaultCombatBridge().then(({ bridge, boardContext }) => {
+    game.scene.start('CombatScene', { bridge, boardContext });
   });
 });

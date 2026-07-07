@@ -1,17 +1,9 @@
 import type Phaser from 'phaser';
-import type { NucleoColor } from '@collector/domain-shared';
 import type { JuiceRecipe } from '../juice-recipe';
 import { DEFAULT_PLACEHOLDER_POSITION } from './placeholder';
-
-/** H2.5 spec §3.1 — tabla fija color→hex para los placeholders efímeros de dado (no hay asset de
- *  Núcleo real todavía, H2.8). */
-const NUCLEO_COLOR_HEX: Record<NucleoColor, number> = {
-  AGRESION: 0xe74c3c,
-  CONTROL: 0x3498db,
-  DEFENSA: 0x2ecc71,
-  RECURSO: 0xf1c40f,
-  CAOS: 0x9b59b6,
-};
+// H2.8 spec §6 — tabla fija color→hex extraída a `view/nucleo-colors.ts` para que `nucleo-pool-view.ts`
+// la reutilice sin duplicar el literal; sin cambio de valores/comportamiento respecto a H2.5.
+import { NUCLEO_COLOR_HEX } from '../../view/nucleo-colors';
 
 const DIE_SIZE = 64;
 const DIE_SEPARATION_PX = 80;

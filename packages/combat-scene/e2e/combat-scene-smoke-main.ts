@@ -37,7 +37,7 @@ const game = new Phaser.Game({
 
 game.scene.add('CombatScene', CombatScene);
 
-void buildDefaultCombatBridge().then((bridge) => {
+void buildDefaultCombatBridge().then(({ bridge, boardContext }) => {
   window.__combatBridge = bridge;
-  game.scene.start('CombatScene', { bridge });
+  game.scene.start('CombatScene', { bridge, boardContext });
 });

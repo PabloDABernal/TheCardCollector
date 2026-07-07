@@ -1,36 +1,6 @@
-import type { AbilityId, CardId } from '@collector/domain-shared';
-import type { Catalog, LeaderDefinition, EnemyDefinition } from '@collector/domain-catalog';
-
-export interface NameLookup {
-  abilityName(id: AbilityId): string;
-  cardName(id: CardId): string;
-}
-
-/**
- * Construido una vez al arrancar, a partir del Líder/Enemigo/catálogo ya seleccionados
- * (main.ts) — combina `leader.baseAbilities` + `enemy.abilities` (nombre de habilidad) y
- * `catalog.cards` (nombre de carta). Puramente de presentación — el motor nunca ve
- * nombres, solo ids.
- */
-export function buildNameLookup(params: {
-  readonly leader: LeaderDefinition;
-  readonly enemy: EnemyDefinition;
-  readonly catalog: Catalog;
-}): NameLookup {
-  const abilityNames = new Map<AbilityId, string>();
-  for (const ability of params.leader.baseAbilities) {
-    abilityNames.set(ability.id, ability.name);
-  }
-  for (const ability of params.enemy.abilities) {
-    abilityNames.set(ability.id, ability.name);
-  }
-
-  return {
-    abilityName(id: AbilityId): string {
-      return abilityNames.get(id) ?? id;
-    },
-    cardName(id: CardId): string {
-      return params.catalog.cards.get(id)?.name ?? id;
-    },
-  };
-}
+// H2.8 spec §2.3 — `NameLookup`/`buildNameLookup` se movieron a `packages/domain/catalog/src/name-lookup.ts`
+// para que `packages/combat-scene` los reutilice sin duplicar lógica de resolución de nombres. Este archivo
+// queda como re-export puro, sin cambio de comportamiento, para no romper los imports relativos existentes
+// de `packages/cli`.
+export type { NameLookup } from '@collector/domain-catalog';
+export { buildNameLookup } from '@collector/domain-catalog';
