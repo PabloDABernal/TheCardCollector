@@ -4,15 +4,24 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node scripts/sync-data.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/sync-data.mjs",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify:visual": "playwright test e2e/"
   },
   "dependencies": {
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-router-dom": "^6.26.0",
-    "@collector/ui-shared": "*"
+    "@collector/ui-shared": "*",
+    "@collector/combat-scene": "*",
+    "@collector/combat-bridge": "*",
+    "@collector/domain-shared": "*",
+    "@collector/domain-catalog": "*",
+    "@collector/domain-combat": "*",
+    "phaser": "^3.80.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.0",
@@ -21,6 +30,7 @@
     "vite": "^5.0.0",
     "@testing-library/react": "^16.0.0",
     "@testing-library/jest-dom": "^6.0.0",
-    "@testing-library/user-event": "^14.0.0"
+    "@testing-library/user-event": "^14.0.0",
+    "@playwright/test": "^1.61.1"
   }
 }

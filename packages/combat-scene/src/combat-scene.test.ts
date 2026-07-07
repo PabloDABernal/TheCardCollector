@@ -34,10 +34,12 @@ import { CombatScene } from './scenes/CombatScene';
 // en el mismo `SHUTDOWN` que el de `EffectsDirector`, sin ejercitar la máquina de estados real de
 // `InputAdapter` (ya cubierta en `input/input-adapter.test.ts`).
 const inputAdapterAttachMock = vi.fn(() => vi.fn());
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- firma calcada de InputAdapter.subscribe(listener)
+const inputAdapterSubscribeMock = vi.fn((_listener: (gesture: unknown) => void) => vi.fn());
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- firma calcada de createInputAdapter(config?)
 const createInputAdapterMock = vi.fn((_config?: unknown) => ({
   attach: inputAdapterAttachMock,
-  subscribe: vi.fn(() => vi.fn()),
+  subscribe: inputAdapterSubscribeMock,
 }));
 vi.mock('./input', () => ({
   createInputAdapter: (config?: unknown) => createInputAdapterMock(config),
@@ -50,6 +52,16 @@ const boardViewRenderMock = vi.fn();
 const createBoardViewMock = vi.fn(() => ({ render: boardViewRenderMock }));
 vi.mock('./view', () => ({
   createBoardView: (...args: unknown[]) => createBoardViewMock(...(args as [])),
+}));
+
+// H2.9 spec §4.1 — mockea `./interaction` (análogo al mock de `./input`/`./view`) para verificar
+// que `create()` construye el `GestureCommandTranslator` y lo suscribe a `inputAdapter.subscribe`,
+// sin ejercitar la máquina de estados real (ya cubierta en
+// `interaction/gesture-command-translator.test.ts`).
+const translatorHandleGestureMock = vi.fn();
+const createGestureCommandTranslatorMock = vi.fn(() => ({ handleGesture: translatorHandleGestureMock }));
+vi.mock('./interaction', () => ({
+  createGestureCommandTranslator: (...args: unknown[]) => createGestureCommandTranslatorMock(...(args as [])),
 }));
 
 function createFakeCombatSceneSurface(scene: CombatScene) {
@@ -79,10 +91,15 @@ describe('CombatScene — init/create/shutdown (H2.6/H2.8)', () => {
   beforeEach(() => {
     inputAdapterAttachMock.mockClear();
     inputAdapterAttachMock.mockImplementation(() => vi.fn());
+    inputAdapterSubscribeMock.mockClear();
+    inputAdapterSubscribeMock.mockImplementation(() => vi.fn());
     createInputAdapterMock.mockClear();
     createBoardViewMock.mockClear();
     createBoardViewMock.mockImplementation(() => ({ render: boardViewRenderMock }));
     boardViewRenderMock.mockClear();
+    createGestureCommandTranslatorMock.mockClear();
+    createGestureCommandTranslatorMock.mockImplementation(() => ({ handleGesture: translatorHandleGestureMock }));
+    translatorHandleGestureMock.mockClear();
   });
 
   it('init(data) guarda el CombatBridge/boardContext inyectados sin dispatch ni side-effects', () => {
@@ -199,12 +216,47 @@ describe('CombatScene — init/create/shutdown (H2.6/H2.8)', () => {
     expect(hudUnsubscribe).toHaveBeenCalledTimes(1);
   });
 
-  it('reconstrucción real: buildDefaultCombatBridge + CombatScene arrancan sin lanzar (sanity funcional)', async () => {
-    const { buildDefaultCombatBridge } = await import('./build-default-combat-bridge');
-    const { bridge, boardContext } = await buildDefaultCombatBridge();
+  it('create() construye el GestureCommandTranslator (bridge, boardContext) y lo suscribe al InputAdapter (H2.9 spec §4.1)', () => {
     const scene = new CombatScene();
     createFakeCombatSceneSurface(scene);
-    scene.init({ bridge, boardContext });
-    expect(() => scene.create()).not.toThrow();
+    const bridge = createFakeBridge();
+    scene.init({ bridge, boardContext: fakeBoardContext });
+    scene.create();
+
+    expect(createGestureCommandTranslatorMock).toHaveBeenCalledTimes(1);
+    expect(createGestureCommandTranslatorMock).toHaveBeenCalledWith(bridge, fakeBoardContext);
+    expect(inputAdapterSubscribeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('un gesto emitido por InputAdapter.subscribe llega a translator.handleGesture (H2.9 spec §4.1)', () => {
+    const scene = new CombatScene();
+    createFakeCombatSceneSurface(scene);
+    let gestureListener: ((gesture: unknown) => void) | undefined;
+    inputAdapterSubscribeMock.mockImplementationOnce((listener: (gesture: unknown) => void) => {
+      gestureListener = listener;
+      return vi.fn();
+    });
+    const bridge = createFakeBridge();
+    scene.init({ bridge, boardContext: fakeBoardContext });
+    scene.create();
+
+    const fakeGesture = { kind: 'TAP', targetId: null, point: { x: 0, y: 0 } };
+    gestureListener?.(fakeGesture);
+
+    expect(translatorHandleGestureMock).toHaveBeenCalledTimes(1);
+    expect(translatorHandleGestureMock).toHaveBeenCalledWith(fakeGesture);
+  });
+
+  it('shutdown invoca el unsubscribe del translator junto a los de EffectsDirector/InputAdapter/BoardView (H2.9 spec §4.1)', () => {
+    const scene = new CombatScene();
+    const { fireShutdown } = createFakeCombatSceneSurface(scene);
+    const translatorUnsubscribe = vi.fn();
+    inputAdapterSubscribeMock.mockImplementationOnce(() => translatorUnsubscribe);
+    const bridge = createFakeBridge();
+    scene.init({ bridge, boardContext: fakeBoardContext });
+    scene.create();
+    fireShutdown();
+
+    expect(translatorUnsubscribe).toHaveBeenCalledTimes(1);
   });
 });

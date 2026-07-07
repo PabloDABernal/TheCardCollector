@@ -22,7 +22,7 @@
       "@collector/domain-shared": ["packages/domain/shared/src/index.ts"],
       "@collector/domain-catalog": ["packages/domain/catalog/src/index.ts"],
       "@collector/domain-combat": ["packages/domain/combat/src/index.ts"],
-      "@collector/combat-scene": ["packages/combat-scene/src/main.ts"],
+      "@collector/combat-scene": ["packages/combat-scene/src/index.ts"],
       "@collector/combat-bridge": ["packages/combat-bridge/src/index.ts"],
       "@collector/ui-shared": ["packages/ui-shared/src/index.ts"]
     }

@@ -9,9 +9,12 @@ const isNodeRuntime = typeof process !== 'undefined' && !!process.versions?.node
 
 /**
  * Carga el contenido real 2×2×2 de `packages/data` (mismos 9 archivos que
- * `packages/cli/src/load-raw-content.ts`, sin nada mockeado a mano) — spec H2.1 §3.1.1.
- * Dos vías según entorno de ejecución, ninguna de las dos cruza `boundaries/element-types`
- * (`combat-scene` no puede depender de `data`, ver spec §5):
+ * `packages/cli/src/load-raw-content.ts`, sin nada mockeado a mano). MOVIDO tal cual
+ * (mismo contenido, mismo mecanismo dual Node/fetch) desde
+ * `packages/combat-scene/src/load-raw-content.ts` — H2.9 spec §1.3: `apps/shell` es ahora
+ * quien construye el `CombatBridge`/`BoardViewContext` de producción (§1.2), así que esta
+ * función viaja con esa responsabilidad. Dos vías según entorno de ejecución, ninguna de
+ * las dos cruza `boundaries/element-types` (`shell` no puede depender de `data`):
  *  - Node (Vitest, incluso con `environment: 'jsdom'`): lee directamente los JSON de
  *    `packages/data` vía `readFileSync` con una ruta resuelta en runtime (no un
  *    `import` estático) — exactamente el mismo patrón que ya usa `packages/cli`.
@@ -51,7 +54,8 @@ async function readContent(relativePath: string): Promise<unknown> {
     const { fileURLToPath } = await import('node:url');
     const { dirname, join } = await import('node:path');
     const here = fileURLToPath(import.meta.url);
-    const dataDir = join(dirname(here), '..', '..', 'data');
+    // apps/shell/src/combat -> ../../../.. -> raíz del repo -> packages/data
+    const dataDir = join(dirname(here), '..', '..', '..', '..', 'packages', 'data');
     return JSON.parse(readFileSync(join(dataDir, relativePath), 'utf-8'));
   }
   const response = await fetch(`/data/${relativePath}`);

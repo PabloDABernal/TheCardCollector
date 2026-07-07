@@ -21,8 +21,8 @@ function createMockContext(overrides: Partial<BoardViewContext> = {}): BoardView
     enemyMaxHealth: 40,
     scenarioPlotDefeatThreshold: 10,
     leaderCardPool: [
-      { cardId: mockCardId('card-cheap'), name: 'Carta Barata', energyCost: 1, cardType: 'EVENTO' },
-      { cardId: mockCardId('card-expensive'), name: 'Carta Cara', energyCost: 5, cardType: 'EQUIPO' },
+      { cardId: mockCardId('card-cheap'), name: 'Carta Barata', energyCost: 1, cardType: 'EVENTO', requiresNucleoInstance: false },
+      { cardId: mockCardId('card-expensive'), name: 'Carta Cara', energyCost: 5, cardType: 'EQUIPO', requiresNucleoInstance: false },
     ],
     ...overrides,
   };

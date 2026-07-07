@@ -12,6 +12,13 @@ export interface HandCardViewData {
   readonly name: string;
   readonly energyCost: number;
   readonly cardType: 'EVENTO' | 'EQUIPO' | 'ALIADO' | 'CONTRATIEMPO';
+  /** NUEVO H2.9. `true` si y solo si esta carta EVENTO/EQUIPO tiene un efecto `ATTACK_ENEMY`
+   *  (`commands.ts`: "`nucleoInstanceId` es OBLIGATORIO si y solo si `effect.kind === 'ATTACK_ENEMY'`").
+   *  Siempre `false` para ALIADO/CONTRATIEMPO (nunca lo necesitan). Calculado UNA VEZ al construir
+   *  `BoardViewContext`, vía `cardHasAttackEffect` (`@collector/domain-combat`) — la máquina de
+   *  estados de gestos (`interaction/gesture-command-translator.ts`) lee este campo en vez de
+   *  reinterpretar `keywords`/`effect` por su cuenta. */
+  readonly requiresNucleoInstance: boolean;
 }
 
 /**

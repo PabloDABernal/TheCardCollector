@@ -3,6 +3,7 @@ import type { CombatBridge, Unsubscribe } from '@collector/combat-bridge';
 import { createEffectsDirector, JUICE_CONFIG, RECIPE_REGISTRY } from '../juice';
 import { createInputAdapter, type InputAdapter } from '../input';
 import { createBoardView, type BoardViewContext } from '../view';
+import { createGestureCommandTranslator } from '../interaction';
 
 /** Viewport virtual de diseño — mobile-first, ver docs/architecture_stack.md §4.2. Misma resolución que
  *  `main.ts` (H2.1) ya usaba para el propio `Phaser.Game`; ahora también gobierna el `Scale Manager`
@@ -87,6 +88,14 @@ export class CombatScene extends Phaser.Scene {
       boardView.render(this.bridge.getSnapshot());
     });
 
+    // NUEVO H2.9 (spec §4.1) — traducción `PointerGesture → CombatCommand` conectada al mismo
+    // stream de `InputAdapter` que consume el debug de H2.7; sin intermediarios, cableado dentro
+    // de `create()` igual que EffectsDirector/BoardView.
+    const translator = createGestureCommandTranslator(this.bridge, this.boardContext);
+    const unsubscribeTranslator: Unsubscribe = this.inputAdapter.subscribe((gesture) => {
+      translator.handleGesture(gesture);
+    });
+
     // `SHUTDOWN` (no `DESTROY`, spec §2.4): cubre tanto el cierre del `Phaser.Game` completo como el
     // reinicio de esta escena (`scene.start()` de nuevo) sin destruir el `Game` — caso relevante para H2.9
     // (modal de resultado que reinicia `CombatScene` con un nuevo `CombatBridge`). Usar solo `DESTROY`
@@ -96,6 +105,7 @@ export class CombatScene extends Phaser.Scene {
       unsubscribeEffects();
       unsubscribeInput();
       unsubscribeBoard();
+      unsubscribeTranslator(); // NUEVO H2.9
     });
   }
 

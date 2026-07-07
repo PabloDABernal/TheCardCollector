@@ -1,0 +1,51 @@
+{
+  "id": "enemy-espectro-base",
+  "name": "Espectro Base",
+  "maxHealth": 45,
+  "abilities": [
+    {
+      "id": "ability-espectro-base-toque-gelido",
+      "name": "Toque Gélido",
+      "coreCost": { "kind": "ANY" },
+      "baseCooldown": 1,
+      "effect": { "kind": "ATTACK", "formula": { "baseFormula": { "kind": "VALUE" } } },
+      "aiProfile": { "branch": "ATTACK", "tier": "BASICA" }
+    },
+    {
+      "id": "ability-espectro-base-susurro",
+      "name": "Susurro",
+      "coreCost": { "kind": "ANY" },
+      "baseCooldown": 1,
+      "effect": { "kind": "PLOT", "amount": 1 },
+      "aiProfile": { "branch": "PLOT", "tier": "BASICA" }
+    },
+    {
+      "id": "ability-espectro-base-golpe-espectral",
+      "name": "Golpe Espectral",
+      "coreCost": { "kind": "COLOR", "colors": ["CONTROL"] },
+      "baseCooldown": 3,
+      "effect": { "kind": "ATTACK", "formula": { "baseFormula": { "kind": "MULTIPLY", "amount": 2 } } },
+      "aiProfile": { "branch": "ATTACK", "tier": "FIRMA" }
+    },
+    {
+      "id": "ability-espectro-base-eco-de-tragedia",
+      "name": "Eco de Tragedia",
+      "coreCost": { "kind": "COLOR", "colors": ["CONTROL", "CAOS"] },
+      "baseCooldown": 4,
+      "effect": { "kind": "PLOT", "amount": 3 },
+      "aiProfile": { "branch": "PLOT", "tier": "STANDARD" }
+    }
+  ],
+  "phases": [
+    { "phaseNumber": 1, "changeCondition": { "kind": "TURN_COUNT_AT_LEAST", "turn": 6 } },
+    { "phaseNumber": 2, "changeCondition": { "kind": "TURN_COUNT_AT_LEAST", "turn": 1 } }
+  ],
+  "dramaturgiaDeck": [
+    { "id": "dramacard-espectro-base-01", "name": "Frío Mortal", "icon": "ATTACK" },
+    { "id": "dramacard-espectro-base-02", "name": "Zarpa Fantasmal", "icon": "ATTACK" },
+    { "id": "dramacard-espectro-base-03", "name": "Lamento", "icon": "PLOT" },
+    { "id": "dramacard-espectro-base-04", "name": "Presagio", "icon": "PLOT" },
+    { "id": "dramacard-espectro-base-05", "name": "Maldición Menor", "icon": "PLOT", "effectDescription": "Daño extra directo (no ejecutable todavía, ver spec H1.10 §0.3)." },
+    { "id": "dramacard-espectro-base-06", "name": "Aparición", "icon": "ATTACK" }
+  ]
+}

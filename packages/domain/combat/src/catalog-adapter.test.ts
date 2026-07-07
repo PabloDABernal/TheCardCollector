@@ -4,8 +4,9 @@ import { createId, SeededRandomSource } from '@collector/domain-shared';
 import type { LeaderId, EnemyId, ScenarioId } from '@collector/domain-shared';
 import { CatalogLoader } from '@collector/domain-catalog';
 import type { CatalogRawInput } from '@collector/domain-catalog';
+import type { CardDefinition } from '@collector/domain-catalog';
 import { CombatEngine } from './combat-engine';
-import { buildCombatEngineConfig } from './catalog-adapter';
+import { buildCombatEngineConfig, cardHasAttackEffect } from './catalog-adapter';
 
 /**
  * Smoke test obligatorio (spec H1.19 §2.3) — mismo patrón de lectura de
@@ -157,4 +158,57 @@ describe('buildCombatEngineConfig (H1.19) — smoke test con contenido real de p
       }
     }
   );
+});
+
+describe('cardHasAttackEffect (H2.9 spec §4.2.1)', () => {
+  function fakeCard(keywords: CardDefinition['keywords']): CardDefinition {
+    return {
+      id: createId<'CardId'>('CardId', 'fake-card') as CardDefinition['id'],
+      name: 'Fake',
+      type: 'EVENTO',
+      cost: { energy: 1 },
+      keywords,
+    };
+  }
+
+  it.each(['ATAQUE', 'ATAQUE_MAS_X', 'ATAQUE_POR_X'] as const)(
+    '%s → true',
+    (keyword) => {
+      const amount = keyword === 'ATAQUE' ? undefined : 2;
+      const card = fakeCard(amount !== undefined ? [{ keyword, amount }] : [{ keyword }]);
+      expect(cardHasAttackEffect(card)).toBe(true);
+    }
+  );
+
+  it.each(['TRAMA_X', 'DEFENSA_X'] as const)('%s (sin keyword de ataque) → false', (keyword) => {
+    const card = fakeCard([{ keyword, amount: 1 }]);
+    expect(cardHasAttackEffect(card)).toBe(false);
+  });
+
+  it('sin keywords → false', () => {
+    expect(cardHasAttackEffect(fakeCard([]))).toBe(false);
+  });
+
+  it('resolveKeywordEffect (vía buildCombatEngineConfig) sigue produciendo el mismo effect tras la refactorización (regresión cero)', async () => {
+    const loader = new CatalogLoader(buildRawInput());
+    const catalog = await loader.load();
+    const leader = loader.getLeader(createId<'LeaderId'>('LeaderId', 'leader-soldado-base') as LeaderId);
+    const enemy = loader.getEnemy(createId<'EnemyId'>('EnemyId', 'enemy-bestia-base') as EnemyId);
+    const scenario = loader.getScenario(
+      createId<'ScenarioId'>('ScenarioId', 'scenario-bosque-encantado-base') as ScenarioId
+    );
+
+    const config = buildCombatEngineConfig({
+      catalog,
+      leader,
+      enemy,
+      scenario,
+      randomSource: new SeededRandomSource(1),
+    });
+
+    const attackCardEntry = [...config.playableCards!.entries()].find(
+      ([, def]) => def.effect?.kind === 'ATTACK_ENEMY'
+    );
+    expect(attackCardEntry).toBeDefined();
+  });
 });
