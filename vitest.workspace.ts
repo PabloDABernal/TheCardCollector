@@ -5,5 +5,6 @@ export default [
   'packages/data/vitest.config.ts',
   'packages/cli/vitest.config.ts',
   'packages/combat-scene/vitest.config.ts',
-  'packages/ui-shared/vitest.config.ts'
+  'packages/ui-shared/vitest.config.ts',
+  'apps/shell/vitest.config.ts'
 ];

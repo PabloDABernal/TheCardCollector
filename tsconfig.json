@@ -7,6 +7,7 @@
     { "path": "packages/data" },
     { "path": "packages/cli" },
     { "path": "packages/combat-scene" },
-    { "path": "packages/ui-shared" }
+    { "path": "packages/ui-shared" },
+    { "path": "apps/shell" }
   ]
 }

@@ -11,7 +11,8 @@
     "packages/data",
     "packages/cli",
     "packages/combat-scene",
-    "packages/ui-shared"
+    "packages/ui-shared",
+    "apps/shell"
   ],
   "scripts": {
     "build": "tsc -b",
