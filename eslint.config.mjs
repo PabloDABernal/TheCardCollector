@@ -16,9 +16,9 @@ export default tseslint.config(
         { type: 'domain-combat', pattern: 'packages/domain/combat/**' },
         { type: 'data', pattern: 'packages/data/**' },
         { type: 'cli', pattern: 'packages/cli/**' }, // NUEVO H1.19 — ver spec §0.1
-        // entradas futuras (no crear aún en H1.1, dejar documentado el patrón):
-        { type: 'combat-scene', pattern: 'packages/combat-scene/**' },
-        { type: 'ui-shared', pattern: 'packages/ui-shared/**' },
+        { type: 'combat-scene', pattern: 'packages/combat-scene/**' }, // NUEVO H2.1
+        { type: 'ui-shared', pattern: 'packages/ui-shared/**' }, // NUEVO H2.1
+        // entrada futura (no crear aún, dejar documentado el patrón):
         { type: 'shell', pattern: 'apps/shell/**' }
       ]
     },

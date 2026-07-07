@@ -21,7 +21,9 @@
     "paths": {
       "@collector/domain-shared": ["packages/domain/shared/src/index.ts"],
       "@collector/domain-catalog": ["packages/domain/catalog/src/index.ts"],
-      "@collector/domain-combat": ["packages/domain/combat/src/index.ts"]
+      "@collector/domain-combat": ["packages/domain/combat/src/index.ts"],
+      "@collector/combat-scene": ["packages/combat-scene/src/main.ts"],
+      "@collector/ui-shared": ["packages/ui-shared/src/index.ts"]
     }
   }
 }

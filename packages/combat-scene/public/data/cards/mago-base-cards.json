@@ -1,0 +1,22 @@
+[
+  { "id": "card-mago-base-01", "name": "Bola de Caos", "type": "EVENTO", "cost": { "energy": 1 },
+    "keywords": [{ "keyword": "ATAQUE_MAS_X", "amount": 1 }, { "keyword": "CAOS" }] },
+  { "id": "card-mago-base-02", "name": "Descarga Arcana", "type": "EVENTO", "cost": { "energy": 2 },
+    "keywords": [{ "keyword": "ATAQUE_POR_X", "amount": 2 }] },
+  { "id": "card-mago-base-03", "name": "Vórtice", "type": "EVENTO", "cost": { "energy": 2 },
+    "keywords": [{ "keyword": "ATAQUE_MAS_X", "amount": 2 }, { "keyword": "UMBRAL" }] },
+  { "id": "card-mago-base-04", "name": "Bastón Encantado", "type": "EQUIPO", "cost": { "energy": 1 },
+    "keywords": [{ "keyword": "DEFENSA_X", "amount": 1 }, { "keyword": "NEUTRO" }] },
+  { "id": "card-mago-base-05", "name": "Torre de Mana", "type": "EQUIPO", "cost": { "energy": 2 },
+    "keywords": [{ "keyword": "DEFENSA_X", "amount": 2 }] },
+  { "id": "card-mago-base-06", "name": "Familiar Arcano", "type": "ALIADO", "cost": { "energy": 2 },
+    "keywords": [{ "keyword": "DEFENSOR" }, { "keyword": "VIDA_X", "amount": 5 }] },
+  { "id": "card-mago-base-07", "name": "Golem de Caos", "type": "ALIADO", "cost": { "energy": 3 },
+    "keywords": [{ "keyword": "BERSERKER" }, { "keyword": "VIDA_X", "amount": 10 }] },
+  { "id": "card-mago-base-08", "name": "Contrahechizo", "type": "CONTRATIEMPO", "cost": { "energy": 1 },
+    "keywords": [{ "keyword": "DESHACER_DANO" }] },
+  { "id": "card-mago-base-09", "name": "Manipular Destino", "type": "EVENTO", "cost": { "energy": 1 },
+    "keywords": [{ "keyword": "TRAMA_X", "amount": 2 }] },
+  { "id": "card-mago-base-10", "name": "Cadena de Combos", "type": "EVENTO", "cost": { "energy": 2 },
+    "keywords": [{ "keyword": "ATAQUE_MAS_X", "amount": 1 }, { "keyword": "COMBO" }] }
+]
