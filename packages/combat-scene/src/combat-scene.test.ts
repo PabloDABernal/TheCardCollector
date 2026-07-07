@@ -23,9 +23,23 @@ vi.mock('phaser', () => {
   };
 });
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { CombatBridge } from '@collector/combat-bridge';
 import { CombatScene } from './scenes/CombatScene';
+
+// H2.7 spec §4.1 — mockea `./input` (análogo a como este archivo ya mockea `phaser`) para verificar que
+// `create()` invoca `createInputAdapter()` + `inputAdapter.attach(this)` y que su `unsubscribe` se registra
+// en el mismo `SHUTDOWN` que el de `EffectsDirector`, sin ejercitar la máquina de estados real de
+// `InputAdapter` (ya cubierta en `input/input-adapter.test.ts`).
+const inputAdapterAttachMock = vi.fn(() => vi.fn());
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- firma calcada de createInputAdapter(config?)
+const createInputAdapterMock = vi.fn((_config?: unknown) => ({
+  attach: inputAdapterAttachMock,
+  subscribe: vi.fn(() => vi.fn()),
+}));
+vi.mock('./input', () => ({
+  createInputAdapter: (config?: unknown) => createInputAdapterMock(config),
+}));
 
 function createFakeCombatSceneSurface(scene: CombatScene) {
   const shutdownListeners: Array<() => void> = [];
@@ -39,6 +53,12 @@ function createFakeCombatSceneSurface(scene: CombatScene) {
 }
 
 describe('CombatScene — init/create/shutdown (H2.6)', () => {
+  beforeEach(() => {
+    inputAdapterAttachMock.mockClear();
+    inputAdapterAttachMock.mockImplementation(() => vi.fn());
+    createInputAdapterMock.mockClear();
+  });
+
   it('init(data) guarda el CombatBridge inyectado sin dispatch ni side-effects', () => {
     const scene = new CombatScene();
     const bridge = { subscribeSceneEvents: vi.fn(() => () => {}) } as unknown as CombatBridge;
@@ -71,6 +91,34 @@ describe('CombatScene — init/create/shutdown (H2.6)', () => {
     scene.create();
     fireShutdown();
     expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('create() instancia InputAdapter y lo conecta a la escena (H2.7 spec §4.1)', () => {
+    const scene = new CombatScene();
+    createFakeCombatSceneSurface(scene);
+    const bridge = { subscribeSceneEvents: vi.fn(() => vi.fn()) } as unknown as CombatBridge;
+    scene.init({ bridge });
+    scene.create();
+
+    expect(createInputAdapterMock).toHaveBeenCalledTimes(1);
+    expect(inputAdapterAttachMock).toHaveBeenCalledTimes(1);
+    expect(inputAdapterAttachMock).toHaveBeenCalledWith(scene);
+  });
+
+  it('shutdown invoca el unsubscribe de InputAdapter.attach junto al de EffectsDirector (H2.7 spec §4.1)', () => {
+    const scene = new CombatScene();
+    const { fireShutdown } = createFakeCombatSceneSurface(scene);
+    const effectsUnsubscribe = vi.fn();
+    const bridge = { subscribeSceneEvents: vi.fn(() => effectsUnsubscribe) } as unknown as CombatBridge;
+    const inputUnsubscribe = vi.fn();
+    inputAdapterAttachMock.mockReturnValueOnce(inputUnsubscribe);
+
+    scene.init({ bridge });
+    scene.create();
+    fireShutdown();
+
+    expect(effectsUnsubscribe).toHaveBeenCalledTimes(1);
+    expect(inputUnsubscribe).toHaveBeenCalledTimes(1);
   });
 
   it('reconstrucción real: buildDefaultCombatBridge + CombatScene arrancan sin lanzar (sanity funcional)', async () => {

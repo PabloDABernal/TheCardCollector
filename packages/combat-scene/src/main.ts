@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { CombatScene, COMBAT_SCENE_VIEWPORT } from './scenes/CombatScene';
 import { buildDefaultCombatBridge } from './build-default-combat-bridge';
+import { createInputAdapter } from './input';
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -22,4 +23,31 @@ game.scene.add('CombatScene', CombatScene);
 
 void buildDefaultCombatBridge().then((bridge) => {
   game.scene.start('CombatScene', { bridge });
+  const scene = game.scene.getScene('CombatScene');
+
+  // H2.7 spec §4.2 — verificación visual manual complementaria, no gate de CI: un `Rectangle` de prueba
+  // interactivo y un overlay de debug que muestra el último `PointerGesture` detectado, para poder probar
+  // tap/drag/long-press sobre *algo* concreto antes de que H2.8 aporte sprites reales. Se elimina del
+  // harness cuando H2.8 exista.
+  scene.events.once(Phaser.Scenes.Events.CREATE, () => {
+    const debugRect = scene.add.rectangle(
+      COMBAT_SCENE_VIEWPORT.width / 2,
+      COMBAT_SCENE_VIEWPORT.height / 2,
+      300,
+      300,
+      0x3355ff,
+    );
+    debugRect.setInteractive().setData('targetId', 'debug-rect');
+
+    const debugText = scene.add.text(16, 16, 'InputAdapter (H2.7): sin gestos todavía', {
+      fontSize: '28px',
+      color: '#ffffff',
+    });
+
+    const inputAdapter = createInputAdapter();
+    inputAdapter.attach(scene);
+    inputAdapter.subscribe((gesture) => {
+      debugText.setText(`InputAdapter (H2.7): ${JSON.stringify(gesture)}`);
+    });
+  });
 });

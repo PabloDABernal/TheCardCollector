@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { CombatBridge, Unsubscribe } from '@collector/combat-bridge';
 import { createEffectsDirector, JUICE_CONFIG, RECIPE_REGISTRY } from '../juice';
+import { createInputAdapter, type InputAdapter } from '../input';
 
 /** Viewport virtual de diseño — mobile-first, ver docs/architecture_stack.md §4.2. Misma resolución que
  *  `main.ts` (H2.1) ya usaba para el propio `Phaser.Game`; ahora también gobierna el `Scale Manager`
@@ -17,12 +18,15 @@ export interface CombatSceneInitData {
 /**
  * H2.6 — escena base de producción que sustituye a `HelloCombatScene` (H2.1, prueba desechable). No
  * construye su propio `CombatEngine`/`CombatBridge` (docs/architecture_stack.md §2.3: "Phaser nunca instancia
- * su propio motor de reglas") ni renderiza tablero/HUD todavía (H2.8) ni registra input (H2.7) — únicamente
- * fija el ciclo de vida estándar de `Phaser.Scene` y conecta el `EffectsDirector` real al `CombatBridge`
- * inyectado, sin fugas de listeners entre reinicios de escena.
+ * su propio motor de reglas") ni renderiza tablero/HUD todavía (H2.8) — fija el ciclo de vida estándar de
+ * `Phaser.Scene`, conecta el `EffectsDirector` real al `CombatBridge` inyectado y (H2.7) el `InputAdapter`
+ * de clasificación de gestos genéricos, sin fugas de listeners entre reinicios de escena.
  */
 export class CombatScene extends Phaser.Scene {
   private bridge!: CombatBridge;
+  /** H2.7 spec §2.3 — expuesto como propiedad de instancia para que H2.8/H2.9 puedan `subscribe(...)` al
+   *  stream de `PointerGesture` desde fuera de `create()` si lo necesitan. */
+  private inputAdapter!: InputAdapter;
 
   constructor() {
     super('CombatScene');
@@ -46,20 +50,30 @@ export class CombatScene extends Phaser.Scene {
     // no-op deliberado — ver spec H2.6 §2.2.
   }
 
-  /** Fase 3 — cámara mínima, `EffectsDirector` real suscrito al `bridge` inyectado, cleanup registrado en
-   *  `shutdown` (spec §2.1/§2.4). No pinta ningún estado de combate (eso es H2.8). */
+  /** Fase 3 — cámara mínima, `EffectsDirector` real suscrito al `bridge` inyectado, `InputAdapter` (H2.7)
+   *  conectado a la escena, cleanup de ambos registrado en `shutdown` (spec §2.1/§2.4, H2.7 spec §2.3). No
+   *  pinta ningún estado de combate (eso es H2.8). */
   create(): void {
     this.cameras.main.setBackgroundColor('#12141c');
 
     const effectsDirector = createEffectsDirector(JUICE_CONFIG, RECIPE_REGISTRY);
-    const unsubscribe: Unsubscribe = effectsDirector.attach(this.bridge, this);
+    const unsubscribeEffects: Unsubscribe = effectsDirector.attach(this.bridge, this);
+
+    // H2.7 §2.3 — umbrales por defecto; H2.8/H2.9 pueden pasar config si el feel lo pide. Sin consumidor
+    // semántico todavía en esta historia (§0.1): la traducción PointerGesture -> PlayerIntent de dominio es
+    // de H2.8/H2.9.
+    this.inputAdapter = createInputAdapter();
+    const unsubscribeInput: Unsubscribe = this.inputAdapter.attach(this);
 
     // `SHUTDOWN` (no `DESTROY`, spec §2.4): cubre tanto el cierre del `Phaser.Game` completo como el
     // reinicio de esta escena (`scene.start()` de nuevo) sin destruir el `Game` — caso relevante para H2.9
     // (modal de resultado que reinicia `CombatScene` con un nuevo `CombatBridge`). Usar solo `DESTROY`
     // dejaría el listener vivo (fuga) en ese escenario de reinicio. `.once` (no `.on`): si la escena se
-    // reinicia, `create()` vuelve a registrar un `once` fresco sobre el nuevo `unsubscribe`.
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => unsubscribe());
+    // reinicia, `create()` vuelve a registrar un `once` fresco sobre los nuevos `unsubscribe`.
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      unsubscribeEffects();
+      unsubscribeInput();
+    });
   }
 
   /** No-op explícito (spec §2.3), confirmado — Phaser ya gestiona su loop de render (RAF interno); el
