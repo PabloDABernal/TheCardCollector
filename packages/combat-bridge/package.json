@@ -10,5 +10,8 @@
   "dependencies": {
     "@collector/domain-shared": "*",
     "@collector/domain-combat": "*"
+  },
+  "devDependencies": {
+    "@collector/domain-catalog": "*"
   }
 }
