@@ -8,6 +8,7 @@ import { cooldownReady } from './cooldown-ready';
 import { floatingNumber } from './floating-number';
 import { soundOnly } from './sound-only';
 import { createCombatOutcomeSoundRecipe } from './combat-outcome-sound';
+import { minionDefeated } from './minion-defeated';
 
 /** H2.5 spec §4 — registro id→implementación real (sustituye `STUB_RECIPE_REGISTRY` de H2.4).
  *  H2.10 añade `cooldownReady` (5º id). H2.11 añade `floatingNumber` (6º id).
@@ -27,5 +28,6 @@ export function createRecipeRegistry(soundManager: SoundManager): JuiceRecipeReg
     floatingNumber,
     soundOnly, // NUEVO H2.13
     combatOutcomeSound: createCombatOutcomeSoundRecipe(soundManager), // NUEVO H2.13
+    minionDefeated, // NUEVO H3 (spec §3.9.6)
   };
 }

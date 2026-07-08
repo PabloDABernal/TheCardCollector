@@ -24,8 +24,8 @@ const ARROLLAR_ID = abilityId('ability-soldado-base-arrollar');
 
 function leaderAbilities(): AbilityViewData[] {
   return [
-    { abilityId: GUARDIA_ID, name: 'Guardia Firme', baseCooldown: 1 },
-    { abilityId: ARROLLAR_ID, name: 'Arrollar', baseCooldown: 3 },
+    { abilityId: GUARDIA_ID, name: 'Guardia Firme', baseCooldown: 1, coreCost: { kind: 'ANY' } },
+    { abilityId: ARROLLAR_ID, name: 'Arrollar', baseCooldown: 3, coreCost: { kind: 'ANY' } },
   ];
 }
 

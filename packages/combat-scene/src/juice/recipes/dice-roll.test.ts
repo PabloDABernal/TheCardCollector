@@ -15,10 +15,10 @@ const NUCLEO_ID_2 = createId<'NucleoInstanceId'>('NucleoInstanceId', 'nucleo-2')
 
 function poolRolledEvent(): CombatEvent {
   return {
-    type: 'NUCLEO_POOL_ROLLED',
-    pool: [
-      { id: NUCLEO_ID_1, color: 'AGRESION', value: 2 },
-      { id: NUCLEO_ID_2, color: 'CONTROL', value: 3 },
+    type: 'NUCLEO_TABLE_REROLLED',
+    dice: [
+      { id: NUCLEO_ID_1, color: 'AGRESION', value: 2, kind: 'FIXED', status: 'AVAILABLE' },
+      { id: NUCLEO_ID_2, color: 'CONTROL', value: 3, kind: 'FIXED', status: 'AVAILABLE' },
     ],
     priorityTurnOwner: 'LEADER',
   };
@@ -80,7 +80,7 @@ describe('diceRoll', () => {
     expect(resolved).toBe(true);
   });
 
-  it('con un evento distinto de NUCLEO_POOL_ROLLED, resuelve sin crear tweens (defensivo)', async () => {
+  it('con un evento distinto de NUCLEO_TABLE_REROLLED, resuelve sin crear tweens (defensivo)', async () => {
     const fake = createFakeJuiceScene();
     const target: JuiceTarget = {
       event: { type: 'TURN_ENDED', previousTurnOwner: 'LEADER', nextTurnOwner: 'ENEMY', turnNumber: 1 },

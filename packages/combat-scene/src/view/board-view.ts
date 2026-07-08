@@ -6,7 +6,7 @@ import { createLeaderRoleView, createEnemyRoleView, createScenarioRoleView } fro
 import { createCardHandView } from './card-hand-view';
 import { createAlliesView } from './allies-view';
 import { createMinionsView } from './minions-view';
-import { createNucleoPoolView } from './nucleo-pool-view';
+import { createNucleoTable } from './nucleo-table-view';
 import { createAbilityCooldownView } from './ability-cooldown-view';
 import { LEADER_ABILITIES_ROW_Y, ENEMY_ABILITIES_ROW_Y } from './board-layout';
 
@@ -31,7 +31,7 @@ export function createBoardView(scene: Phaser.Scene, ctx: BoardViewContext): Boa
   const cardHandView = createCardHandView(scene, ctx);
   const alliesView = createAlliesView(scene);
   const minionsView = createMinionsView(scene);
-  const nucleoPoolView = createNucleoPoolView(scene);
+  const nucleoTableView = createNucleoTable(scene, []);
   const leaderAbilitiesView = createAbilityCooldownView(scene, ctx.leaderAbilities, 'LEADER', LEADER_ABILITIES_ROW_Y, true);
   const enemyAbilitiesView = createAbilityCooldownView(scene, ctx.enemyAbilities, 'ENEMY', ENEMY_ABILITIES_ROW_Y, false);
 
@@ -43,7 +43,7 @@ export function createBoardView(scene: Phaser.Scene, ctx: BoardViewContext): Boa
       cardHandView.update(snapshot);
       alliesView.syncFromSnapshot(snapshot);
       minionsView.syncFromSnapshot(snapshot);
-      nucleoPoolView.syncFromSnapshot(snapshot);
+      nucleoTableView.syncFromSnapshot(snapshot);
       leaderAbilitiesView.update(snapshot);
       enemyAbilitiesView.update(snapshot);
     },

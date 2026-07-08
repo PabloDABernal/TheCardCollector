@@ -42,11 +42,13 @@ export interface FakeText {
   y: number;
   text: string;
   alpha: number;
+  name: string;
   destroyed: boolean;
   setOrigin(x: number, y: number): FakeText;
   setPosition(x: number, y: number): FakeText;
   setText(value: string): FakeText;
   setAlpha(alpha: number): FakeText;
+  setName(name: string): FakeText;
   destroy(): void;
 }
 
@@ -135,13 +137,24 @@ function createFakeRectangle(
   return rect;
 }
 
-function createFakeText(x: number, y: number, initialText: string): FakeText {
+function createFakeText(
+  x: number,
+  y: number,
+  initialText: string,
+  registerByName: (name: string, obj: FakeText) => void,
+): FakeText {
   const text: FakeText = {
     x,
     y,
     text: initialText,
     alpha: 1,
+    name: '',
     destroyed: false,
+    setName(name: string) {
+      text.name = name;
+      registerByName(name, text);
+      return text;
+    },
     setOrigin() {
       return text;
     },
@@ -178,10 +191,10 @@ export function createFakeBoardScene(options: CreateFakeBoardSceneOptions = {}):
   const texts: FakeText[] = [];
   const recordedTweens: RecordedFakeTween[] = [];
   const tweenEntries: FakeTweenEntry[] = [];
-  const byName = new Map<string, FakeRectangle>();
+  const byName = new Map<string, FakeRectangle | FakeText>();
 
-  function registerByName(name: string, rect: FakeRectangle): void {
-    byName.set(name, rect);
+  function registerByName(name: string, obj: FakeRectangle | FakeText): void {
+    byName.set(name, obj);
   }
 
   function resolveTween(index: number): void {
@@ -215,7 +228,7 @@ export function createFakeBoardScene(options: CreateFakeBoardSceneOptions = {}):
         return rect;
       },
       text(x?: number, y?: number, value?: string): FakeText {
-        const text = createFakeText(x ?? 0, y ?? 0, value ?? '');
+        const text = createFakeText(x ?? 0, y ?? 0, value ?? '', registerByName);
         texts.push(text);
         return text;
       },
@@ -273,7 +286,7 @@ export function createFakeBoardScene(options: CreateFakeBoardSceneOptions = {}):
       },
     },
     children: {
-      getByName(name: string): FakeRectangle | null {
+      getByName(name: string): FakeRectangle | FakeText | null {
         return byName.get(name) ?? null;
       },
     },

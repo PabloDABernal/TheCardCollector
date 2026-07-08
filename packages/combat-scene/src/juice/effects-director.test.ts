@@ -74,7 +74,7 @@ const NUCLEO_ID_2 = createId<'NucleoInstanceId'>('NucleoInstanceId', 'nucleo-2')
 const ALLY_INSTANCE_ID = createId<'CardInstanceId'>('CardInstanceId', 'ally-1') as CardInstanceId;
 
 describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
-  it('NUCLEO_POOL_ROLLED: dispara soundOnly (H2.13 — JUICE_CONFIG.NUCLEO_POOL_ROLLED apunta a soundOnly+soundId "diceRoll"; sin ningún tween visual, el "dado rodando" sigue viviendo en nucleo-pool-view.ts/BoardView)', async () => {
+  it('NUCLEO_TABLE_REROLLED: dispara soundOnly (H2.13 — JUICE_CONFIG.NUCLEO_TABLE_REROLLED apunta a soundOnly+soundId "diceRoll"; sin ningún tween visual, el "dado rodando" sigue viviendo en nucleo-table-view.ts/BoardView)', async () => {
     const { bridge, emit } = createMockSceneBridge();
     const { registry } = createTestRegistry();
     const soundManager = createFakeSoundManager();
@@ -82,10 +82,10 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
     director.attach(bridge, {} as Phaser.Scene);
 
     const event: CombatEvent = {
-      type: 'NUCLEO_POOL_ROLLED',
-      pool: [
-        { id: NUCLEO_ID_1, color: 'AGRESION', value: 2 },
-        { id: NUCLEO_ID_2, color: 'CONTROL', value: 3 },
+      type: 'NUCLEO_TABLE_REROLLED',
+      dice: [
+        { id: NUCLEO_ID_1, color: 'AGRESION', value: 2, kind: 'FIXED', status: 'AVAILABLE' },
+        { id: NUCLEO_ID_2, color: 'CONTROL', value: 3, kind: 'FIXED', status: 'AVAILABLE' },
       ],
       priorityTurnOwner: 'LEADER',
     };

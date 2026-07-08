@@ -103,6 +103,7 @@ function CombatHudOverlay({
     <>
       <CombatHud
         snapshot={snapshot}
+        bridge={bridge}
         onEndTurn={() => bridge.dispatch({ type: 'END_TURN' })}
         leaderName={leaderName}
       />

@@ -12,9 +12,15 @@ export const ENEMY_POSITION = PLACEHOLDER_POSITIONS.enemy!; // {x:540, y:300}
 export const SCENARIO_POSITION = PLACEHOLDER_POSITIONS.scenario!; // {x:540, y:960}
 export const HAND_ROW_POSITION = CARD_HAND_POSITION; // {x:540, y:1600} — justo sobre el Líder (y:1700)
 
-export const NUCLEO_POOL_ROW_Y = 1450;
+/** RENOMBRADO H3.4 de `NUCLEO_POOL_ROW_Y` — mesa persistente de dados (ya no "pool" que se vacía).
+ *  Alias `NUCLEO_POOL_ROW_Y` conservado para no romper imports existentes fuera de este cambio. */
+export const NUCLEO_TABLE_ROW_Y = 1450;
+export const NUCLEO_POOL_ROW_Y = NUCLEO_TABLE_ROW_Y;
 export const ALLIES_ROW_Y = 1300;
 export const TILE_SEPARATION_PX = 140;
+/** NUEVO H3 (capa visual) — separación vertical entre un dado FIXED y sus dados EXTRA apilados del
+ *  mismo color (spec H3 §5.2, "agrupación visual por color"). */
+export const NUCLEO_EXTRA_DIE_STACK_OFFSET_PX = 70;
 
 // H2.10 spec §2.3 — fila de iconos de CD de habilidad, debajo del tile de rol y su HUD de texto.
 export const LEADER_ABILITIES_ROW_Y = LEADER_POSITION.y + 180;

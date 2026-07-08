@@ -60,11 +60,13 @@ export async function buildCombatSetup(params: BuildCombatSetupParams = {}): Pro
     abilityId: ability.id,
     name: ability.name,
     baseCooldown: ability.baseCooldown,
+    coreCost: ability.coreCost, // NUEVO H3 (spec §5.4)
   }));
   const enemyAbilities: AbilityViewData[] = enemy.abilities.map((ability) => ({
     abilityId: ability.id,
     name: ability.name,
     baseCooldown: ability.baseCooldown,
+    coreCost: ability.coreCost, // NUEVO H3 (spec §5.4)
   }));
 
   const boardContext: BoardViewContext = {

@@ -40,7 +40,7 @@ vi.mock('@collector/combat-scene', () => ({
 
 const fakeSnapshot: CombatStateSnapshot = {
   turn: { turnOwner: 'LEADER', turnNumber: 1 },
-  nucleoPool: [],
+  nucleoTable: [],
   cooldowns: [],
   leaderDamage: 0,
   leaderShield: 0,
@@ -56,6 +56,9 @@ const fakeSnapshot: CombatStateSnapshot = {
   scenarioPhase: { phaseNumber: 1, totalPhases: 1 },
   enemyDamage: 0,
   status: 'IN_PROGRESS',
+  leaderHand: [],
+  leaderDeckRemaining: 0,
+  leaderFreeStep: { takenThisTurn: false },
 };
 
 const fakeBridge = {

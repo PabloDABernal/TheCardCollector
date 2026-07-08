@@ -43,13 +43,18 @@ export function createMinionsView(scene: Phaser.Scene): MinionsView {
             align: 'center',
           });
           text.setOrigin(0.5, 0.5);
+          // NUEVO §3.9.6 — nombrado por convención `${instanceId}-label` para que la receta
+          // `minionDefeated` (juice/recipes/minion-defeated.ts) pueda destruirlo junto al rect
+          // principal cuando el Secuaz muere, sin dejarlo huérfano en pantalla.
+          text.setName(`${minion.instanceId}-label`);
           entry = { rect, text };
           tilesByInstanceId.set(minion.instanceId, entry);
         }
 
         entry.text.setPosition(x, y);
         const defensorLabel = minion.isDefensor ? ' (Defensor)' : '';
-        entry.text.setText(`${minion.definitionId}${defensorLabel}`);
+        // NUEVO §3.9 — vida propia del Secuaz, mismo formato que `allies-view.ts` ("Vida X/Y").
+        entry.text.setText(`${minion.definitionId}${defensorLabel}\nVida ${minion.life}/${minion.maxLife}`);
       });
     },
   };

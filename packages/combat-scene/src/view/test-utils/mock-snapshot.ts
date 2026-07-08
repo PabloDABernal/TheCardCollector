@@ -9,7 +9,7 @@ import type { CombatStateSnapshot } from '@collector/domain-combat';
 export function createMockSnapshot(overrides: Partial<CombatStateSnapshot> = {}): CombatStateSnapshot {
   const base: CombatStateSnapshot = {
     turn: { turnOwner: 'LEADER', turnNumber: 1 },
-    nucleoPool: [],
+    nucleoTable: [],
     cooldowns: [],
     leaderDamage: 0,
     leaderShield: 0,
@@ -25,6 +25,9 @@ export function createMockSnapshot(overrides: Partial<CombatStateSnapshot> = {})
     scenarioPhase: { phaseNumber: 1, totalPhases: 1 },
     enemyDamage: 0,
     status: 'IN_PROGRESS',
+    leaderHand: [],
+    leaderDeckRemaining: 0,
+    leaderFreeStep: { takenThisTurn: false },
   };
 
   return { ...base, ...overrides };

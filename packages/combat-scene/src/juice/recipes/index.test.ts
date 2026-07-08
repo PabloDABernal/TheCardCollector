@@ -85,18 +85,18 @@ describe('createRecipeRegistry + EffectsDirector — integración de secuencia (
     expect(fake.recordedShakes).toHaveLength(1);
   });
 
-  it('NUCLEO_POOL_ROLLED: sin ningún tween visual (H2.13 — soundOnly es no-op visual puro, el "dado rodando" sigue viviendo en nucleo-pool-view.ts/BoardView), pero SÍ dispara soundManager.play("diceRoll")', async () => {
+  it('NUCLEO_TABLE_REROLLED: sin ningún tween visual (H2.13 — soundOnly es no-op visual puro, el "dado rodando" sigue viviendo en nucleo-table-view.ts/BoardView), pero SÍ dispara soundManager.play("diceRoll")', async () => {
     const { bridge, emit } = createMockSceneBridge();
     const fake = createFakeJuiceScene();
     const soundManager = createFakeSoundManager();
     const director = createEffectsDirector(JUICE_CONFIG, createRecipeRegistry(soundManager), soundManager);
     director.attach(bridge, fake.scene as unknown as Phaser.Scene);
 
-    expect(JUICE_CONFIG.NUCLEO_POOL_ROLLED).toEqual([{ recipeId: 'soundOnly', mode: 'parallel', soundId: 'diceRoll' }]);
+    expect(JUICE_CONFIG.NUCLEO_TABLE_REROLLED).toEqual([{ recipeId: 'soundOnly', mode: 'parallel', soundId: 'diceRoll' }]);
 
     emit({
-      type: 'NUCLEO_POOL_ROLLED',
-      pool: [{ id: NUCLEO_ID_1, color: 'AGRESION', value: 2 }],
+      type: 'NUCLEO_TABLE_REROLLED',
+      dice: [{ id: NUCLEO_ID_1, color: 'AGRESION', value: 2, kind: 'FIXED', status: 'AVAILABLE' }],
       priorityTurnOwner: 'LEADER',
     });
 
