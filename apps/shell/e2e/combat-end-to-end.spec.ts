@@ -55,6 +55,21 @@ test('CombatScreen monta Phaser real dentro de #phaser-mount y un tap real sobre
   // Scale Manager FIT preserva el aspect ratio 1080/1920 del viewport virtual.
   expect(box.width / box.height).toBeCloseTo(1080 / 1920, 1);
 
+  // FIX_combat_viewport_and_layout.md §3.1 punto 2 — la aserción de aspect ratio de arriba, por sí
+  // sola, NO detecta el Bug 1 (un canvas a tamaño nativo 1080×1920 sin escalar también cumple esa
+  // proporción). Confirmar que el canvas realmente encogió para caber en la ventana:
+  const viewportSize = page.viewportSize();
+  expect(viewportSize).not.toBeNull();
+  if (viewportSize) {
+    expect(box.width).toBeLessThanOrEqual(viewportSize.width);
+    expect(box.height).toBeLessThanOrEqual(viewportSize.height);
+  }
+
+  // Ausencia de scroll de página (tolerancia de 1-2px por redondeo de subpíxel).
+  const scrollHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+  const clientHeight = await page.evaluate(() => document.documentElement.clientHeight);
+  expect(scrollHeight).toBeLessThanOrEqual(clientHeight + 2);
+
   const scaleX = box.width / 1080;
   const scaleY = box.height / 1920;
   const toPagePoint = (virtualX: number, virtualY: number) => ({
@@ -106,4 +121,36 @@ test('CombatScreen monta Phaser real dentro de #phaser-mount y un tap real sobre
   await page.waitForTimeout(200);
 
   expect(pageErrors).toEqual([]);
+});
+
+/**
+ * FIX_combat_viewport_and_layout.md §3.1 punto 3 — cubre el caso "desktop ancho" citado en el
+ * diagnóstico del bug original (reportado exactamente en ese contexto: viewport bien más ancho que
+ * la proporción 9:16 del combate). Repite las aserciones de tamaño real/ausencia de scroll del test
+ * de arriba, con un viewport fijado explícitamente ancho.
+ */
+test('CombatScreen encaja sin scroll de página en un viewport ancho de escritorio (1280x800)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  await page.goto('/combat');
+
+  const mountedCanvas = page.locator('#phaser-mount canvas');
+  await expect(mountedCanvas).toBeVisible();
+
+  const box = await mountedCanvas.boundingBox();
+  expect(box).not.toBeNull();
+  if (!box) return;
+
+  expect(box.width / box.height).toBeCloseTo(1080 / 1920, 1);
+
+  const viewportSize = page.viewportSize();
+  expect(viewportSize).not.toBeNull();
+  if (viewportSize) {
+    expect(box.width).toBeLessThanOrEqual(viewportSize.width);
+    expect(box.height).toBeLessThanOrEqual(viewportSize.height);
+  }
+
+  const scrollHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+  const clientHeight = await page.evaluate(() => document.documentElement.clientHeight);
+  expect(scrollHeight).toBeLessThanOrEqual(clientHeight + 2);
 });

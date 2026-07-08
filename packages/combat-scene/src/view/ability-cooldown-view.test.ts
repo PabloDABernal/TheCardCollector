@@ -5,7 +5,15 @@ import { createAbilityCooldownView, abilityIconGroupName } from './ability-coold
 import type { AbilityViewData } from './board-view-context';
 import { createFakeBoardScene } from './test-utils/fake-board-scene';
 import { createMockSnapshot } from './test-utils/mock-snapshot';
-import { LEADER_ABILITIES_ROW_Y, ENEMY_ABILITIES_ROW_Y } from './board-layout';
+import { LEADER_ABILITIES_ROW_Y, ENEMY_ABILITIES_ROW_Y, ABILITY_ICON_SEPARATION_PX } from './board-layout';
+// Copia sincronizada de `packages/data` servida por Vite (`scripts/sync-data.mjs`) — se usa esta
+// ruta en vez de `packages/data/**` directamente porque el boundary de eslint (`eslint.config.mjs`)
+// no permite que `combat-scene` importe del tipo `data` fuera de esta copia local ya establecida
+// (mismo criterio que `load-raw-content.ts`).
+import soldadoBase from '../../public/data/leaders/soldado-base.json';
+import magoBase from '../../public/data/leaders/mago-base.json';
+import bestiaBase from '../../public/data/enemies/bestia-base.json';
+import espectroBase from '../../public/data/enemies/espectro-base.json';
 
 function abilityId(value: string): AbilityId {
   return createId<'AbilityId'>('AbilityId', value) as AbilityId;
@@ -141,4 +149,56 @@ describe('createAbilityCooldownView (H2.10)', () => {
     );
     expect(texts.some((t) => t.text === 'Guardia Firme LISTA')).toBe(true);
   });
+});
+
+/**
+ * FIX_combat_viewport_and_layout.md §3.2 punto 2 — regresión: `ABILITY_ICON_SEPARATION_PX` debe ser
+ * suficiente para alojar la etiqueta de habilidad más larga de cada uno de los 4 roles reales del
+ * catálogo MVP (2 Líderes + 2 Enemigos, 4 `baseAbilities`/`abilities` cada uno — datos LITERALES de
+ * `packages/data/{leaders,enemies}/*.json`, no un mock sintético, para detectar de verdad una
+ * regresión de contenido). `estimateLabelWidthPx`/`AVG_CHAR_WIDTH_PX`/`MIN_GAP_PX` son test-only,
+ * NUNCA se usan en runtime (spec §2.2: no hay medición real de texto por `canvas.measureText` en el
+ * entorno de test sin canvas real de `combat-scene`).
+ */
+describe('ABILITY_ICON_SEPARATION_PX — separación suficiente contra el catálogo real (Bug 2 §2.2)', () => {
+  // Estimación conservadora/pesimista del ancho renderizado por carácter a 14px con la fuente por
+  // defecto de Phaser (sans-serif del sistema) — solo para este test, no representa una medición
+  // real de `Text.width`.
+  const AVG_CHAR_WIDTH_PX = 8.5;
+  // Margen de seguridad mínimo entre el borde derecho de una etiqueta y el borde izquierdo de la
+  // siguiente, además del ancho estimado de la etiqueta.
+  const MIN_GAP_PX = 8;
+
+  function estimateLabelWidthPx(label: string): number {
+    return label.length * AVG_CHAR_WIDTH_PX;
+  }
+
+  // Peor caso de longitud de etiqueta por habilidad: `remaining === baseCooldown` (recién gastada),
+  // mismo número de dígitos que cualquier otro valor de `remaining` posible en el catálogo MVP
+  // (todos los `baseCooldown` son de un solo dígito, 1-4) — `labelFor()` produce
+  // `"{name} {remaining}/{baseCooldown}"`.
+  function worstCaseLabel(ability: { readonly name: string; readonly baseCooldown: number }): string {
+    return `${ability.name} ${ability.baseCooldown}/${ability.baseCooldown}`;
+  }
+
+  const catalogRoles: ReadonlyArray<{
+    readonly roleName: string;
+    readonly abilities: ReadonlyArray<{ readonly name: string; readonly baseCooldown: number }>;
+  }> = [
+    { roleName: soldadoBase.name, abilities: soldadoBase.baseAbilities },
+    { roleName: magoBase.name, abilities: magoBase.baseAbilities },
+    { roleName: bestiaBase.name, abilities: bestiaBase.abilities },
+    { roleName: espectroBase.name, abilities: espectroBase.abilities },
+  ];
+
+  it.each(catalogRoles.map((role) => [role.roleName, role] as const))(
+    'rol %s: ABILITY_ICON_SEPARATION_PX aloja la etiqueta más larga de sus 4 habilidades reales',
+    (_roleName, role) => {
+      expect(role.abilities.length).toBe(4); // los 4 roles del MVP fijan exactamente 4 habilidades
+
+      const widestLabelWidthPx = Math.max(...role.abilities.map((a) => estimateLabelWidthPx(worstCaseLabel(a))));
+
+      expect(ABILITY_ICON_SEPARATION_PX).toBeGreaterThanOrEqual(widestLabelWidthPx + MIN_GAP_PX);
+    },
+  );
 });

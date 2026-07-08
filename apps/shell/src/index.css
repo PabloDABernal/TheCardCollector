@@ -1,0 +1,19 @@
+/* FIX_combat_viewport_and_layout.md §1.2 punto 1 — CSS global mínimo: el `<canvas>` de Phaser
+ * necesita un contenedor con tamaño real que `Phaser.Scale.FIT` pueda medir en el momento de
+ * construir el `Game`. `overflow: hidden` en `html`/`body` (no solo en el contenedor del juego)
+ * es la garantía a nivel de documento de que ningún elemento (HUD overlay, modal de resultado,
+ * mensaje "Cargando combate…") puede introducir scroll de página por accidente. */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* ningún scroll de página — el juego vive enteramente dentro del viewport */
+  background: #000; /* color de "letterbox": lo que se ve fuera del canvas cuando FIT no puede
+                        llenar el contenedor completo sin distorsionar el aspect ratio 9:16 */
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
