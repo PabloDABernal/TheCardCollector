@@ -117,4 +117,19 @@ describe('App routing', () => {
     expect(screen.queryByText('Líder: Soldado Base')).not.toBeInTheDocument();
     expect(buildCombatSetupMock).toHaveBeenCalledWith({ leaderId: 'leader-mago-base' });
   });
+
+  it('H2.14 bug fix — navegar a /combat con un leaderId inválido en state no crashea y cae al Líder por defecto', async () => {
+    // Simula navegación directa con `state` manipulado/corrupto (ej. URL/state inyectado a mano,
+    // no proviene de `RunStartScreen`) — `leaderId` no existe en `LEADER_OPTIONS`.
+    window.history.pushState({ leaderId: 'leader-does-not-exist' }, '', '/combat');
+    vi.resetModules();
+    ({ App } = await import('./App'));
+
+    render(<App />);
+
+    expect(document.getElementById('phaser-mount')).not.toBeNull();
+    expect(await screen.findByText('Fin de turno')).toBeInTheDocument();
+    expect(screen.getByText('Líder: Soldado Base')).toBeInTheDocument();
+    expect(buildCombatSetupMock).toHaveBeenCalledWith({ leaderId: 'leader-soldado-base' });
+  });
 });

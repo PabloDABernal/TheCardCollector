@@ -24,10 +24,15 @@ import type { RunStartNavigationState } from '../combat/run-start-navigation-sta
  */
 export function CombatScreen(): JSX.Element {
   const location = useLocation();
-  const leaderId =
-    (location.state as RunStartNavigationState | null)?.leaderId ?? DEFAULT_LEADER_OPTION.leaderId;
-  const leaderName =
-    LEADER_OPTIONS.find((option) => option.leaderId === leaderId)?.label ?? DEFAULT_LEADER_OPTION.label;
+  const requestedLeaderId = (location.state as RunStartNavigationState | null)?.leaderId;
+  // H2.14 bug fix (Reviewer): saneamos el `leaderId` UNA sola vez contra `LEADER_OPTIONS` — el mismo
+  // id ya validado se usa tanto para `leaderName` (HUD) como para `buildCombatSetup`, evitando que
+  // este último reciba un id no validado (ej. navegación con `state` manipulado) que provocaría un
+  // `TypeError` opaco más abajo en `catalog.leaders.get(...)!`.
+  const leaderOption =
+    LEADER_OPTIONS.find((option) => option.leaderId === requestedLeaderId) ?? DEFAULT_LEADER_OPTION;
+  const leaderId = leaderOption.leaderId;
+  const leaderName = leaderOption.label;
 
   const mountRef = useRef<HTMLDivElement>(null);
   const [bridge, setBridge] = useState<CombatBridge | null>(null);
