@@ -1,6 +1,7 @@
 import type { AbilityId, CardId, CardInstanceId, NucleoInstanceId } from '@collector/domain-shared';
 import type { CombatSide } from './turn';
 import type { MinionDefinitionId } from './minion';
+import type { AttackTarget } from './combat-target'; // NUEVO §3.9.2
 
 /**
  * Slice de H1.3 del union completo esbozado en architecture_stack.md §2.2. Historias
@@ -91,4 +92,28 @@ export type CombatCommand =
       readonly cardId: CardId;
       readonly sourceId: string;
       readonly nucleoInstanceId?: NucleoInstanceId;
+      /**
+       * NUEVO §3.9.2/§3.9.3. Objetivo explícito del ataque — OBLIGATORIO en tiempo de
+       * ejecución (no se puede forzar por tipos, igual que `nucleoInstanceId`) si y solo
+       * si `PlayableCardEffectDefinition.effect.kind === 'ATTACK_ENEMY'`. Ausente/
+       * irrelevante para cualquier otro `effect.kind`.
+       */
+      readonly target?: AttackTarget;
+    }
+  | {
+      /**
+       * NUEVO H3.6. Paso previo GRATIS del turno del Líder — no consume
+       * actionsTakenThisTurn. Válido como máximo 1 vez por turno de Líder.
+       */
+      readonly type: 'DRAW_OR_GENERATE';
+      readonly action: 'draw' | 'generate';
+    }
+  | {
+      /**
+       * NUEVO H3.6. Versión PAGADA de "Robar Carta" (decisions.md exige que exista
+       * como acción, simétrica a Generar Energía). Consume 1 de las 2 acciones del
+       * turno. Mismo efecto que `DRAW_OR_GENERATE { action: 'draw' }`, solo cambia el
+       * coste.
+       */
+      readonly type: 'DRAW_CARD';
     };

@@ -18,9 +18,12 @@
   "dramaturgiaDeck": [
     { "id": "dramacard-templo-en-ruinas-base-01", "name": "Trampa de Presión", "icon": "ATTACK" },
     { "id": "dramacard-templo-en-ruinas-base-02", "name": "Bloque Deslizante", "icon": "ATTACK" },
-    { "id": "dramacard-templo-en-ruinas-base-03", "name": "Guardián de Piedra", "icon": "ATTACK", "effectDescription": "Invoca un secuaz menor de piedra (no ejecutable todavía, ver spec H1.11 §0.3 — H1.16)." },
+    { "id": "dramacard-templo-en-ruinas-base-03", "name": "Guardián de Piedra", "icon": "ATTACK", "effectDescription": "Invoca un secuaz menor de piedra (SUMMON_MINION no está atado a esta carta todavía, fuera de alcance de H3 — ver spec H3 §3.3).", "minionBehavior": { "criterion": { "kind": "HIGHEST_PLANO_ATTACK" } } },
     { "id": "dramacard-templo-en-ruinas-base-04", "name": "Grabado Maldito", "icon": "PLOT" },
     { "id": "dramacard-common-niebla-01", "name": "Niebla Repentina", "icon": "PLOT" },
     { "id": "dramacard-common-viento-cortante-01", "name": "Viento Cortante", "icon": "ATTACK" }
+  ],
+  "alternativeVictoryConditions": [
+    { "kind": "TURN_COUNT_AT_LEAST", "turn": 50, "outcome": "DEFEAT" }
   ]
 }

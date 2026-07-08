@@ -10,7 +10,9 @@ import type { AbilityEffectDefinition } from './types/ability-effect';
 import type { PlayableCardDefinition, PlayableCardEffectDefinition } from './types/playable-card';
 import type { AllyCardDefinition } from './types/ally';
 import type { ContratiempoCardDefinition } from './types/contratiempo';
-import type { EnemyAbilityAiProfile, DramaturgiaCardIcon } from './types/enemy-ai';
+import type { EnemyAbilityAiProfile } from './types/enemy-ai';
+import type { DramaturgiaCardDefinition } from '@collector/domain-catalog';
+import type { AlternativeVictoryCondition } from './types/victory-condition';
 
 /**
  * H1.19 §2.1 — ver spec para el contrato completo. `packages/cli` (H1.19) es hoy el
@@ -72,9 +74,17 @@ export function buildCombatEngineConfig(params: BuildCombatEngineConfigParams): 
   const enemyAbilityAiProfiles = new Map<AbilityId, EnemyAbilityAiProfile>(
     enemy.abilities.map((a) => [a.id, a.aiProfile])
   );
-  const dramaturgiaDeck: DramaturgiaCardIcon[] = [...enemy.dramaturgiaDeck, ...scenario.dramaturgiaDeck].map(
-    (c) => c.icon
-  );
+  // MODIFICADO H1.16 (rediseño) — la carta COMPLETA, no solo el icono (§3.4).
+  const dramaturgiaDeck: DramaturgiaCardDefinition[] = [...enemy.dramaturgiaDeck, ...scenario.dramaturgiaDeck];
+
+  // NUEVO H3.6 — MVP: el mazo de combate del Líder es su pool completo de cartas (§2.9).
+  const leaderDeckCardIds: CardId[] = [...leader.cardPoolIds];
+
+  // NUEVO H1.8+H1.18 — merge Enemigo + Escenario (§4.3).
+  const alternativeVictoryConditions: AlternativeVictoryCondition[] = [
+    ...(enemy.alternativeVictoryConditions ?? []),
+    ...(scenario.alternativeVictoryConditions ?? []),
+  ];
 
   return {
     randomSource,
@@ -93,6 +103,8 @@ export function buildCombatEngineConfig(params: BuildCombatEngineConfigParams): 
     leaderMaxHealth: leader.maxHealth,
     scenarioPlotDefeatThreshold: Math.max(...scenario.plotThresholds.map((t) => t.atLeast)),
     minionDefinitions: new Map(),
+    leaderDeckCardIds,
+    alternativeVictoryConditions,
   };
 }
 

@@ -87,6 +87,40 @@ export type CombatCommandError =
       /** NUEVO H1.18. `dispatch()` rechaza cualquier comando una vez `status !== 'IN_PROGRESS'`. */
       readonly code: 'COMBAT_ALREADY_ENDED';
       readonly status: CombatOutcome;
+    }
+  | {
+      /** NUEVO H3.4. El dado existe en `nucleoTable` pero ya está `SPENT` — no puede
+       *  volver a gastarse hasta el próximo reroll colectivo. */
+      readonly code: 'NUCLEO_ALREADY_SPENT';
+      readonly nucleoInstanceId: NucleoInstanceId;
+    }
+  | {
+      /** NUEVO H3.6. `PLAY_CARD`/`PLAY_ALLY`/`PLAY_CONTRATIEMPO` con un `cardId` que no
+       *  está en `leaderHand`. */
+      readonly code: 'CARD_NOT_IN_HAND';
+      readonly cardId: CardId;
+    }
+  | {
+      /** NUEVO H3.6. `DRAW_OR_GENERATE` ya se despachó con éxito este turno de Líder. */
+      readonly code: 'FREE_STEP_ALREADY_TAKEN';
+    }
+  | {
+      /** NUEVO §3.9.3. `PLAY_CARD` con `effect.kind === 'ATTACK_ENEMY'` sin `target`. */
+      readonly code: 'PLAY_CARD_TARGET_REQUIRED';
+      readonly cardId: CardId;
+    }
+  | {
+      /** NUEVO §3.9.3. `target.kind === 'MINION'` con `minionInstanceId` que no existe
+       *  en `minionsInPlay` ahora mismo. */
+      readonly code: 'ATTACK_TARGET_NOT_FOUND';
+      readonly minionInstanceId: CardInstanceId;
+    }
+  | {
+      /** NUEVO §3.9.3. Hay ≥1 Secuaz Defensor vivo y el `target` elegido no es uno de
+       *  ellos. */
+      readonly code: 'MUST_TARGET_DEFENSOR';
+      readonly cardId: CardId;
+      readonly defensorInstanceIds: readonly CardInstanceId[];
     };
 
 /**

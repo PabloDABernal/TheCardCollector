@@ -20,6 +20,8 @@ import { CATALOG_ABILITY_BASE_COOLDOWN_MIN } from '../types/ability';
 import type { LeaderDefinition, LevelUpEffectSpec, LevelUpOption } from '../types/leader';
 import type { EnemyAbilityAiProfile, EnemyAbilityDefinition, EnemyDefinition } from '../types/enemy';
 import type { DramaturgiaCardDefinition } from '../types/dramaturgia-card';
+import type { MinionBehaviorSpec, MinionSelectionCriterion } from '../types/minion-behavior';
+import type { AlternativeVictoryCondition } from '../types/victory-condition';
 import type { PhaseChangeCondition, PhaseDefinition } from '../types/phase';
 import type { ScenarioDefinition, ScenarioPassiveEffect, ScenarioPlotThreshold } from '../types/scenario';
 import type { EvolutionEffectSpec, EvolutionTemplate, EvolutionTemplateTarget } from '../types/evolution-template';
@@ -341,6 +343,38 @@ function validatePhaseSequence(phases: readonly PhaseDefinition[], context: stri
   if (!isSequential) fail(context, 'phases debe numerarse 1..N sin huecos ni duplicados');
 }
 
+/** NUEVO H1.16 (rediseño). `kind: 'SPECIFIC_DEFINITION'` requiere que
+ *  `minionDefinitionId` sea un string no vacío — la validación de que ese id exista
+ *  realmente entre los Secuaces invocables del Enemigo es responsabilidad de
+ *  `validation/cross-reference.ts`. */
+function parseMinionSelectionCriterion(raw: unknown, context: string): MinionSelectionCriterion {
+  if (!isRecord(raw)) fail(context, 'se esperaba un objeto');
+  switch (raw.kind) {
+    case 'ALL':
+    case 'RANDOM_ONE':
+    case 'HIGHEST_PLANO_ATTACK':
+    case 'HIGHEST_LIFE':
+    case 'LOWEST_LIFE':
+      return { kind: raw.kind };
+    case 'SPECIFIC_DEFINITION':
+      if (!isNonEmptyString(raw.minionDefinitionId)) {
+        fail(context, 'campo "minionDefinitionId" ausente o no es un string no vacío (kind SPECIFIC_DEFINITION)');
+      }
+      return { kind: 'SPECIFIC_DEFINITION', minionDefinitionId: raw.minionDefinitionId };
+    default:
+      fail(
+        context,
+        `campo "kind" debe ser ALL|RANDOM_ONE|HIGHEST_PLANO_ATTACK|HIGHEST_LIFE|LOWEST_LIFE|SPECIFIC_DEFINITION, recibido ${String(raw.kind)}`
+      );
+  }
+}
+
+function parseMinionBehaviorSpec(raw: unknown, context: string): MinionBehaviorSpec {
+  if (!isRecord(raw)) fail(context, 'se esperaba un objeto');
+  const criterion = parseMinionSelectionCriterion(raw.criterion, `${context}.criterion`);
+  return { criterion };
+}
+
 function parseDramaturgiaCardDefinition(raw: unknown, context: string): DramaturgiaCardDefinition {
   if (!isRecord(raw)) fail(context, 'se esperaba un objeto');
   if (!isNonEmptyString(raw.id)) fail(context, 'campo "id" ausente o no es un string no vacío');
@@ -351,12 +385,46 @@ function parseDramaturgiaCardDefinition(raw: unknown, context: string): Dramatur
   if (raw.effectDescription !== undefined && typeof raw.effectDescription !== 'string') {
     fail(context, 'campo "effectDescription", si está presente, debe ser un string');
   }
+  const minionBehavior =
+    raw.minionBehavior === undefined ? undefined : parseMinionBehaviorSpec(raw.minionBehavior, `${context}.minionBehavior`);
   return {
     id: createId<'DramaturgiaCardId'>('DramaturgiaCardId', raw.id) as DramaturgiaCardDefinition['id'],
     name: raw.name,
     icon: raw.icon,
     ...(raw.effectDescription !== undefined ? { effectDescription: raw.effectDescription } : {}),
+    ...(minionBehavior !== undefined ? { minionBehavior } : {}),
   };
+}
+
+/** NUEVO H1.8+H1.18. `SCENARIO_PLOT_AT_MOST` admite `amount` negativo por diseño (ver
+ *  spec §4.1) — a diferencia de otros campos numéricos del catálogo. */
+function parseAlternativeVictoryCondition(raw: unknown, context: string): AlternativeVictoryCondition {
+  if (!isRecord(raw)) fail(context, 'se esperaba un objeto');
+  if (raw.outcome !== 'VICTORY' && raw.outcome !== 'DEFEAT') {
+    fail(context, `campo "outcome" debe ser VICTORY|DEFEAT, recibido ${String(raw.outcome)}`);
+  }
+  switch (raw.kind) {
+    case 'SCENARIO_PLOT_AT_MOST':
+      if (typeof raw.amount !== 'number' || !Number.isInteger(raw.amount)) {
+        fail(context, 'campo "amount" debe ser un entero (kind SCENARIO_PLOT_AT_MOST, puede ser negativo)');
+      }
+      return { kind: 'SCENARIO_PLOT_AT_MOST', amount: raw.amount, outcome: raw.outcome };
+    case 'TURN_COUNT_AT_LEAST':
+      if (!isPositiveInteger(raw.turn)) fail(context, 'campo "turn" debe ser un entero >= 1 (kind TURN_COUNT_AT_LEAST)');
+      return { kind: 'TURN_COUNT_AT_LEAST', turn: raw.turn, outcome: raw.outcome };
+    case 'ENEMY_DAMAGE_AT_LEAST':
+      if (!isNonNegativeInteger(raw.amount)) {
+        fail(context, 'campo "amount" debe ser un entero >= 0 (kind ENEMY_DAMAGE_AT_LEAST)');
+      }
+      return { kind: 'ENEMY_DAMAGE_AT_LEAST', amount: raw.amount, outcome: raw.outcome };
+    default:
+      fail(context, `campo "kind" debe ser SCENARIO_PLOT_AT_MOST|TURN_COUNT_AT_LEAST|ENEMY_DAMAGE_AT_LEAST, recibido ${String(raw.kind)}`);
+  }
+}
+
+function parseAlternativeVictoryConditions(raw: unknown, context: string): readonly AlternativeVictoryCondition[] {
+  if (!Array.isArray(raw)) fail(context, 'campo "alternativeVictoryConditions", si está presente, debe ser un array');
+  return raw.map((c, i) => parseAlternativeVictoryCondition(c, `${context}[${i}]`));
 }
 
 /** Valida `dramaturgiaDeck` de una `EnemyDefinition` (spec H1.10 §0.2): mínimo 4
@@ -439,6 +507,11 @@ export function parseEnemyDefinition(raw: unknown, context: string): EnemyDefini
 
   const dramaturgiaDeck = parseDramaturgiaDeck(raw.dramaturgiaDeck, `${context}.dramaturgiaDeck`);
 
+  const alternativeVictoryConditions =
+    raw.alternativeVictoryConditions === undefined
+      ? undefined
+      : parseAlternativeVictoryConditions(raw.alternativeVictoryConditions, `${context}.alternativeVictoryConditions`);
+
   if (raw.universeSkin !== undefined && typeof raw.universeSkin !== 'string') {
     fail(context, 'campo "universeSkin", si está presente, debe ser un string');
   }
@@ -450,6 +523,7 @@ export function parseEnemyDefinition(raw: unknown, context: string): EnemyDefini
     phases,
     maxHealth: raw.maxHealth,
     dramaturgiaDeck,
+    ...(alternativeVictoryConditions !== undefined ? { alternativeVictoryConditions } : {}),
     ...(raw.universeSkin !== undefined ? { universeSkin: raw.universeSkin } : {}),
   };
 }
@@ -517,6 +591,11 @@ export function parseScenarioDefinition(raw: unknown, context: string): Scenario
 
   const dramaturgiaDeck = parseDramaturgiaDeck(raw.dramaturgiaDeck, `${context}.dramaturgiaDeck`);
 
+  const alternativeVictoryConditions =
+    raw.alternativeVictoryConditions === undefined
+      ? undefined
+      : parseAlternativeVictoryConditions(raw.alternativeVictoryConditions, `${context}.alternativeVictoryConditions`);
+
   if (raw.universeSkin !== undefined && typeof raw.universeSkin !== 'string') {
     fail(context, 'campo "universeSkin", si está presente, debe ser un string');
   }
@@ -528,6 +607,7 @@ export function parseScenarioDefinition(raw: unknown, context: string): Scenario
     passives,
     phases,
     dramaturgiaDeck,
+    ...(alternativeVictoryConditions !== undefined ? { alternativeVictoryConditions } : {}),
     ...(raw.universeSkin !== undefined ? { universeSkin: raw.universeSkin } : {}),
   };
 }

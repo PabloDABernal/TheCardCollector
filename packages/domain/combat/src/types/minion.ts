@@ -36,6 +36,12 @@ export interface MinionDefinition {
   /** GDD §3.8, keyword Defensor: "obliga a recibir/atacar a ese secuaz primero". Ver §0.5
    *  sobre por qué esta historia modela su CONTRATO pero no su integración end-to-end. */
   readonly isDefensor: boolean;
+  /** NUEVO §3.9.1 (decisions.md, "Vida de Secuaz"). Vida máxima del Secuaz — campo fijo
+   *  de catálogo, igual patrón que `AllyCardDefinition.life` (H1.15). Entero > 0 — a
+   *  diferencia de `NucleoValue`, aquí NO se permite 0: un Secuaz de 0 de vida está
+   *  muerto por definición. No se calcula a partir de la vida del Enemigo ni es un valor
+   *  global compartido. */
+  readonly maxLife: number;
 }
 
 /**
@@ -45,9 +51,10 @@ export interface MinionDefinition {
  * `planoAttackAmount`/`isDefensor` desde la `MinionDefinition` en el momento de
  * invocar (mismo patrón que `AllyInPlay.isBerserker`/`maxLife`, H1.15).
  *
- * Sin campo de vida (ver spec H1.16 §0.1) — no existe todavía ningún mecanismo por el
- * que el jugador dañe al Enemigo o a sus Secuaces. Una vez invocado, un Secuaz
- * permanece en mesa indefinidamente en esta historia.
+ * NUEVO §3.9.1: gana vida propia. A diferencia de `AllyInPlay` (que permanece en mesa
+ * con `life === 0`), un Secuaz cuya vida llega a `<= 0` se ELIMINA de `minionsInPlay` de
+ * inmediato (decisions.md, "Vida de Secuaz", punto 3) — por eso `minionsInPlay` nunca
+ * necesita filtrar `life > 0`, su sola presencia ya lo implica.
  */
 export interface MinionInPlay {
   readonly instanceId: CardInstanceId;
@@ -56,4 +63,9 @@ export interface MinionInPlay {
   readonly specialActionAbilityId?: AbilityId;
   readonly planoAttackAmount: number;
   readonly isDefensor: boolean;
+  /** NUEVO §3.9.1. Denormalizado de `MinionDefinition.maxLife` al invocar. */
+  readonly maxLife: number;
+  /** NUEVO §3.9.1. Vida ACTUAL — es el campo que consumen `HIGHEST_LIFE`/`LOWEST_LIFE`,
+   *  NO `maxLife` (decisions.md, "operan sobre vida actual, no vida máxima"). */
+  readonly life: number;
 }

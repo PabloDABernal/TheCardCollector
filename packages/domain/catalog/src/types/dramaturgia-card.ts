@@ -1,5 +1,6 @@
 import type { DramaturgiaCardId } from '@collector/domain-shared';
 import type { EnemyAbilityBranch } from './enemy';
+import type { MinionBehaviorSpec } from './minion-behavior'; // NUEVO H1.16 (rediseño)
 
 /**
  * Carta de Dramaturgia propia de un Enemigo (GDD §3.4/§5.2/§5.3). Su ÚNICO dato
@@ -25,4 +26,8 @@ export interface DramaturgiaCardDefinition {
    *  paralelos que puedan divergir. */
   readonly icon: EnemyAbilityBranch;
   readonly effectDescription?: string;
+  /** NUEVO H1.16 (rediseño). Ausente = esta carta NO dicta comportamiento de Secuaz —
+   *  ningún Secuaz actúa el turno en que sale esta carta. Presente = el motor resuelve
+   *  exactamente este criterio, sin azar propio salvo que el criterio sea RANDOM_ONE. */
+  readonly minionBehavior?: MinionBehaviorSpec;
 }

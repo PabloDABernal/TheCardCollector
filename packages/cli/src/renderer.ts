@@ -75,9 +75,9 @@ function renderPhase(phase: { readonly phaseNumber: number; readonly totalPhases
 }
 
 function renderNucleoPool(snapshot: CombatStateSnapshot): string[] {
-  if (snapshot.nucleoPool.length === 0) return ['  (pool vacío)'];
+  if (snapshot.nucleoTable.length === 0) return ['  (pool vacío)'];
 
-  const entries = snapshot.nucleoPool.map((n, i) => {
+  const entries = snapshot.nucleoTable.map((n, i) => {
     let suffix = '';
     if (n.value >= UMBRAL_BONUS_THRESHOLD) suffix += ' (Umbral)';
     if (n.value === 0) suffix += ' (debuff)';
@@ -182,8 +182,8 @@ export function renderEvent(event: CombatEvent, nameLookup: NameLookup): string 
       return `» DRAMATURGIA_CARD_DRAWN: ${event.icon}`;
     case 'DRAMATURGIA_DECK_RESHUFFLED':
       return `» DRAMATURGIA_DECK_RESHUFFLED: ${event.deckSize} cartas`;
-    case 'NUCLEO_POOL_ROLLED':
-      return '» NUCLEO_POOL_ROLLED';
+    case 'NUCLEO_TABLE_REROLLED':
+      return '» NUCLEO_TABLE_REROLLED';
     case 'COMBAT_ENDED':
       return `» COMBAT_ENDED: ${event.outcome}${event.defeatReason ? ` (${event.defeatReason})` : ''}`;
     default:

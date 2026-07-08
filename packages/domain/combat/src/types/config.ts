@@ -7,7 +7,9 @@ import type { ContratiempoCardDefinition } from './contratiempo';
 import type { AllyCardDefinition } from './ally';
 import type { MinionDefinition, MinionDefinitionId } from './minion';
 import type { PlayableCardDefinition } from './playable-card'; // NUEVO H1.18
-import type { EnemyAbilityAiProfile, DramaturgiaCardIcon } from './enemy-ai'; // NUEVO H1.18
+import type { EnemyAbilityAiProfile } from './enemy-ai'; // NUEVO H1.18
+import type { DramaturgiaCardDefinition } from '@collector/domain-catalog'; // MODIFICADO H1.16 — carta completa, no solo icono
+import type { AlternativeVictoryCondition } from './victory-condition'; // NUEVO H1.8+H1.18
 
 export interface CombatEngineConfig {
   readonly randomSource: RandomSource;
@@ -29,8 +31,10 @@ export interface CombatEngineConfig {
    */
   readonly abilityCooldowns: ReadonlyMap<AbilityId, AbilityCooldownDefinition>;
 
-  /** Placeholder no-definitivo si se omite — ver DEFAULT_NUCLEO_POOL_SIZE y nota §0.3. */
-  readonly poolSize?: number;
+  /** NUEVO H3.4. Tope duro de dados simultáneos en mesa (5 fijos + extras hasta este
+   *  tope). Default `DEFAULT_NUCLEO_TABLE_MAX_DICE` (10). Sustituye a `poolSize`
+   *  (ELIMINADO — ya no hay "tamaño de pool" configurable, son 5 fijos + extras). */
+  readonly tableMaxDice?: number;
 
   /** Por defecto 'LEADER' (GDD §2.2 describe el turno del jugador primero). */
   readonly initialTurnOwner?: CombatSide;
@@ -161,8 +165,30 @@ export interface CombatEngineConfig {
   readonly enemyAbilityAiProfiles?: ReadonlyMap<AbilityId, EnemyAbilityAiProfile>;
 
   /**
-   * NUEVO H1.18. Mazo de Dramaturgia del Enemigo/Escenario (solo el icono importa, ver
-   * spec §0.5) — se copia y baraja una vez en el constructor. Default `[]`.
+   * NUEVO H1.18. MODIFICADO H1.16 (rediseño de Secuaces): pasa de solo-icono a la carta
+   * COMPLETA — `RESOLVE_MINION_ACTION` necesita leer `minionBehavior` en el momento de
+   * resolución. Se copia y baraja una vez en el constructor. Default `[]`.
    */
-  readonly dramaturgiaDeck?: readonly DramaturgiaCardIcon[];
+  readonly dramaturgiaDeck?: readonly DramaturgiaCardDefinition[];
+
+  /**
+   * NUEVO H3.6. IDs de TODAS las cartas jugables del Líder (unión de playableCards +
+   * allyCards + contratiempoCards) de las que se compone el mazo de robo de este
+   * combate. Se baraja UNA VEZ en el constructor (mismo `shuffle` Fisher-Yates ya usado
+   * para `dramaturgiaDeck`). OBLIGATORIO — sin mazo no hay mano inicial.
+   */
+  readonly leaderDeckCardIds: readonly CardId[];
+
+  /** NUEVO H3.6. Default `LEADER_INITIAL_HAND_SIZE` (5). */
+  readonly initialHandSize?: number;
+
+  /** NUEVO H3.6. Default `LEADER_HAND_SIZE_MAX` (7). */
+  readonly handSizeMax?: number;
+
+  /**
+   * NUEVO H1.8+H1.18. Condiciones de victoria/derrota alternativas — merge de
+   * `EnemyDefinition.alternativeVictoryConditions` + `ScenarioDefinition.
+   * alternativeVictoryConditions` (Enemigo primero). Default `[]`.
+   */
+  readonly alternativeVictoryConditions?: readonly AlternativeVictoryCondition[];
 }

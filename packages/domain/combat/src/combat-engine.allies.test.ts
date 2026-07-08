@@ -38,6 +38,10 @@ function allyCards(entries: [CardId, AllyCardDefinition][]): Map<CardId, AllyCar
  *  Berserker (life 20). */
 function buildEngine(overrides: Partial<CombatEngineConfig> = {}) {
   return new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    // NUEVO H3.6 — varias copias + initialHandSize alto: varios tests juegan la misma
+    // carta Aliado más de una vez en el mismo engine.
+    leaderDeckCardIds: [CARD_ALLY_PLAIN, CARD_ALLY_PLAIN, CARD_ALLY_PLAIN, CARD_ALLY_BERSERKER, CARD_ALLY_BERSERKER],
+    initialHandSize: 10,
     randomSource: new SeededRandomSource(1),
     abilityCoreCosts: costs([ENEMY_ATTACK, ENEMY_ATTACK_ARROLLAR, LEADER_FILLER]),
     abilityCooldowns: cooldowns([
@@ -55,7 +59,6 @@ function buildEngine(overrides: Partial<CombatEngineConfig> = {}) {
     ]),
     initialLeaderEnergy: 5,
     initialTurnOwner: 'LEADER',
-    poolSize: 6,
     ...overrides,
   });
 }
@@ -78,7 +81,7 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
     expect(isOk(redirect)).toBe(true);
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     const attack = engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
     });
@@ -98,7 +101,7 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
     expect(engine.getSnapshot().actions.actionsTaken).toBe(actionsAfterPlay);
     expect(engine.getSnapshot().actions.actionsTaken).toBeLessThan(engine.getSnapshot().actions.actionsAllowed);
 
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     const activate = engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: LEADER_FILLER, sourceId: 'leader', side: 'LEADER', nucleoInstanceId: nucleo.id,
     });
@@ -111,7 +114,7 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
     engine.dispatch({ type: 'SET_DAMAGE_REDIRECT', targetAllyInstanceId: allyId });
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     const result = engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
     });
@@ -132,7 +135,7 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
     engine.dispatch({ type: 'SET_DAMAGE_REDIRECT', targetAllyInstanceId: allyId });
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     const result = engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK_ARROLLAR, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
     });
@@ -160,7 +163,7 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
     }
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     const result = engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
     });
@@ -179,7 +182,7 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
     playAlly(engine, CARD_ALLY_PLAIN); // en mesa, pero sin redirección activa
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     const result = engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
     });
@@ -206,7 +209,7 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
     engine.dispatch({ type: 'SET_DAMAGE_REDIRECT', targetAllyInstanceId: allyId });
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
     });
@@ -225,7 +228,7 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
     engine.dispatch({ type: 'SET_DAMAGE_REDIRECT', targetAllyInstanceId: allyId });
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo1 = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo1 = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo1.id,
     });
@@ -233,7 +236,7 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
 
     engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo2 = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo2 = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     const result = engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo2.id,
     });
@@ -245,7 +248,7 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
 
   it('PLAY_ALLY consume acción + Energía: NO_ACTIONS_REMAINING con acciones agotadas', () => {
     const engine = buildEngine();
-    const nucleo1 = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo1 = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: LEADER_FILLER, sourceId: 'leader', side: 'LEADER', nucleoInstanceId: nucleo1.id });
     engine.dispatch({ type: 'PLAY_ALLY', cardId: CARD_ALLY_PLAIN, sourceId: 'leader' });
 
@@ -300,13 +303,12 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
   });
 
   it('calentamiento de habilidad propia: al jugar el Aliado, su abilityId vuelve a baseCooldown completo', () => {
-    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [CARD_ALLY_WITH_ABILITY],
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([ALLY_OWN_ABILITY]),
       abilityCooldowns: cooldowns([[ALLY_OWN_ABILITY, { side: 'LEADER', baseCooldown: 3 }]]),
       allyCards: allyCards([[CARD_ALLY_WITH_ABILITY, { energyCost: 1, life: 5, isBerserker: false, abilityIds: [ALLY_OWN_ABILITY] }]]),
       initialLeaderEnergy: 5,
-      poolSize: 6,
     });
     // Recién construido, ALLY_OWN_ABILITY ya está en calentamiento completo (CD3) porque
     // aún no se ha jugado el Aliado dueño — se fuerza a un valor intermedio simulando
@@ -324,13 +326,13 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
   });
 
   it('constructor: lanza si allyCards tiene life no entero o < 1', () => {
-    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
       allyCards: allyCards([[CARD_ALLY_PLAIN, { energyCost: 1, life: 0, isBerserker: false }]]),
     })).toThrow();
-    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -339,7 +341,7 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
   });
 
   it('constructor: lanza si allyCards tiene energyCost negativo o no entero', () => {
-    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -348,7 +350,7 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
   });
 
   it('constructor: lanza si abilityIds referencia un abilityId inexistente en abilityCooldowns', () => {
-    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -357,7 +359,7 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
   });
 
   it('constructor: lanza si abilityIds referencia un abilityId con side ENEMY', () => {
-    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([ALLY_OWN_ABILITY]),
       abilityCooldowns: cooldowns([[ALLY_OWN_ABILITY, { side: 'ENEMY', baseCooldown: 1 }]]),
@@ -371,7 +373,7 @@ describe('CombatEngine — H1.15: Aliados en mesa (GDD §2.2/§2.5)', () => {
     engine.dispatch({ type: 'SET_DAMAGE_REDIRECT', targetAllyInstanceId: allyId });
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
     });

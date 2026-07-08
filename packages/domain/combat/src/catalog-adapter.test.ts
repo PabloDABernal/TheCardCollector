@@ -108,15 +108,19 @@ describe('buildCombatEngineConfig (H1.19) — smoke test con contenido real de p
       expect(attackCardEntry).toBeDefined();
       const [cardId] = attackCardEntry!;
 
-      const engine = new CombatEngine(config);
+      // NUEVO H3.6 — `leaderDeckCardIds` (10 cartas) se baraja y solo 5 entran a la mano
+      // inicial; `initialHandSize: 10` garantiza que la carta de ataque encontrada esté
+      // en mano para este smoke test, sin depender de la semilla del shuffle.
+      const engine = new CombatEngine({ ...config, initialHandSize: 10 });
       const snapshot = engine.getSnapshot();
-      const nucleo = snapshot.nucleoPool[0]!;
+      const nucleo = snapshot.nucleoTable.find((d) => d.status === 'AVAILABLE')!;
 
       const result = engine.dispatch({
         type: 'PLAY_CARD',
         cardId,
         sourceId: 'leader',
         nucleoInstanceId: nucleo.id,
+        target: { kind: 'ENEMY' },
       });
 
       expect(result.ok).toBe(true);
