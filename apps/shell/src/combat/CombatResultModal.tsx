@@ -15,7 +15,25 @@ export interface CombatResultModalProps {
 export function CombatResultModal({ snapshot }: CombatResultModalProps): JSX.Element {
   const title = snapshot.status === 'VICTORY' ? 'Victoria' : 'Derrota';
   return (
-    <div role="dialog" style={{ position: 'absolute', inset: 0 }}>
+    <div
+      role="dialog"
+      style={{
+        position: 'absolute',
+        inset: 0,
+        // Fondo opaco necesario para ocultar por completo el HUD/canvas congelados detrás (bug QA
+        // battle-loop-design: sin esto el texto se solapaba con el HUD vivo debajo). Mismo tono
+        // oscuro que `CombatScene.setBackgroundColor('#12141c')` (packages/combat-scene/src/scenes/CombatScene.ts)
+        // con un poco más de opacidad para asegurar contraste total del texto, coherente con la
+        // paleta oscura del resto del combate.
+        backgroundColor: 'rgba(18, 20, 28, 0.95)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#ffffff',
+        textAlign: 'center',
+      }}
+    >
       <h2>{title}</h2>
       {snapshot.status === 'DEFEAT' && <p>Motivo: {snapshot.defeatReason}</p>}
     </div>
