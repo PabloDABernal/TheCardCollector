@@ -6,12 +6,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { CombatBridge, CombatEvent } from '@collector/combat-bridge';
 import { createId } from '@collector/domain-shared';
-import type { CardInstanceId, NucleoInstanceId } from '@collector/domain-shared';
+import type { CardId, CardInstanceId, NucleoInstanceId } from '@collector/domain-shared';
 import type Phaser from 'phaser';
 import { createEffectsDirector } from './effects-director';
 import { JUICE_CONFIG } from './juice-config';
 import type { JuiceConfig } from './juice-config';
 import type { JuiceRecipe, JuiceRecipeRegistry } from './juice-recipe';
+import type { SoundManager } from '../audio/sound-manager';
 
 function createMockSceneBridge() {
   const listeners: Array<(e: CombatEvent) => void> = [];
@@ -34,6 +35,7 @@ interface TestRegistry {
   hitImpact: JuiceRecipe;
   screenShake: JuiceRecipe;
   floatingNumber: JuiceRecipe;
+  soundOnly: JuiceRecipe;
 }
 
 function createTestRegistry(): { registry: TestRegistry; callOrder: string[] } {
@@ -55,9 +57,16 @@ function createTestRegistry(): { registry: TestRegistry; callOrder: string[] } {
       hitImpact: fnRecipe('hitImpact'),
       screenShake: fnRecipe('screenShake'),
       floatingNumber: fnRecipe('floatingNumber'),
+      soundOnly: fnRecipe('soundOnly'),
     },
     callOrder,
   };
+}
+
+/** H2.13 spec §4.3 — `FakeSoundManager` de test, objeto simple sin necesidad de `FakeAudioContext`
+ *  real (`EffectsDirector` no conoce Web Audio, solo la interfaz `SoundManager`). */
+function createFakeSoundManager(): SoundManager {
+  return { unlock: vi.fn(), play: vi.fn() };
 }
 
 const NUCLEO_ID_1 = createId<'NucleoInstanceId'>('NucleoInstanceId', 'nucleo-1') as NucleoInstanceId;
@@ -65,10 +74,11 @@ const NUCLEO_ID_2 = createId<'NucleoInstanceId'>('NucleoInstanceId', 'nucleo-2')
 const ALLY_INSTANCE_ID = createId<'CardInstanceId'>('CardInstanceId', 'ally-1') as CardInstanceId;
 
 describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
-  it('NUCLEO_POOL_ROLLED: no dispara ningún step (H2.12 — JUICE_CONFIG.NUCLEO_POOL_ROLLED es [], el "dado rodando" ahora vive en nucleo-pool-view.ts/BoardView, no en EffectsDirector)', async () => {
+  it('NUCLEO_POOL_ROLLED: dispara soundOnly (H2.13 — JUICE_CONFIG.NUCLEO_POOL_ROLLED apunta a soundOnly+soundId "diceRoll"; sin ningún tween visual, el "dado rodando" sigue viviendo en nucleo-pool-view.ts/BoardView)', async () => {
     const { bridge, emit } = createMockSceneBridge();
     const { registry } = createTestRegistry();
-    const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry);
+    const soundManager = createFakeSoundManager();
+    const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry, soundManager);
     director.attach(bridge, {} as Phaser.Scene);
 
     const event: CombatEvent = {
@@ -88,12 +98,15 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
     expect(registry.cardFlip.play).not.toHaveBeenCalled();
     expect(registry.hitImpact.play).not.toHaveBeenCalled();
     expect(registry.screenShake.play).not.toHaveBeenCalled();
+    expect(soundManager.play).toHaveBeenCalledWith('diceRoll');
+    expect(soundManager.play).toHaveBeenCalledTimes(1);
   });
 
   it('LEADER_DAMAGED: dispara hitImpact y luego screenShake, en ese orden, con focusId "leader"', async () => {
     const { bridge, emit } = createMockSceneBridge();
     const { registry, callOrder } = createTestRegistry();
-    const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry);
+    const soundManager = createFakeSoundManager();
+    const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry, soundManager);
     director.attach(bridge, {} as Phaser.Scene);
 
     const event: CombatEvent = {
@@ -122,12 +135,70 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
 
     const [, hitImpactTarget] = (registry.hitImpact.play as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(hitImpactTarget.focusId).toBe('leader');
+
+    // H2.13: soundManager.play('hit') se dispara junto con el step 'hitImpact' (soundId estático).
+    expect(soundManager.play).toHaveBeenCalledWith('hit');
+    expect(soundManager.play).toHaveBeenCalledTimes(1);
   });
 
-  it('TURN_ENDED: ninguna receta del registro es invocada', async () => {
+  it('H2.13: LEADER_DAMAGED invoca soundManager.play("hit") ANTES de que hitImpact/screenShake completen sus tweens (no bloquea el "pending", mismo criterio que floatingNumber)', async () => {
+    const { bridge, emit } = createMockSceneBridge();
+    const soundManager = createFakeSoundManager();
+    const callOrder: string[] = [];
+    const registry: TestRegistry = {
+      diceRoll: { id: 'diceRoll', play: vi.fn(async () => {}) },
+      cardFlip: { id: 'cardFlip', play: vi.fn(async () => {}) },
+      hitImpact: {
+        id: 'hitImpact',
+        play: vi.fn(
+          () =>
+            new Promise<void>((resolve) => {
+              // Nunca resuelve dentro del test — solo nos interesa que soundManager.play ya se
+              // haya invocado ANTES de que esta promesa llegue a resolverse.
+              setTimeout(resolve, 0);
+            }),
+        ),
+      },
+      screenShake: { id: 'screenShake', play: vi.fn(async () => {}) },
+      floatingNumber: {
+        id: 'floatingNumber',
+        play: vi.fn(async () => {
+          callOrder.push('floatingNumber');
+        }),
+      },
+      soundOnly: { id: 'soundOnly', play: vi.fn(async () => {}) },
+    };
+    const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry, soundManager);
+    director.attach(bridge, {} as Phaser.Scene);
+
+    const event: CombatEvent = {
+      type: 'LEADER_DAMAGED',
+      sourceId: 'enemy-ability-1',
+      side: 'ENEMY',
+      nucleoSpent: { id: NUCLEO_ID_1, color: 'AGRESION', value: 2 },
+      rawAmount: 5,
+      absorbedByShield: 0,
+      appliedDamage: 5,
+      leaderShieldAfter: 0,
+      leaderDamageAfter: 5,
+    };
+
+    emit(event);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // hitImpact todavía no ha completado su tween (nunca resuelve en este test), pero
+    // soundManager.play('hit') ya se disparó de forma síncrona al arrancar el step.
+    expect(soundManager.play).toHaveBeenCalledWith('hit');
+    expect(registry.screenShake.play).not.toHaveBeenCalled();
+  });
+
+  it('TURN_ENDED: ninguna receta del registro es invocada, ni soundManager.play', async () => {
     const { bridge, emit } = createMockSceneBridge();
     const { registry } = createTestRegistry();
-    const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry);
+    const soundManager = createFakeSoundManager();
+    const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry, soundManager);
     director.attach(bridge, {} as Phaser.Scene);
 
     const event: CombatEvent = {
@@ -145,12 +216,61 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
     expect(registry.cardFlip.play).not.toHaveBeenCalled();
     expect(registry.hitImpact.play).not.toHaveBeenCalled();
     expect(registry.screenShake.play).not.toHaveBeenCalled();
+    expect(soundManager.play).not.toHaveBeenCalled();
+  });
+
+  it('H2.13: CARD_PLAYED invoca soundManager.play("cardFlip")', async () => {
+    const { bridge, emit } = createMockSceneBridge();
+    const { registry } = createTestRegistry();
+    const soundManager = createFakeSoundManager();
+    const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry, soundManager);
+    director.attach(bridge, {} as Phaser.Scene);
+
+    const event: CombatEvent = {
+      type: 'CARD_PLAYED',
+      cardId: createId<'CardId'>('CardId', 'card-1') as CardId,
+      sourceId: 'card-instance-1',
+      leaderEnergyAfter: 2,
+    };
+
+    emit(event);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(soundManager.play).toHaveBeenCalledWith('cardFlip');
+    expect(soundManager.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('H2.13: evento sin soundId en ninguno de sus steps (SCENARIO_PLOT_CHANGED) nunca invoca soundManager.play', async () => {
+    const { bridge, emit } = createMockSceneBridge();
+    const { registry } = createTestRegistry();
+    const soundManager = createFakeSoundManager();
+    const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry, soundManager);
+    director.attach(bridge, {} as Phaser.Scene);
+
+    const event: CombatEvent = {
+      type: 'SCENARIO_PLOT_CHANGED',
+      sourceId: 'enemy-ability-1',
+      side: 'ENEMY',
+      direction: 'INCREASE',
+      rawAmount: 2,
+      appliedDelta: 2,
+      scenarioPlotAfter: 2,
+    };
+
+    emit(event);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(soundManager.play).not.toHaveBeenCalled();
   });
 
   it('ALLY_DAMAGED: dispara hitImpact con focusId=allyInstanceId, sin screenShake (distinto de LEADER_DAMAGED)', async () => {
     const { bridge, emit } = createMockSceneBridge();
     const { registry } = createTestRegistry();
-    const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry);
+    const soundManager = createFakeSoundManager();
+    const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry, soundManager);
     director.attach(bridge, {} as Phaser.Scene);
 
     const event: CombatEvent = {
@@ -177,11 +297,14 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
     const [, target] = (registry.hitImpact.play as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(target.focusId).toBe(ALLY_INSTANCE_ID);
     expect(registry.screenShake.play).not.toHaveBeenCalled();
+    // ALLY_DAMAGED no tiene soundId estático asignado en JUICE_CONFIG (H2.13 spec §1.6 no lo cubre).
+    expect(soundManager.play).not.toHaveBeenCalled();
   });
 
   it('recipeId inexistente en el registro: lanza en vez de fallar en silencio', async () => {
     const { bridge, emit } = createMockSceneBridge();
     const { registry } = createTestRegistry();
+    const soundManager = createFakeSoundManager();
 
     const brokenConfig: JuiceConfig = {
       ...JUICE_CONFIG,
@@ -194,7 +317,7 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
     process.on('unhandledRejection', handler);
 
     try {
-      const director = createEffectsDirector(brokenConfig, registry as unknown as JuiceRecipeRegistry);
+      const director = createEffectsDirector(brokenConfig, registry as unknown as JuiceRecipeRegistry, soundManager);
       director.attach(bridge, {} as Phaser.Scene);
 
       const event: CombatEvent = {

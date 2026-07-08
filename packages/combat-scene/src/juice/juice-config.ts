@@ -11,11 +11,12 @@ export type JuiceConfig = Record<CombatEvent['type'], JuiceStep[]>;
  * `docs/specs/H2.4_effects_director.md` §4 para el razonamiento de cada entrada.
  */
 export const JUICE_CONFIG: JuiceConfig = {
-  NUCLEO_POOL_ROLLED: [], // H2.12 — antes: [{ recipeId: 'diceRoll', mode: 'parallel' }].
-                          // El "dado rodando" ahora anima el sprite REAL en nucleo-pool-view.ts
-                          // (BoardView), no un placeholder efímero de EffectsDirector — ver spec
-                          // H2.12 §0.1/§1.1 (el canal hud siempre entrega antes que el canal scene,
-                          // así que ninguna receta llegaría a tiempo sobre el sprite real).
+  NUCLEO_POOL_ROLLED: [{ recipeId: 'soundOnly', mode: 'parallel', soundId: 'diceRoll' }], // NUEVO H2.13
+                          // antes: [] (H2.12). El "dado rodando" real sigue viviendo en
+                          // nucleo-pool-view.ts (BoardView) — ver spec H2.12 §0.1/§1.1 (el canal hud
+                          // siempre entrega antes que el canal scene, así que ninguna receta llegaría
+                          // a tiempo sobre el sprite real). `soundOnly` no anima nada; esta entrada
+                          // solo añade el cue de sonido (H2.13 spec §1.6/§3).
   ABILITY_ACTIVATED: [], // sin cambio — la animación de "Núcleo gastado" tampoco pasa por juice
                          // (mismo razonamiento, §1.1); `nucleo-pool-view.ts` la resuelve internamente
                          // leyendo el diff de snapshot, no el evento.
@@ -23,7 +24,7 @@ export const JUICE_CONFIG: JuiceConfig = {
   COOLDOWNS_TICKED: [{ recipeId: 'cooldownReady', mode: 'parallel' }], // NUEVO H2.10 (antes: [])
   LEADER_DAMAGED: [
     { recipeId: 'floatingNumber', mode: 'parallel' }, // NUEVO H2.11 — antes de hitImpact, spec §1.8
-    { recipeId: 'hitImpact', mode: 'sequential' },
+    { recipeId: 'hitImpact', mode: 'sequential', soundId: 'hit' }, // soundId NUEVO H2.13
     { recipeId: 'screenShake', mode: 'sequential' },
   ],
   SCENARIO_PLOT_CHANGED: [
@@ -44,14 +45,14 @@ export const JUICE_CONFIG: JuiceConfig = {
   MINION_PASSIVE_EFFECTS_APPLIED: [],
   PHASE_CHANGED: [{ recipeId: 'screenShake', mode: 'sequential' }],
   LEADER_LEVELED_UP: [],
-  CARD_PLAYED: [{ recipeId: 'cardFlip', mode: 'parallel' }],
+  CARD_PLAYED: [{ recipeId: 'cardFlip', mode: 'parallel', soundId: 'cardFlip' }], // soundId NUEVO H2.13
   ENEMY_DAMAGED: [
     { recipeId: 'floatingNumber', mode: 'parallel' }, // NUEVO H2.11
-    { recipeId: 'hitImpact', mode: 'sequential' },
+    { recipeId: 'hitImpact', mode: 'sequential', soundId: 'hit' }, // soundId NUEVO H2.13
     { recipeId: 'screenShake', mode: 'sequential' },
   ],
   LEADER_SHIELD_GAINED: [],
   DRAMATURGIA_CARD_DRAWN: [{ recipeId: 'cardFlip', mode: 'parallel' }],
   DRAMATURGIA_DECK_RESHUFFLED: [],
-  COMBAT_ENDED: [],
+  COMBAT_ENDED: [{ recipeId: 'combatOutcomeSound', mode: 'parallel' }], // NUEVO H2.13, antes: []
 };

@@ -1,5 +1,6 @@
 import type Phaser from 'phaser';
 import type { CombatEvent } from '@collector/domain-combat';
+import type { SoundCueId } from '../audio/sound-manager';
 
 /**
  * H2.4 spec §2 — contrato de destino de un `JuiceStep`. Enmienda al sketch
@@ -26,6 +27,14 @@ export interface JuiceStep {
   readonly recipeId: string;
   readonly params?: Record<string, unknown>;
   readonly mode: JuiceStepMode;
+  /** NUEVO H2.13 — cue de audio estático a reproducir cuando este step arranca (independiente de si
+   *  su receta visual tiene éxito/fracasa). `undefined` = sin sonido para este step. Casos que
+   *  necesitan decidir el cue dinámicamente según el payload del evento (p.ej. victoria vs. derrota,
+   *  un único campo `soundId` no puede bifurcar) NO usan este campo — usan una receta dedicada que
+   *  lee `target.event` y llama al `SoundManager` ella misma (ver `combatOutcomeSound`), mismo
+   *  criterio ya sentado por `resolveFloatingNumberEntries`/`computeIntensity` para parámetros
+   *  visuales dependientes del evento. */
+  readonly soundId?: SoundCueId;
 }
 
 /** Contrato que toda receta (stub en H2.4, real en H2.5) debe cumplir. `id` debe coincidir

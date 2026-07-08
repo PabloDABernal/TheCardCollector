@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import type { CombatBridge, Unsubscribe } from '@collector/combat-bridge';
-import { createEffectsDirector, JUICE_CONFIG, RECIPE_REGISTRY } from '../juice';
+import { createEffectsDirector, JUICE_CONFIG, createRecipeRegistry } from '../juice';
 import { createInputAdapter, type InputAdapter } from '../input';
 import { createBoardView, type BoardViewContext } from '../view';
 import { createGestureCommandTranslator } from '../interaction';
+import { createWebAudioSoundManager } from '../audio';
 
 /** Viewport virtual de diseño — mobile-first, ver docs/architecture_stack.md §4.2. Misma resolución que
  *  `main.ts` (H2.1) ya usaba para el propio `Phaser.Game`; ahora también gobierna el `Scale Manager`
@@ -69,7 +70,19 @@ export class CombatScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.setBackgroundColor('#12141c');
 
-    const effectsDirector = createEffectsDirector(JUICE_CONFIG, RECIPE_REGISTRY);
+    // NUEVO H2.13 (spec §1.1/§1.7) — Sound Manager real (Web Audio API cruda, tonos sintéticos).
+    // `unlock()` se registra sobre el primer `pointerdown` NATIVO de `scene.input` (no vía
+    // `InputAdapter.subscribe`, spec §1.7): el desbloqueo de audio exige que la llamada a
+    // crear/reanudar el `AudioContext` ocurra en la misma pila de llamadas síncrona del gesto real
+    // del navegador. `debug: true` — `CombatScene` todavía no está integrada en `apps/shell` (fuera
+    // de esta historia, spec §1.8); mientras el único consumidor real de esta clase sea el harness
+    // standalone (`main.ts`) y el smoke e2e de Playwright, se deja el log de verificación manual
+    // activado por defecto aquí. Cuando se cablee en `apps/shell`, esa integración decide su propio
+    // valor (spec §1.8).
+    const soundManager = createWebAudioSoundManager({ debug: true });
+    this.input.once('pointerdown', () => soundManager.unlock());
+
+    const effectsDirector = createEffectsDirector(JUICE_CONFIG, createRecipeRegistry(soundManager), soundManager);
     const unsubscribeEffects: Unsubscribe = effectsDirector.attach(this.bridge, this);
 
     // H2.7 §2.3 — umbrales por defecto; H2.8/H2.9 pueden pasar config si el feel lo pide. Sin consumidor

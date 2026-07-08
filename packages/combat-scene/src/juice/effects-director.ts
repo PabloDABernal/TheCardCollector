@@ -2,6 +2,7 @@ import type Phaser from 'phaser';
 import type { CombatBridge, CombatEvent, Unsubscribe } from '@collector/combat-bridge';
 import type { JuiceConfig } from './juice-config';
 import type { JuiceRecipeRegistry, JuiceStep, JuiceTarget } from './juice-recipe';
+import type { SoundManager } from '../audio/sound-manager';
 
 /** H2.4 spec §3.3 — nombres estables que H2.8 debe usar para nombrar los game objects del
  *  tablero/Líder/Enemigo/Escenario, de modo que las recetas reales de H2.5 puedan resolverlos sin
@@ -56,12 +57,16 @@ export interface EffectsDirector {
   attach(bridge: CombatBridge, scene: Phaser.Scene): Unsubscribe;
 }
 
-/** Recorre `steps` en orden, disparando cada `JuiceStep` según su `mode` (§3.2). */
+/** Recorre `steps` en orden, disparando cada `JuiceStep` según su `mode` (§3.2). NUEVO H2.13: si el
+ *  step trae `soundId`, reenvía `soundManager.play(step.soundId)` de forma síncrona y no bloqueante
+ *  en el instante en que el step arranca (antes de `recipe.play`) — no participa en `pending`, no
+ *  altera la secuenciación `parallel`/`sequential` ya validada en H2.4/H2.5. */
 async function resolveEvent(
   steps: readonly JuiceStep[],
   target: JuiceTarget,
   scene: Phaser.Scene,
   recipes: JuiceRecipeRegistry,
+  soundManager: SoundManager,
 ): Promise<void> {
   let pending: Promise<void>[] = [];
 
@@ -71,6 +76,10 @@ async function resolveEvent(
       throw new Error(
         `EffectsDirector: recipeId "${step.recipeId}" no existe en el JuiceRecipeRegistry inyectado (evento "${target.event.type}").`,
       );
+    }
+
+    if (step.soundId) {
+      soundManager.play(step.soundId); // NUEVO H2.13 — síncrono, no bloqueante, no participa en `pending`
     }
 
     if (step.mode === 'parallel') {
@@ -88,7 +97,11 @@ async function resolveEvent(
 /** Único punto de construcción — mismo patrón que `createCombatBridge` (H2.3): sin `new
  *  EffectsDirector(...)` expuesto, deja puerta abierta a validación/instrumentación futura sin
  *  romper la firma pública. */
-export function createEffectsDirector(config: JuiceConfig, recipes: JuiceRecipeRegistry): EffectsDirector {
+export function createEffectsDirector(
+  config: JuiceConfig,
+  recipes: JuiceRecipeRegistry,
+  soundManager: SoundManager, // NUEVO H2.13 — 3er parámetro obligatorio, mismo criterio que `recipes`
+): EffectsDirector {
   return {
     attach(bridge: CombatBridge, scene: Phaser.Scene): Unsubscribe {
       return bridge.subscribeSceneEvents((event: CombatEvent) => {
@@ -100,7 +113,7 @@ export function createEffectsDirector(config: JuiceConfig, recipes: JuiceRecipeR
         const target = resolveJuiceTarget(event);
         // Fire-and-forget respecto al bus de eventos de dominio (§3.2 punto 4) — errores no
         // capturados dentro de una receta deben propagarse como excepción no manejada visible.
-        void resolveEvent(steps, target, scene, recipes);
+        void resolveEvent(steps, target, scene, recipes, soundManager);
       });
     },
   };

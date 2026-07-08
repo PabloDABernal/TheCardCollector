@@ -66,13 +66,23 @@ vi.mock('./interaction', () => ({
 
 function createFakeCombatSceneSurface(scene: CombatScene) {
   const shutdownListeners: Array<() => void> = [];
+  const pointerdownListeners: Array<() => void> = [];
   // Superficie fake mínima de Phaser (mismo patrón que FakeJuiceScene, H2.5), sin depender de un
   // Phaser.Game/canvas real.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (scene as any).cameras = { main: { setBackgroundColor: vi.fn() } };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (scene as any).events = { once: (evt: string, cb: () => void) => evt === 'shutdown' && shutdownListeners.push(cb) };
-  return { fireShutdown: () => shutdownListeners.forEach((cb) => cb()) };
+  // NUEVO H2.13 (spec §1.7) — `create()` registra `this.input.once('pointerdown', ...)` para
+  // desbloquear el `SoundManager` en el primer gesto real.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (scene as any).input = {
+    once: (evt: string, cb: () => void) => evt === 'pointerdown' && pointerdownListeners.push(cb),
+  };
+  return {
+    fireShutdown: () => shutdownListeners.forEach((cb) => cb()),
+    firePointerdown: () => pointerdownListeners.forEach((cb) => cb()),
+  };
 }
 
 const fakeSnapshot = {} as CombatStateSnapshot;
