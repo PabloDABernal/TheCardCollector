@@ -1147,6 +1147,8 @@ export class CombatEngine {
         return this.handleDrawOrGenerate(command);
       case 'DRAW_CARD':
         return this.handleDrawCard();
+      case 'GENERATE_ENERGY':
+        return this.handleGenerateEnergy();
     }
   }
 
@@ -1221,6 +1223,28 @@ export class CombatEngine {
 
     this.actionsTakenThisTurn += 1;
     const effectEvent = this.executeDrawCard();
+    this.eventBus.emit(effectEvent);
+    return ok([effectEvent]);
+  }
+
+  /** NUEVO H3.6 — ver spec §2.6/decisions.md ("Robar carta y Generar Energía como acción
+   *  pagada: mismo efecto que la versión gratuita"). Versión PAGADA de "Generar
+   *  Energía" — 1 de las 2 acciones. */
+  private handleGenerateEnergy(): CombatCommandResult {
+    if (this.turnOwner !== 'LEADER') {
+      return err({ code: 'NOT_YOUR_TURN', expected: 'LEADER', actual: this.turnOwner });
+    }
+    if (this.actionsTakenThisTurn >= this.actionsAllowedThisTurn) {
+      return err({
+        code: 'NO_ACTIONS_REMAINING',
+        side: this.turnOwner,
+        actionsTaken: this.actionsTakenThisTurn,
+        actionsAllowed: this.actionsAllowedThisTurn,
+      });
+    }
+
+    this.actionsTakenThisTurn += 1;
+    const effectEvent = this.executeGenerateEnergy();
     this.eventBus.emit(effectEvent);
     return ok([effectEvent]);
   }

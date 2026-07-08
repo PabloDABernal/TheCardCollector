@@ -3,21 +3,6 @@ import type { MinionInPlay } from './types/minion';
 import type { MinionBehaviorSpec } from './types/minion-behavior';
 
 /**
- * NUEVO H1.16 (histórico, ver `selectActingMinions` abajo para el reemplazo real usado
- * por `combat-engine.ts` desde el rediseño de H1.16). GDD §3.8: si hay ≥1 Secuaz
- * Defensor vivo en mesa, CUALQUIER ataque dirigido al tablero del Enemigo debe
- * resolverse contra él, nunca contra el Enemigo directamente ni contra otro Secuaz. Si
- * hay más de uno, se elige el primero por orden de entrada en mesa.
- *
- * Sustituida en la práctica por la validación explícita de Defensor de §3.9.3
- * (`handlePlayCard`, `MUST_TARGET_DEFENSOR`) — se conserva esta función (nunca se borra
- * texto/código antiguo sin razón) como utilidad pura reutilizable.
- */
-export function resolveDefenderMinion(minionsInPlay: readonly MinionInPlay[]): MinionInPlay | null {
-  return minionsInPlay.find((m) => m.isDefensor) ?? null;
-}
-
-/**
  * NUEVO H1.16 (rediseño), spec §3.5/§3.9.5. Resuelve QUÉ instancias de Secuaz actúan
  * este turno, dado el `minionBehavior` de la carta de Dramaturgia robada. Pura respecto
  * al estado del motor — no valida CD/Núcleo (eso sigue en `CombatEngine`, porque

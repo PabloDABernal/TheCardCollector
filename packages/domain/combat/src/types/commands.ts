@@ -116,4 +116,13 @@ export type CombatCommand =
        * coste.
        */
       readonly type: 'DRAW_CARD';
+    }
+  | {
+      /**
+       * NUEVO H3.6. Versión PAGADA de "Generar Energía" (decisions.md exige que exista
+       * como una de las 2 acciones del turno, simétrica a Robar Carta). Consume 1 de las
+       * 2 acciones del turno. Mismo efecto que `DRAW_OR_GENERATE { action: 'generate' }`,
+       * solo cambia el coste.
+       */
+      readonly type: 'GENERATE_ENERGY';
     };

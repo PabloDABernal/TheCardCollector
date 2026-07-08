@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SeededRandomSource, createId } from '@collector/domain-shared';
-import { resolveDefenderMinion, selectActingMinions } from './minion-ai';
+import { selectActingMinions } from './minion-ai';
 import type { MinionInPlay } from './types/minion';
 import type { MinionBehaviorSpec } from './types/minion-behavior';
 
@@ -17,25 +17,6 @@ function minion(overrides: Partial<Omit<MinionInPlay, 'instanceId'>> & { instanc
     ...rest,
   };
 }
-
-describe('resolveDefenderMinion (pura)', () => {
-  it('0 Secuaces isDefensor → null', () => {
-    const minions: MinionInPlay[] = [minion({ instanceId: 'm1', isDefensor: false })];
-    expect(resolveDefenderMinion(minions)).toBeNull();
-  });
-
-  it('1 Secuaz isDefensor → esa instancia', () => {
-    const defensor = minion({ instanceId: 'm2', isDefensor: true });
-    const minions: MinionInPlay[] = [minion({ instanceId: 'm1', isDefensor: false }), defensor];
-    expect(resolveDefenderMinion(minions)).toBe(defensor);
-  });
-
-  it('2 Secuaces isDefensor → el primero por orden de entrada', () => {
-    const firstDefensor = minion({ instanceId: 'm1', isDefensor: true });
-    const secondDefensor = minion({ instanceId: 'm2', isDefensor: true });
-    expect(resolveDefenderMinion([firstDefensor, secondDefensor])).toBe(firstDefensor);
-  });
-});
 
 describe('selectActingMinions', () => {
   const rng = new SeededRandomSource(1);

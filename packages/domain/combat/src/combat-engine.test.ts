@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { SeededRandomSource, createId, isOk, isErr, type AbilityId, type CoreCostRequirement, type NucleoColor } from '@collector/domain-shared';
+import { SeededRandomSource, createId, isOk, isErr, type AbilityId, type CardId, type CoreCostRequirement, type NucleoColor } from '@collector/domain-shared';
 import { CombatEngine } from './combat-engine';
 import type { CombatCommandError } from './types/errors';
 import type { NucleoDie } from './types/nucleo';
+import type { CombatEvent } from './types/events';
 import type { AbilityCooldownDefinition } from './types/cooldown'; // H1.4
+import type { PlayableCardDefinition } from './types/playable-card';
 
 const ABILITY_ANY: AbilityId = createId<'AbilityId'>('AbilityId', 'ability-any');
 // H1.4 — ver §5 de la spec: "Escenario B" activaba ABILITY_ANY como ENEMY y como
@@ -368,5 +370,106 @@ describe('CombatEngine — regla "elige primero quien tenga turno tras el vaciad
     // sí puede gastar del nuevo estado de mesa ya relanzado.
     const rLeader = engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ABILITY_ANY, sourceId: 'leader', side: 'LEADER', nucleoInstanceId: staleNucleo.id });
     expect(isOk(rLeader)).toBe(true);
+  });
+});
+
+describe('CombatEngine — H3.4 (revisión): integración de dados EXTRA / tope de mesa / NUCLEO_ALREADY_SPENT', () => {
+  const CARD_ADD_DIE: CardId = createId<'CardId'>('CardId', 'card-add-die');
+
+  function playableCards(entries: [CardId, PlayableCardDefinition][]): Map<CardId, PlayableCardDefinition> {
+    return new Map(entries);
+  }
+
+  it('PLAY_CARD con efecto ADD_NUCLEO_DIE añade un dado EXTRA a la mesa por debajo del tope y emite NUCLEO_DIE_ADDED', () => {
+    const engine = new CombatEngine({
+      leaderMaxHealth: 100,
+      enemyMaxHealth: 100,
+      scenarioPlotDefeatThreshold: 999,
+      leaderDeckCardIds: [CARD_ADD_DIE],
+      randomSource: new SeededRandomSource(4),
+      abilityCoreCosts: abilityCosts(),
+      abilityCooldowns: abilityCooldowns(),
+      playableCards: playableCards([[CARD_ADD_DIE, { energyCost: 0, effect: { kind: 'ADD_NUCLEO_DIE', color: 'CAOS' } }]]),
+      tableMaxDice: 10,
+    });
+
+    const before = engine.getSnapshot().nucleoTable;
+    expect(before).toHaveLength(5);
+
+    const result = engine.dispatch({ type: 'PLAY_CARD', cardId: CARD_ADD_DIE, sourceId: 'leader' });
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      const added = result.value.find((e) => e.type === 'NUCLEO_DIE_ADDED') as
+        | Extract<CombatEvent, { type: 'NUCLEO_DIE_ADDED' }>
+        | undefined;
+      expect(added).toBeDefined();
+      expect(added?.color).toBe('CAOS');
+      expect(added?.tableSizeAfter).toBe(6);
+    }
+
+    const after = engine.getSnapshot().nucleoTable;
+    expect(after).toHaveLength(6);
+    expect(after.filter((d) => d.kind === 'EXTRA')).toHaveLength(1);
+  });
+
+  it('PLAY_CARD con efecto ADD_NUCLEO_DIE cuando la mesa ya está al tope emite NUCLEO_DIE_ADD_SKIPPED (no error, la carta se juega igual)', () => {
+    const engine = new CombatEngine({
+      leaderMaxHealth: 100,
+      enemyMaxHealth: 100,
+      scenarioPlotDefeatThreshold: 999,
+      leaderDeckCardIds: [CARD_ADD_DIE],
+      randomSource: new SeededRandomSource(4),
+      abilityCoreCosts: abilityCosts(),
+      abilityCooldowns: abilityCooldowns(),
+      playableCards: playableCards([[CARD_ADD_DIE, { energyCost: 0, effect: { kind: 'ADD_NUCLEO_DIE', color: 'CAOS' } }]]),
+      tableMaxDice: 5, // ya al tope con los 5 dados fijos iniciales
+    });
+
+    const result = engine.dispatch({ type: 'PLAY_CARD', cardId: CARD_ADD_DIE, sourceId: 'leader' });
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      const skipped = result.value.find((e) => e.type === 'NUCLEO_DIE_ADD_SKIPPED') as
+        | Extract<CombatEvent, { type: 'NUCLEO_DIE_ADD_SKIPPED' }>
+        | undefined;
+      expect(skipped).toBeDefined();
+      expect(skipped?.reason).toBe('TABLE_AT_MAX');
+      expect(result.value.some((e) => e.type === 'NUCLEO_DIE_ADDED')).toBe(false);
+    }
+
+    expect(engine.getSnapshot().nucleoTable).toHaveLength(5);
+  });
+
+  it('un dado ya SPENT no puede volver a gastarse hasta el próximo reroll — NUCLEO_ALREADY_SPENT vía CombatEngine.dispatch', () => {
+    const ABILITY_A: AbilityId = createId<'AbilityId'>('AbilityId', 'already-spent-a');
+    const ABILITY_B: AbilityId = createId<'AbilityId'>('AbilityId', 'already-spent-b');
+    const engine = new CombatEngine({
+      leaderMaxHealth: 100,
+      enemyMaxHealth: 100,
+      scenarioPlotDefeatThreshold: 999,
+      leaderDeckCardIds: [],
+      randomSource: new SeededRandomSource(1),
+      abilityCoreCosts: abilityCosts([[ABILITY_A, { kind: 'ANY' }], [ABILITY_B, { kind: 'ANY' }]]),
+      abilityCooldowns: abilityCooldowns([
+        [ABILITY_A, { side: 'LEADER', baseCooldown: 1 }],
+        [ABILITY_B, { side: 'LEADER', baseCooldown: 1 }],
+      ]),
+    });
+
+    const target = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
+    const first = engine.dispatch({
+      type: 'ACTIVATE_ABILITY', abilityId: ABILITY_A, sourceId: 'leader', side: 'LEADER', nucleoInstanceId: target.id,
+    });
+    expect(isOk(first)).toBe(true);
+    expect(engine.getSnapshot().nucleoTable.find((d) => d.id === target.id)?.status).toBe('SPENT');
+
+    // Otra habilidad (distinta abilityId, evita ABILITY_ALREADY_ACTIVATED_THIS_TURN)
+    // intenta gastar el MISMO dado, todavía SPENT (sin reroll de por medio).
+    const second = engine.dispatch({
+      type: 'ACTIVATE_ABILITY', abilityId: ABILITY_B, sourceId: 'leader', side: 'LEADER', nucleoInstanceId: target.id,
+    });
+    expect(isErr(second)).toBe(true);
+    if (isErr(second)) {
+      expect((second.error as CombatCommandError).code).toBe('NUCLEO_ALREADY_SPENT');
+    }
   });
 });

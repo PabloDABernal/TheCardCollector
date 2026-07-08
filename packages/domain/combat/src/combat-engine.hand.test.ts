@@ -193,6 +193,59 @@ describe('CombatEngine — H3.6: DRAW_CARD (acción pagada)', () => {
   });
 });
 
+describe('CombatEngine — H3.6: GENERATE_ENERGY (acción pagada)', () => {
+  it('mismo efecto que la versión gratis, pero consume 1 acción', () => {
+    const engine = buildEngine({ initialLeaderEnergy: 1 });
+    const before = engine.getSnapshot();
+
+    const result = engine.dispatch({ type: 'GENERATE_ENERGY' });
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0]!.type).toBe('ENERGY_GENERATED');
+    }
+
+    const after = engine.getSnapshot();
+    expect(after.leaderEnergy).toBe(before.leaderEnergy + 1);
+    expect(after.actions.actionsTaken).toBe(1);
+    // No consume el paso previo gratuito — sigue disponible.
+    expect(after.leaderFreeStep.takenThisTurn).toBe(false);
+  });
+
+  it('sin acciones restantes → NO_ACTIONS_REMAINING', () => {
+    const engine = buildEngine();
+    engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ABILITY_ANY, sourceId: 'leader', side: 'LEADER', nucleoInstanceId: engine.getSnapshot().nucleoTable[0]!.id });
+    engine.dispatch({ type: 'GENERATE_ENERGY' }); // 2ª acción
+    const result = engine.dispatch({ type: 'GENERATE_ENERGY' }); // 3ª — rechazada
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect((result.error as CombatCommandError).code).toBe('NO_ACTIONS_REMAINING');
+    }
+  });
+
+  it('turno de Enemigo → NOT_YOUR_TURN', () => {
+    const engine = buildEngine({ initialTurnOwner: 'ENEMY' });
+    const result = engine.dispatch({ type: 'GENERATE_ENERGY' });
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect((result.error as CombatCommandError).code).toBe('NOT_YOUR_TURN');
+    }
+  });
+
+  it('energía al tope → ENERGY_GENERATE_SKIPPED, no-op sin error, acción igualmente consumida', () => {
+    const engine = buildEngine({ initialLeaderEnergy: LEADER_ENERGY_MAX });
+    const result = engine.dispatch({ type: 'GENERATE_ENERGY' });
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      const skipped = result.value[0] as Extract<CombatEvent, { type: 'ENERGY_GENERATE_SKIPPED' }>;
+      expect(skipped.reason).toBe('ENERGY_AT_MAX');
+    }
+    const after = engine.getSnapshot();
+    expect(after.leaderEnergy).toBe(LEADER_ENERGY_MAX);
+    expect(after.actions.actionsTaken).toBe(1);
+  });
+});
+
 describe('CombatEngine — H3.6: hand-gating de PLAY_CARD/PLAY_ALLY/PLAY_CONTRATIEMPO', () => {
   it('PLAY_CARD con cardId conocido pero fuera de mano → CARD_NOT_IN_HAND', () => {
     const engine = buildEngine({ leaderDeckCardIds: [] }); // mano vacía
