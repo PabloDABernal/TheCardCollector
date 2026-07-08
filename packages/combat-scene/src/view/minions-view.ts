@@ -8,8 +8,11 @@ const MINIONS_ROW_X_ORIGIN = 200;
 
 export interface MinionsView {
   /** Análogo exacto de `AlliesView.syncFromSnapshot` para `MinionInPlay`/`minionsInPlay`
-   *  (`MINIONS_ROW_Y`), mostrando `isDefensor` como una etiqueta de texto adicional. Nunca destruye
-   *  tiles de Secuaz. */
+   *  (`MINIONS_ROW_Y`), mostrando `isDefensor` como una etiqueta de texto adicional. Los game
+   *  objects (rect/label) los destruye la receta `minionDefeated` (juice/recipes), NO esta vista —
+   *  pero sí olvida (`tilesByInstanceId.delete`) las entradas cuyo Secuaz ya no está en
+   *  `snapshot.minionsInPlay`, mismo patrón destroy-and-forget que `card-hand-view.ts`, evitando que
+   *  el `Map` acumule referencias a objetos ya destruidos indefinidamente. */
   syncFromSnapshot(snapshot: CombatStateSnapshot): void;
 }
 
@@ -23,6 +26,17 @@ export function createMinionsView(scene: Phaser.Scene): MinionsView {
 
   return {
     syncFromSnapshot(snapshot: CombatStateSnapshot): void {
+      const presentIds = new Set(snapshot.minionsInPlay.map((minion) => minion.instanceId));
+
+      // Olvida las entradas de Secuaces que ya no están en mesa (derrotados). Sus game objects ya
+      // fueron destruidos por la receta `minionDefeated` — aquí solo se limpia el `Map` para que no
+      // acumule referencias muertas (fix Reviewer, punto bajo del H3 wrap-up).
+      for (const instanceId of Array.from(tilesByInstanceId.keys())) {
+        if (!presentIds.has(instanceId)) {
+          tilesByInstanceId.delete(instanceId);
+        }
+      }
+
       snapshot.minionsInPlay.forEach((minion, index) => {
         const x = MINIONS_ROW_X_ORIGIN + index * TILE_SEPARATION_PX;
         const y = MINIONS_ROW_Y;

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import Phaser from 'phaser';
 import { CombatScene, COMBAT_SCENE_VIEWPORT } from '@collector/combat-scene';
+import type { AbilityViewData } from '@collector/combat-scene';
 import type { CombatBridge } from '@collector/combat-bridge';
 import './CombatScreen.css';
 import { buildCombatSetup } from '../combat/build-combat-setup';
@@ -37,6 +38,10 @@ export function CombatScreen(): JSX.Element {
 
   const mountRef = useRef<HTMLDivElement>(null);
   const [bridge, setBridge] = useState<CombatBridge | null>(null);
+  // FIX Reviewer post-H3 (commit `cce72a3`) — `CombatHud` necesita las `leaderAbilities` del
+  // `boardContext` (mismo dato ya resuelto por `buildCombatSetup`) para calcular disponibilidad de
+  // "Activar Habilidad" por color real (`isAnyLeaderAbilityActivatable`).
+  const [leaderAbilities, setLeaderAbilities] = useState<readonly AbilityViewData[]>([]);
 
   useEffect(() => {
     let game: Phaser.Game | null = null;
@@ -66,6 +71,7 @@ export function CombatScreen(): JSX.Element {
         game!.scene.start('CombatScene', { bridge: newBridge, boardContext });
         void scene; // solo para dejar constancia del mismo patrón que main.ts (H2.7)
       });
+      setLeaderAbilities(boardContext.leaderAbilities);
       setBridge(newBridge); // dispara el montaje del HUD React tan pronto el bridge existe, sin
                             // esperar a que Phaser termine su propio arranque asíncrono
     });
@@ -80,7 +86,9 @@ export function CombatScreen(): JSX.Element {
     <div className="combat-screen-root">
       <div ref={mountRef} id="phaser-mount" />
       {!bridge && <p>Cargando combate…</p>}
-      {bridge && <CombatHudOverlay bridge={bridge} leaderName={leaderName} />}
+      {bridge && (
+        <CombatHudOverlay bridge={bridge} leaderName={leaderName} leaderAbilities={leaderAbilities} />
+      )}
     </div>
   );
 }
@@ -94,9 +102,11 @@ export function CombatScreen(): JSX.Element {
 function CombatHudOverlay({
   bridge,
   leaderName,
+  leaderAbilities,
 }: {
   readonly bridge: CombatBridge;
   readonly leaderName: string;
+  readonly leaderAbilities: readonly AbilityViewData[];
 }): JSX.Element {
   const snapshot = useCombatSnapshot(bridge);
   return (
@@ -106,6 +116,7 @@ function CombatHudOverlay({
         bridge={bridge}
         onEndTurn={() => bridge.dispatch({ type: 'END_TURN' })}
         leaderName={leaderName}
+        leaderAbilities={leaderAbilities}
       />
       {snapshot.status !== 'IN_PROGRESS' && <CombatResultModal snapshot={snapshot} />}
     </>

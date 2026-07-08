@@ -1,11 +1,18 @@
 import type { CombatBridge } from '@collector/combat-bridge';
 import type { CombatStateSnapshot } from '@collector/domain-combat';
+import type { AbilityViewData } from '@collector/combat-scene';
+import { isAnyLeaderAbilityActivatable } from '@collector/combat-scene';
 
 export interface CombatHudProps {
   readonly snapshot: CombatStateSnapshot;
   readonly bridge: CombatBridge; // NUEVO H3.5 — dispatch directo de los controles de decisión de turno
   readonly onEndTurn: () => void;
   readonly leaderName: string; // NUEVO H2.14
+  /** FIX Reviewer post-H3 (commit `cce72a3`) — las `baseAbilities` del Líder (mismo dato que
+   *  `BoardViewContext.leaderAbilities`), necesarias para que "Activar Habilidad" compruebe
+   *  disponibilidad por color real vía `isAnyLeaderAbilityActivatable`, en vez del agregado laxo
+   *  anterior ("¿algún dado libre? Y ¿alguna habilidad en CD 0?" sin cruzarlos). */
+  readonly leaderAbilities: readonly AbilityViewData[];
 }
 
 const LEADER_ENERGY_MAX = 5; // GDD §2.2 / decisions.md — tope de Energía, mismo valor que el motor
@@ -30,7 +37,7 @@ const LEADER_HAND_SIZE_MAX = 7; // decisions.md "Tope de mano: 7"
  * "Robar Carta" (pagadas) SÍ son botones accionables aquí porque no requieren ninguna selección
  * adicional (sin objetivo, sin Núcleo) — igual que el paso previo gratuito.
  */
-export function CombatHud({ snapshot, bridge, onEndTurn, leaderName }: CombatHudProps): JSX.Element {
+export function CombatHud({ snapshot, bridge, onEndTurn, leaderName, leaderAbilities }: CombatHudProps): JSX.Element {
   const isLeaderTurn = snapshot.turn.turnOwner === 'LEADER' && snapshot.status === 'IN_PROGRESS';
   const hasActionsRemaining = snapshot.actions.actionsTaken < snapshot.actions.actionsAllowed;
   const canAct = isLeaderTurn && hasActionsRemaining;
@@ -39,11 +46,14 @@ export function CombatHud({ snapshot, bridge, onEndTurn, leaderName }: CombatHud
   const handFull = snapshot.leaderHand.length >= LEADER_HAND_SIZE_MAX;
   const deckEmpty = snapshot.leaderDeckRemaining === 0;
   const energyAtMax = snapshot.leaderEnergy >= LEADER_ENERGY_MAX;
-  const hasAvailableDie = snapshot.nucleoTable.some((die) => die.status === 'AVAILABLE');
-  const hasAbilityReady = snapshot.cooldowns.some((cd) => cd.side === 'LEADER' && cd.remaining === 0);
 
   const canPlayCard = canAct && !handEmpty;
-  const canActivateAbility = canAct && hasAvailableDie && hasAbilityReady;
+  // FIX Reviewer post-H3 (commit `cce72a3`) — antes era un agregado laxo ("¿algún dado libre? Y
+  // ¿alguna habilidad en CD 0?") que no cruzaba color de dado contra `coreCost` de la habilidad
+  // concreta lista. `isAnyLeaderAbilityActivatable` reutiliza el mismo criterio que
+  // `gesture-command-translator.ts` (`satisfiesCoreCost`) para que el indicador nunca muestre
+  // activo un estado que el tap real rechazaría.
+  const canActivateAbility = canAct && isAnyLeaderAbilityActivatable(snapshot, leaderAbilities);
   const canGenerateEnergyPaid = canAct && !energyAtMax;
   const canDrawCardPaid = canAct && !handFull && !deckEmpty;
 

@@ -32,6 +32,10 @@ vi.mock('phaser', () => {
 vi.mock('@collector/combat-scene', () => ({
   CombatScene: class FakeCombatScene {},
   COMBAT_SCENE_VIEWPORT: { width: 1080, height: 1920 },
+  // FIX Reviewer post-H3 — `CombatHud` (renderizado dentro de `CombatScreen`) llama a esta función
+  // real vía `@collector/combat-scene`; el mock del paquete debe exponerla, aunque devuelva `false`
+  // siempre (mismo espíritu que el resto de este mock: superficie mínima, no lógica real).
+  isAnyLeaderAbilityActivatable: vi.fn(() => false),
 }));
 
 const fakeSnapshot: CombatStateSnapshot = {
@@ -65,7 +69,7 @@ const fakeBridge = {
 } as unknown as CombatBridge;
 
 const buildCombatSetupMock = vi.fn((_params: { readonly leaderId?: string }) =>
-  Promise.resolve({ bridge: fakeBridge, boardContext: {} })
+  Promise.resolve({ bridge: fakeBridge, boardContext: { leaderAbilities: [] } })
 );
 
 vi.mock('./combat/build-combat-setup', () => ({

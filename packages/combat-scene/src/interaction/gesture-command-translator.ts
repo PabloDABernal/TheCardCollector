@@ -1,11 +1,11 @@
 import type { AbilityId, CardId, NucleoInstanceId } from '@collector/domain-shared';
-import { satisfiesCoreCost } from '@collector/domain-shared';
 import type { CombatBridge } from '@collector/combat-bridge';
 import type { AttackTarget } from '@collector/domain-combat';
 import type { PointerGesture } from '../input';
 import type { AbilityViewData, BoardViewContext, HandCardViewData } from '../view';
 import { cardTileName } from '../view';
 import { FOCUS_ID_ENEMY } from '../juice';
+import { findValidDiceForAbility } from './ability-activation';
 
 /**
  * H2.9 spec §4 (extendida por H3 §5.4/§6) — traducción `PointerGesture → CombatCommand`, dispatch
@@ -61,15 +61,14 @@ export function createGestureCommandTranslator(
   }
 
   /** NUEVO H3.1/§5.4 — tap en un icono de habilidad del Líder: calcula qué dados de `nucleoTable`
-   *  satisfacen `ability.coreCost` ahora mismo. 0 válidos → no-op (el motor rechazaría igual, sin
-   *  Núcleo que ofrecer no hay comando que construir). 1 válido → auto-selección, dispatch
-   *  inmediato (spec §5.4: "si solo hay un dado válido, se puede auto-seleccionar sin pedir el
-   *  gesto extra"). 2+ válidos → espera un TAP en un dado concreto. */
+   *  satisfacen `ability.coreCost` ahora mismo (`findValidDiceForAbility`, compartido con
+   *  `CombatHud.tsx` vía FIX Reviewer post-H3, ver `ability-activation.ts`). 0 válidos → no-op (el
+   *  motor rechazaría igual, sin Núcleo que ofrecer no hay comando que construir). 1 válido →
+   *  auto-selección, dispatch inmediato (spec §5.4: "si solo hay un dado válido, se puede
+   *  auto-seleccionar sin pedir el gesto extra"). 2+ válidos → espera un TAP en un dado concreto. */
   function handleAbilityTap(ability: AbilityViewData): void {
     const snapshot = bridge.getSnapshot();
-    const validDice = snapshot.nucleoTable.filter(
-      (die) => die.status === 'AVAILABLE' && satisfiesCoreCost(ability.coreCost, die.color),
-    );
+    const validDice = findValidDiceForAbility(snapshot.nucleoTable, ability.coreCost);
 
     if (validDice.length === 0) {
       pending = null;
