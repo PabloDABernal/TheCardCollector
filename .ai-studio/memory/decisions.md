@@ -137,3 +137,51 @@ Resuelven las 3 dudas de diseño que bloqueaban conectar el input táctil de hab
 - **Generar Energía es una acción explícita del jugador que consume 1 de las 2 acciones del turno — no es regeneración automática.** El jugador elige, en su turno, entre jugar una carta/activar una habilidad o "pasar" esa acción para generar +1 Energía (tope 5), igual que ya describía el GDD §2.2 pero que nunca se implementó como comando. *Por qué:* el ritmo de turnos ya fijado (2 acciones alternas, GDD §2.1) solo genera decisiones interesantes si cada acción compite por el mismo recurso escaso. Regenerar Energía gratis (automático al inicio de turno o ligado a otro trigger pasivo) elimina esa competencia y banaliza el recurso — el jugador nunca tendría que sacrificar tempo por músculo futuro. Con Generar Energía como acción, "atacar ya" contra "banco Energía para una carta más fuerte/Contratiempo más adelante" se vuelve una decisión de ritmo real, coherente con la escasez que ya define Núcleos y acciones. Energía inicial sigue en 1 (decisión ya cerrada); el máximo sigue en 5.
 
 - **Pool de Núcleos: tamaño final 8 (sube de 6), reparto sigue siendo azar puro sin cobertura garantizada de color.** Se sube `DEFAULT_NUCLEO_POOL_SIZE` de 6 a 8 fichas por relanzado; se mantiene explícitamente el reparto independiente por ficha (mismo color puede repetirse, ningún color garantizado) ya modelado en H1.3 §0.4. *Por qué:* el caos de color es intencional, no un bug — es la razón de ser de las habilidades de coste Neutro ("para que ningún color de dado quede sin uso", decisión ya cerrada el 2026-07-05); garantizar 1-de-cada-color quitaría sentido a esa mecánica y a la identidad del color CAOS. Lo que sí se ajusta es el volumen: con solo 6 fichas para 5 colores, el caso que vivió el Director (6 fichas, 3 colores) es demasiado frecuente y se lee como injusto en vez de caótico. Subir a 8 reduce la frecuencia de rachas de poca variedad sin eliminar la posibilidad (sigue siendo azar puro), y da más fichas por ciclo de relanzado para que ambos lados (Líder/Enemigo, 2 acciones cada uno) tengan más oportunidades reales de encontrar su color antes del vaciado. Queda abierto a re-tunear en balanceo de contenido real (H1.9+), pero deja de ser un placeholder sin cerrar — Architect/Programmer pueden fijar `DEFAULT_NUCLEO_POOL_SIZE = 8` como valor de diseño confirmado.
+  - **⚠️ Sustituida por completo el 2026-07-08** (ver sección "Cierre del loop jugable de batalla" más abajo): el pool de fichas homogéneas de tamaño 8 desaparece. Se sustituye por 5 dados fijos en mesa, uno por color, que se re-tiran (no se relanzan como fichas nuevas) cuando se vacía el último dado disponible.
+
+## 2026-07-08 — Cierre del loop jugable de batalla (Director Creativo + Director del Estudio)
+
+Formaliza en memoria el loop completo de una batalla de combate (fuera de la run/sobres), cerrado en conversación entre el Director Creativo y el Director del Estudio. Sustituye y matiza varias piezas previas de este documento y del glosario, detalladas punto por punto abajo. Nunca se borra texto antiguo — se marca como sustituido/matizado donde corresponde.
+
+### Núcleos: de pool de 8 fichas homogéneas a 5 dados fijos por color
+- **⚠️ Sustituye por completo** la decisión "Pool de Núcleos: tamaño final 8" del 2026-07-08 (arriba) y el término "Pool de Núcleos" del glosario.
+- **Qué:** ya no hay 8 fichas de un pool homogéneo. En mesa hay **5 dados fijos, uno por cada uno de los 5 colores**, cada uno mostrando un valor 1-4 tras tirarse.
+- **Neutro deja de ser un color de dado:** es una etiqueta de coste en las habilidades que acepta el pago con cualquiera de los 5 dados de color presentes en mesa.
+- **Dados extra:** cartas o equipo pueden añadir a la mesa dados EXTRA de un color concreto (ej. un Aliado añade un núcleo rojo extra → quedarían 2 rojos + 1 de cada otro color = 6 dados en mesa). Hay un tope duro de dados simultáneos en mesa (valor de diseño sugerido: **10**, a confirmar en balanceo).
+- **Reroll:** los dados se gastan según los usa cualquiera de los dos lados (jugador o Enemigo) del pool compartido. En cuanto se gasta el ÚLTIMO dado disponible en mesa (sin importar de quién sea el turno ni quién lo gastó), se re-tiran TODOS los dados en mesa a la vez. Se mantiene sin cambios la regla ya cerrada el 2026-07-05: quien tenga turno inmediatamente después del vaciado elige/actúa primero.
+- **Por qué:** un número fijo de dados por color (en vez de fichas sueltas homogéneas repartidas al azar) hace que "quitarle un color al rival" sea una decisión táctica legible — en todo momento se sabe exactamente qué colores hay en mesa y ambos lados compiten explícitamente por ellos, en vez de depender de qué colores tocaron al azar en el relanzado.
+
+### Estructura del turno del jugador: paso previo gratis + 2 acciones
+- **Qué (nueva decisión, no existía formalizada antes):**
+  1. **Paso previo, gratis, no gasta ninguna de las 2 acciones del turno:** el jugador elige entre **robar 1 carta** (tope de mano: 7) o **ganar 1 Energía** (tope 5). Ambas opciones son mutuamente excluyentes entre sí en este paso. Si ya está al tope de la opción elegida, no ocurre nada (no se pierde el paso, simplemente no tiene efecto).
+  2. **Luego, 2 acciones**, cada una elegida libremente entre 4 opciones:
+     - (a) **Jugar Carta** (paga Energía).
+     - (b) **Generar Energía** (+1 Energía, tope 5 — mismo efecto que la opción gratuita del paso previo, pero aquí cuesta 1 acción).
+     - (c) **Robar Carta** (+1 carta, tope mano 7 — mismo efecto que la opción gratuita del paso previo, pero aquí cuesta 1 acción).
+     - (d) **Activar Habilidad** (gasta 1 dado de Núcleo cuyo color case con el coste de la habilidad, o cualquiera si el coste es Neutro; requiere cooldown en 0; no paga Energía — esto ya estaba cerrado el 2026-07-05; el valor del dado gastado alimenta la fórmula del efecto vía Umbral, igual que ya estaba cerrado el 2026-07-05).
+  - Mano inicial de combate: 5 cartas. Tope de mano: 7.
+- **Por qué:** separar "generar recurso" (robar/energía) de "gastar recurso" (jugar carta/activar habilidad) en dos capas —una gratis y una que compite por las 2 acciones— da más granularidad de ritmo: el jugador puede generar recurso gratis Y aun así usar sus 2 acciones en cosas más potentes, o sacrificar una acción para generar más recurso del que la capa gratuita ya le dio.
+- **Nota:** esto reafirma y detalla, sin contradecir, la decisión del 2026-07-08 anterior sobre "Generar Energía es una acción explícita del jugador que consume 1 de las 2 acciones" — ahora queda explícito que ese mismo efecto (+1 Energía / +1 carta) también existe en versión gratuita en el paso previo del turno, y que no hay diferencia de efecto entre ambas versiones, solo de coste (punto 7 abajo).
+
+### Ejemplo canónico de resolución de habilidad con Umbral
+- **Qué:** dos ejemplos concretos que aclaran, sin cambiarla, la mecánica de Umbral ya cerrada el 2026-07-05 ("el valor del Núcleo alimenta la fórmula vía Umbral"):
+  - "Ataque +1 (Neutro)": el jugador puede pagar con cualquier dado en mesa; si usa el dado morado que muestra 4, el ataque hace 4+1=5 de daño.
+  - "Trama x2 (Rojo)": el jugador debe pagar específicamente con el dado rojo; si el dado rojo muestra 1, la Trama se reduce en 1×2=2.
+
+### Secuaces del Enemigo: comportamiento en Dramaturgia, no selección aleatoria del motor
+- **⚠️ Sustituye parcialmente** la decisión previa de comportamiento de Secuaces. Afecta también a `backlog.md` H1.16, que el Coordinator reabrirá por separado.
+- **Qué:** qué Secuaz actúa NO es una selección aleatoria del motor entre los válidos. El comportamiento está escrito en el TEXTO de la carta de Dramaturgia que juega el Enemigo ese turno — ej. una carta puede decir "Tus secuaces atacan" (todos actúan) o "Ataca el secuaz con más vida" (selección determinista por criterio). El azar, si existe, vive en qué carta de Dramaturgia sale, no en una tirada adicional del motor sobre los Secuaces.
+- **Por qué:** mantiene el control del balance en el contenido (cartas) en vez de en una regla genérica del motor, permitiendo que cada Enemigo tenga personalidad táctica distinta en cómo usa a sus Secuaces.
+
+### Auto-cura entre combates: fórmula aditiva confirmada con ejemplo numérico
+- **Matiza (no sustituye)** la decisión ya cerrada el 2026-07-05 "Auto-recuperación del 50% de vida máxima, para todos, siempre".
+- **Qué:** la cura es ADITIVA de +50% de vida máxima, con tope en el máximo — no es un "suelo" que garantice llegar al 50%. Ejemplo: si terminas un combate al 70% de vida, +50% te lleva a 120%, pero el tope lo deja en 100%. Si terminas al 30%, +50% te lleva al 80% (sin tope, se queda en 80%).
+- **Por qué:** cierra la ambigüedad de lectura de la fórmula original con un ejemplo numérico explícito, sin cambiar la decisión de fondo.
+
+### Condiciones de victoria/derrota alternativas por Enemigo/Escenario
+- **Qué (nueva decisión):** por defecto se mantiene sin cambios lo ya cerrado — derrotar al Enemigo (vida a 0) antes de que la vida del Líder llegue a 0 o la Trama del Escenario llegue a su umbral final. Se añade: un Enemigo o Escenario concreto puede definir condiciones de victoria/derrota alternativas o adicionales a las por defecto. Estas reglas alternativas viven como datos propios en `EnemyDefinition`/`ScenarioDefinition` del catálogo — NO en cartas de Dramaturgia genéricas (a diferencia del comportamiento de Secuaces de arriba, que sí vive en Dramaturgia).
+- **Por qué:** permite Enemigos/Escenarios con identidad mecánica propia (ej. una condición de derrota especial ligada a su fantasía) sin tocar el motor genérico ni contaminar las cartas de Dramaturgia compartidas.
+
+### Robar carta y Generar Energía como acción pagada: mismo efecto que la versión gratuita
+- **Qué:** tanto "Robar Carta" como "Generar Energía" al usarse como una de las 2 acciones pagadas del turno tienen exactamente el mismo efecto que la versión gratuita del paso previo (+1 carta / +1 Energía, mismos topes 7 y 5). No hay ninguna diferencia de efecto entre la versión gratis y la versión que cuesta acción — la única diferencia es el coste (ninguno vs. 1 acción).
+- **Por qué:** evita duplicar reglas o inventar una segunda fórmula de recurso; la única palanca de diseño es cuánto cuesta acceder al mismo efecto, no el efecto en sí.
