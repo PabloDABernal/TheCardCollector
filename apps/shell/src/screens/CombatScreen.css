@@ -1,0 +1,17 @@
+/* FIX_combat_viewport_and_layout.md §1.2 punto 2 — el contenedor de Phaser (`#phaser-mount`)
+ * necesita un ancestro con tamaño real (no colapsado a `height: 0`) para que `Phaser.Scale.FIT`
+ * tenga un `clientWidth`/`clientHeight` válido que medir en el momento de `new Phaser.Game(...)`. */
+.combat-screen-root {
+  position: relative;
+  width: 100vw;
+  height: 100dvh; /* dvh en vez de vh: evita el salto de tamaño al aparecer/ocultarse la barra de
+                     direcciones del navegador móvil (Safari/Chrome Android) — 100vh se queda corto o
+                     deja hueco en esos casos; dvh es soportado por los navegadores objetivo del
+                     proyecto (Chrome/Safari/Firefox recientes, PWA instalada) */
+  overflow: hidden;
+}
+
+#phaser-mount {
+  width: 100%;
+  height: 100%;
+}

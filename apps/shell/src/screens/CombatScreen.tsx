@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import Phaser from 'phaser';
 import { CombatScene, COMBAT_SCENE_VIEWPORT } from '@collector/combat-scene';
 import type { CombatBridge } from '@collector/combat-bridge';
+import './CombatScreen.css';
 import { buildCombatSetup } from '../combat/build-combat-setup';
 import { useCombatSnapshot } from '../combat/use-combat-snapshot';
 import { CombatHud } from '../combat/CombatHud';
@@ -76,7 +77,7 @@ export function CombatScreen(): JSX.Element {
   }, [leaderId]);
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div className="combat-screen-root">
       <div ref={mountRef} id="phaser-mount" />
       {!bridge && <p>Cargando combate…</p>}
       {bridge && <CombatHudOverlay bridge={bridge} leaderName={leaderName} />}
