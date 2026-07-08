@@ -3,7 +3,13 @@ import react from '@vitejs/plugin-react';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// Configurable vía VITE_BASE_PATH para despliegues bajo subpath (p. ej. GitHub Pages de proyecto:
+// https://pablodabernal.github.io/TheCardCollector/). Por defecto '/' — sin cambios para dev local
+// ni para un futuro despliegue en la raíz de un dominio propio.
+const base = process.env.VITE_BASE_PATH ?? '/';
+
 export default defineConfig({
+  base,
   plugins: [
     react(),
     tsconfigPaths(),
@@ -19,14 +25,14 @@ export default defineConfig({
         description: 'Juego de cartas PVE roguelite — cruza universos TCG en combates asimétricos.',
         display: 'standalone',
         orientation: 'portrait-primary', // móvil primero (decisions.md), PC sigue funcionando en navegador normal
-        start_url: '/',
-        scope: '/',
+        start_url: base,
+        scope: base,
         theme_color: '#1a1a2e', // tono oscuro coherente con temática "coleccionista/cajas", placeholder ajustable sin bloquear la historia
         background_color: '#1a1a2e',
         icons: [
-          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/icons/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: `${base}icons/icon-192.png`, sizes: '192x192', type: 'image/png' },
+          { src: `${base}icons/icon-512.png`, sizes: '512x512', type: 'image/png' },
+          { src: `${base}icons/icon-512-maskable.png`, sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {
@@ -50,8 +56,8 @@ export default defineConfig({
             },
           },
         ],
-        navigateFallback: '/offline.html', // fallback offline mínimo (spec §4)
-        navigateFallbackDenylist: [/^\/data\//], // no interceptar peticiones de datos como si fueran navegación
+        navigateFallback: `${base}offline.html`, // fallback offline mínimo (spec §4)
+        navigateFallbackDenylist: [new RegExp(`^${base}data/`)], // no interceptar peticiones de datos como si fueran navegación
       },
       devOptions: {
         enabled: false, // SW no se activa en `npm run dev` — coherente con que la verificación usa build+preview, evita interferencias de caché durante desarrollo activo
