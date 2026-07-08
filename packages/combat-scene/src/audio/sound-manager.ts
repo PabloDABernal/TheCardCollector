@@ -93,6 +93,21 @@ export function createWebAudioSoundManager(options: CreateWebAudioSoundManagerOp
       // vuelven a `resume()`/loguear.
       const wasSuspended = context.state === 'suspended';
       if (wasSuspended) {
+        // LIMITACIÓN CONOCIDA (MVP, H2.13): `resume()` fire-and-forget. En un `AudioContext` real,
+        // `resume()` es asíncrono — `state` no pasa a `'running'` de forma síncrona, tarda uno o
+        // varios microtasks/eventos. `play()` gatea en `context.state === 'running'` (ver abajo), así
+        // que si un `CombatEvent` (ej. CARD_PLAYED) llega justo después del `pointerdown` que dispara
+        // este `unlock()` pero ANTES de que la promesa de `resume()` resuelva, esa reproducción se
+        // descarta en silencio — sin cola ni replay — porque `play()` no espera ni reintenta.
+        // Se acepta para este MVP porque el audio es un stub de tonos sintéticos (§1.13 de
+        // decisions.md), no arte final, y la ventana de carrera es de microtasks (soundcues cortos,
+        // impacto perceptual mínimo). El `FakeAudioContext` de test resuelve `state` de forma
+        // síncrona, así que esta ventana NO se ejercita en los tests salvo variante explícita
+        // (ver 'resume() asíncrono' en sound-manager.test.ts).
+        // Para resolverlo de verdad en el futuro: encolar la(s) cue(s) pendientes durante el `unlock()`
+        // en curso y reproducirlas cuando la promesa de `resume()` resuelva, o hacer que `play()`
+        // espere/awaite esa promesa antes de decidir si reproduce (con el coste de que `play()` deje
+        // de ser síncrono).
         void context.resume();
       }
       if (!contextAlreadyExisted || wasSuspended) {

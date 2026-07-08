@@ -105,3 +105,46 @@ export function createFakeAudioContext(): FakeAudioContext {
 
   return fake;
 }
+
+/** H2.13 doc — variante de `createFakeAudioContext()` donde `resume()` NO muta `state` de forma
+ *  síncrona: en su lugar, devuelve una promesa que solo resuelve (y entonces sí muta `state` a
+ *  `'running'`) tras un microtask (`await Promise.resolve()`), igual que un `AudioContext` real.
+ *  Existe solo para ejercitar/documentar la ventana de carrera conocida de `SoundManager.unlock()`
+ *  (ver comentario en `sound-manager.ts`) — el fake "por defecto" (`createFakeAudioContext`) sigue
+ *  siendo el usado por el resto de la suite, con `resume()` síncrono por simplicidad de aserciones. */
+export function createFakeAudioContextWithAsyncResume(): FakeAudioContext {
+  const recordedOscillators: RecordedOscillator[] = [];
+
+  const fake: FakeAudioContext = {
+    currentTime: 0,
+    state: 'suspended',
+    ctx: null as unknown as AudioContextLike, // asignado justo debajo, antes de devolver `fake`.
+    recordedOscillators,
+  };
+
+  const ctx: AudioContextLike = {
+    get currentTime(): number {
+      return fake.currentTime;
+    },
+    destination: {},
+    get state(): 'suspended' | 'running' | 'closed' {
+      return fake.state;
+    },
+    createOscillator(): OscillatorLike {
+      const recorded = new MutableRecordedOscillator();
+      recordedOscillators.push(recorded);
+      return createFakeOscillator(recorded);
+    },
+    createGain(): GainNodeLike {
+      return createFakeGainNode();
+    },
+    async resume(): Promise<void> {
+      await Promise.resolve();
+      fake.state = 'running';
+    },
+  };
+
+  (fake as { ctx: AudioContextLike }).ctx = ctx;
+
+  return fake;
+}

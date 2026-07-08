@@ -6,7 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createWebAudioSoundManager } from './sound-manager';
 import type { SoundCueId } from './sound-manager';
 import { SOUND_CUE_CONFIG } from './sound-cues';
-import { createFakeAudioContext } from './test-utils/fake-audio-context';
+import { createFakeAudioContext, createFakeAudioContextWithAsyncResume } from './test-utils/fake-audio-context';
 
 describe('createWebAudioSoundManager (H2.13 spec §4.1)', () => {
   it('play() ANTES de unlock(): ningún createOscillator registrado (no-op)', () => {
@@ -87,5 +87,29 @@ describe('createWebAudioSoundManager (H2.13 spec §4.1)', () => {
     } finally {
       logSpy.mockRestore();
     }
+  });
+
+  it('resume() asíncrono (§ limitación conocida H2.13): play() llamado ANTES de que resume() resuelva se descarta en silencio', async () => {
+    const fake = createFakeAudioContextWithAsyncResume();
+    const soundManager = createWebAudioSoundManager({ audioContextFactory: () => fake.ctx });
+
+    soundManager.unlock();
+    // `resume()` todavía no ha resuelto (es asíncrono) — `state` sigue en `'suspended'` aquí.
+    expect(fake.state).toBe('suspended');
+
+    // Un `CombatEvent` (ej. CARD_PLAYED) que llegue en esta ventana se pierde silenciosamente: no
+    // hay cola ni replay, tal y como documenta el comentario de `unlock()` en `sound-manager.ts`.
+    soundManager.play('hit');
+    expect(fake.recordedOscillators).toHaveLength(0);
+
+    // Tras el microtask en el que `resume()` resuelve, el contexto sí queda `'running'`, pero la
+    // reproducción perdida arriba nunca se recupera.
+    await Promise.resolve();
+    expect(fake.state).toBe('running');
+    expect(fake.recordedOscillators).toHaveLength(0);
+
+    // Un `play()` posterior a la resolución sí funciona con normalidad.
+    soundManager.play('hit');
+    expect(fake.recordedOscillators).toHaveLength(1);
   });
 });
