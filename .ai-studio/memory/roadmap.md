@@ -45,4 +45,24 @@ Nunca tareas.
 - Juego corre en móvil (simulador o física) sin jank; dados ruedan y se asientan <500ms.
 - PWA instalable en Chrome móvil, ejecutable offline con fallback (no requiere conexión).
 
-**Próximo hito:** H3 (meta-progresión, sorte cruzado, pantalla de colección, selección de mazo).
+**Próximo hito:** H3 (cierre de ciclo jugable de combate base — activar habilidades, generar energía, pool de Núcleos ajustado).
+
+---
+
+### H3: Cierre del ciclo jugable de combate — cableado de input, Generar Energía, ajuste de pool
+
+**Objetivo:** completar las piezas centrales faltantes para que el combate sea realmente jugable: permitir que el jugador active habilidades del Líder vía input táctil, implementar la acción "Generar Energía" como decisión explícita de ritmo, y ajustar el tamaño del pool de Núcleos a 8 para mejorar la varianza de color. Todos los cambios son de alcance cerrado: sin contenido nuevo, sin ampliación de mecánicas, solo pulimiento de lo que H1+H2 dejaron sin conectar.
+
+**Alcance:**
+- `packages/combat-scene/input`: cableado de tap a habilidad del Líder → comando `ACTIVATE_ABILITY`.
+- `packages/domain/combat`: comando `GENERATE_ENERGY` y su lógica (validación, aplicación, tests).
+- `packages/combat-scene/view` + `apps/shell/screens`: UI visual que comunique al jugador que "pasar turno" y "generar energía" es una opción real (botón o gesto).
+- Constante `DEFAULT_NUCLEO_POOL_SIZE` sube de 6 a 8; tests ajustados.
+
+**Criterio de éxito:**
+- Tap/clic en habilidad del Líder dispara `ACTIVATE_ABILITY` al engine, valida reglas, consume Núcleo, anima resultado.
+- Jugador puede elegir explícitamente "generar energía" en su turno (+1 de Energía, tope 5, consume 1 acción).
+- Pool de 8 fichas se rolla al vaciarse; tests de Núcleos pasan con nuevo tamaño.
+- Flujo de decisión en turno es claro: "jugar carta", "activar habilidad" o "generar energía".
+
+**Próximo hito:** H4 (meta-progresión, sorteo cruzado, pantalla de colección, selección de mazo).
