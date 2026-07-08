@@ -1,8 +1,0 @@
-{
-  "name": "The Collector",
-  "short_name": "Collector",
-  "display": "standalone",
-  "orientation": "portrait-primary",
-  "start_url": "/",
-  "icons": []
-}
