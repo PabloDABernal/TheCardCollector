@@ -58,6 +58,6 @@ async function readContent(relativePath: string): Promise<unknown> {
     const dataDir = join(dirname(here), '..', '..', '..', '..', 'packages', 'data');
     return JSON.parse(readFileSync(join(dataDir, relativePath), 'utf-8'));
   }
-  const response = await fetch(`/data/${relativePath}`);
+  const response = await fetch(`${import.meta.env.BASE_URL}data/${relativePath}`);
   return response.json() as Promise<unknown>;
 }
