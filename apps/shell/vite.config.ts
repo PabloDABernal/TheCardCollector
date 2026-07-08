@@ -34,7 +34,7 @@ export default defineConfig({
         // copiados a public/data (mismo criterio "cache-first para el catálogo hoy empaquetado" de
         // decisions.md/architecture_stack.md §4.1 — Workbox precachea todo lo que matchea el glob,
         // sirviéndolo cache-first por defecto una vez precacheado).
-        globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,png,svg,woff2,json}'],
         // Runtime caching explícito para los datos de catálogo bajo /data/**: NetworkFirst, no
         // CacheFirst — aunque hoy el catálogo va empaquetado (precacheado igualmente por el glob
         // anterior), esta regla deja funcionando de fábrica la migración futura a catálogo remoto
