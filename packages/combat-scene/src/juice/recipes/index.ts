@@ -1,0 +1,31 @@
+import type { SoundManager } from '../../audio/sound-manager';
+import type { JuiceRecipeRegistry } from '../juice-recipe';
+import { diceRoll } from './dice-roll';
+import { cardFlip } from './card-flip';
+import { hitImpact } from './hit-impact';
+import { screenShake } from './screen-shake';
+import { cooldownReady } from './cooldown-ready';
+import { floatingNumber } from './floating-number';
+import { soundOnly } from './sound-only';
+import { createCombatOutcomeSoundRecipe } from './combat-outcome-sound';
+
+/** H2.5 spec §4 — registro id→implementación real (sustituye `STUB_RECIPE_REGISTRY` de H2.4).
+ *  H2.10 añade `cooldownReady` (5º id). H2.11 añade `floatingNumber` (6º id).
+ *
+ *  H2.13 — pasa de objeto estático (`RECIPE_REGISTRY`) a fábrica `createRecipeRegistry(soundManager)`:
+ *  `combatOutcomeSound` es la primera receta que necesita un servicio inyectado (`SoundManager`)
+ *  distinto de `scene`/`target`/`params` ya provistos por el contrato de `JuiceRecipe` — no cabe
+ *  como singleton estático. Todos los callers (`CombatScene.ts`, `main.ts`, tests) deben migrar de
+ *  `RECIPE_REGISTRY` (import directo) a `createRecipeRegistry(soundManager)`. */
+export function createRecipeRegistry(soundManager: SoundManager): JuiceRecipeRegistry {
+  return {
+    diceRoll,
+    cardFlip,
+    hitImpact,
+    screenShake,
+    cooldownReady,
+    floatingNumber,
+    soundOnly, // NUEVO H2.13
+    combatOutcomeSound: createCombatOutcomeSoundRecipe(soundManager), // NUEVO H2.13
+  };
+}

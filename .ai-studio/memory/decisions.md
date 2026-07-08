@@ -113,3 +113,17 @@ Resuelven las 4 ambigüedades que Coordinator señaló al desglosar la Épica E2
 - **H2.15 (PWA) se mantiene dentro de H2, no se difiere a H3.** *Por qué:* decisions.md ya fija "móvil primero" como prioridad explícita; probar el vertical slice en condiciones reales de móvil desde el principio evita descubrir tarde problemas de instalabilidad/rendimiento táctil.
 - **Audio de H2.13: stub/tonos genéricos para este MVP, no audio real.** Usar `tone()` de Phaser o placeholders royalty-free; el arte de sonido real se hace en una iteración posterior, cuando el feel visual ya esté validado.
 - **Recetas de juice (H2.5): 4 recetas base (diceRoll, cardFlip, hitImpact, screenShake), sin historia separada para particleBurst/hitStop.** Ambos efectos quedan embebidos (particleBurst dentro de diceRoll, hitStop opcional dentro de hitImpact) en vez de ser historias independientes. *Por qué:* menos historias que gestionar para el mismo resultado visual inicial; se pueden separar más adelante si el feel lo pide.
+
+## 2026-07-06 — H2.7 InputAdapter: re-secuenciación de alcance (Architect)
+
+`architecture_stack.md` §4.3 y el texto literal de H2.7 en backlog.md describían un InputAdapter que emite `PlayerIntent` de dominio (ej. `SELECT_CARD`, `CONFIRM_TARGET`), pero eso asume sprites reales de tablero/Núcleos/cartas que todavía no existen — son de H2.8 ("Renderización de tablero, Núcleos, cartas"), la historia siguiente.
+
+- **H2.7 se redefine como clasificación genérica de gestos (tap/drag/long-press → `PointerGesture`), sin traducir todavía a `PlayerIntent` de dominio.** La traducción final a intents semánticos del juego (qué significa "tocar este objeto" en términos de Núcleos/cartas/habilidades) queda diferida a H2.8/H2.9, cuando ya existan sprites reales con `targetId` que interpretar.
+- *Por qué:* implementar la semántica de dominio ahora sería inventar sobre objetos que no existen; la capa de gestos (con qué umbrales de tiempo/distancia se distingue un tap de un drag o un long-press) es genuinamente independiente de qué signifique cada gesto en el juego, y puede construirse y testearse en aislamiento sin bloquear el resto de la Épica E2.
+
+## 2026-07-06 — H2.10 "Cooldowns visuales": re-secuenciación de alcance (Architect)
+
+El título de H2.10 en backlog.md ("Cooldowns visuales (CD en cartas)") es una imprecisión heredada: el motor de dominio (`packages/domain/combat/src/types/cooldown.ts`/`config.ts`) solo modela cooldown sobre `AbilityId`+`side` (habilidades de Líder/Enemigo) — las cartas de la mano NUNCA tienen cooldown propio, solo coste de Energía (ya atenuado visualmente desde H2.8).
+
+- **H2.10 se redefine como mejora de la representación visual de los cooldowns de HABILIDADES** (Líder y Enemigo), que ya se mostraban como texto plano en `role-view.ts` desde H2.8 — no se inventa ningún cooldown de carta que no existe en el dominio.
+- *Por qué:* el nombre de la historia asumía un concepto (CD de carta) que el motor de reglas nunca implementó (decisión ya cerrada desde H1: el CD pertenece a la habilidad, no a la carta que la activa). Redirigir el esfuerzo a lo que sí existe evita trabajo especulativo y mantiene la historia útil (mejorar el "feel" de un dato ya real, en vez de construir uno ficticio).

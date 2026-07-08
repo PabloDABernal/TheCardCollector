@@ -1,6 +1,7 @@
 import type { RandomSource } from '@collector/domain-shared';
 import type { Catalog, LeaderDefinition, EnemyDefinition, ScenarioDefinition, CardDefinition } from '@collector/domain-catalog';
 import type { AbilityDefinition } from '@collector/domain-catalog';
+import type { KeywordId } from '@collector/domain-catalog';
 import type { CombatEngineConfig } from './types/config';
 import type { CombatSide } from './types/turn';
 import type { AbilityId, CardId, CoreCostRequirement } from '@collector/domain-shared';
@@ -123,26 +124,46 @@ function buildPlayableCardDefinition(card: CardDefinition): PlayableCardDefiniti
   return { energyCost: card.cost.energy, ...(effect ? { effect } : {}) };
 }
 
+/** NUEVO H2.9 (spec §4.2.1). `true` si `card.keywords` contiene alguna keyword de ataque —
+ *  exactamente el mismo vocabulario que `resolveKeywordEffect` ya usa para producir
+ *  `{ kind: 'ATTACK_ENEMY', ... }`. Pura, sin side-effects, reutilizable fuera de
+ *  `domain/combat` sin exponer `resolveKeywordEffect` completo (que construye la fórmula,
+ *  no solo el booleano). */
+const ATTACK_KEYWORDS: readonly KeywordId[] = ['ATAQUE', 'ATAQUE_MAS_X', 'ATAQUE_POR_X'];
+
+export function cardHasAttackEffect(card: CardDefinition): boolean {
+  return card.keywords.some((k) => ATTACK_KEYWORDS.includes(k.keyword));
+}
+
 function resolveKeywordEffect(card: CardDefinition): PlayableCardEffectDefinition | undefined {
   const found: PlayableCardEffectDefinition[] = [];
 
+  if (cardHasAttackEffect(card)) {
+    for (const k of card.keywords) {
+      switch (k.keyword) {
+        case 'ATAQUE':
+          found.push({ kind: 'ATTACK_ENEMY', formula: { baseFormula: { kind: 'VALUE' } } });
+          break;
+        case 'ATAQUE_MAS_X':
+          found.push({
+            kind: 'ATTACK_ENEMY',
+            formula: { baseFormula: { kind: 'ADD', amount: k.amount as number } },
+          });
+          break;
+        case 'ATAQUE_POR_X':
+          found.push({
+            kind: 'ATTACK_ENEMY',
+            formula: { baseFormula: { kind: 'MULTIPLY', amount: k.amount as number } },
+          });
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
   for (const k of card.keywords) {
     switch (k.keyword) {
-      case 'ATAQUE':
-        found.push({ kind: 'ATTACK_ENEMY', formula: { baseFormula: { kind: 'VALUE' } } });
-        break;
-      case 'ATAQUE_MAS_X':
-        found.push({
-          kind: 'ATTACK_ENEMY',
-          formula: { baseFormula: { kind: 'ADD', amount: k.amount as number } },
-        });
-        break;
-      case 'ATAQUE_POR_X':
-        found.push({
-          kind: 'ATTACK_ENEMY',
-          formula: { baseFormula: { kind: 'MULTIPLY', amount: k.amount as number } },
-        });
-        break;
       case 'TRAMA_X':
         found.push({ kind: 'PLOT', amount: k.amount as number });
         break;

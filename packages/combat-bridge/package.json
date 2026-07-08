@@ -1,0 +1,17 @@
+{
+  "name": "@collector/combat-bridge",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@collector/domain-shared": "*",
+    "@collector/domain-combat": "*"
+  },
+  "devDependencies": {
+    "@collector/domain-catalog": "*"
+  }
+}

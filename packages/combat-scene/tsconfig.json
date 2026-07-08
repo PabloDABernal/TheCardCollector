@@ -9,6 +9,7 @@
   "references": [
     { "path": "../domain/shared" },
     { "path": "../domain/catalog" },
-    { "path": "../domain/combat" }
+    { "path": "../domain/combat" },
+    { "path": "../combat-bridge" }
   ]
 }

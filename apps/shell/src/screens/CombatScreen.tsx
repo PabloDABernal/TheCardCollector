@@ -1,8 +1,111 @@
+import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import Phaser from 'phaser';
+import { CombatScene, COMBAT_SCENE_VIEWPORT } from '@collector/combat-scene';
+import type { CombatBridge } from '@collector/combat-bridge';
+import { buildCombatSetup } from '../combat/build-combat-setup';
+import { useCombatSnapshot } from '../combat/use-combat-snapshot';
+import { CombatHud } from '../combat/CombatHud';
+import { CombatResultModal } from '../combat/CombatResultModal';
+import { LEADER_OPTIONS, DEFAULT_LEADER_OPTION } from '../combat/leader-options';
+import type { RunStartNavigationState } from '../combat/run-start-navigation-state';
+
+/**
+ * H2.9 — reescritura completa: sustituye el placeholder vacío de H2.2. Patrón estándar de
+ * "librería imperativa dentro de React": `ref` al contenedor DOM + `useEffect` que construye el
+ * recurso externo en el montaje y lo destruye en el cleanup.
+ *
+ * H2.14 — lee `location.state` (navegación desde `RunStartScreen`) para saber qué Líder eligió el
+ * jugador; si se monta sin `state` (navegación directa a `/combat`, tests existentes, o futuro
+ * deep-link), usa el mismo Líder por defecto de siempre (`DEFAULT_LEADER_OPTION`). El array de
+ * dependencias del efecto pasa a `[leaderId]` (spec §3.3) — sin cambio de comportamiento observable
+ * respecto a `[]`, ya que React Router desmonta/remonta `CombatScreen` en cada navegación real a la
+ * misma ruta con `state` distinto.
+ */
 export function CombatScreen(): JSX.Element {
+  const location = useLocation();
+  const requestedLeaderId = (location.state as RunStartNavigationState | null)?.leaderId;
+  // H2.14 bug fix (Reviewer): saneamos el `leaderId` UNA sola vez contra `LEADER_OPTIONS` — el mismo
+  // id ya validado se usa tanto para `leaderName` (HUD) como para `buildCombatSetup`, evitando que
+  // este último reciba un id no validado (ej. navegación con `state` manipulado) que provocaría un
+  // `TypeError` opaco más abajo en `catalog.leaders.get(...)!`.
+  const leaderOption =
+    LEADER_OPTIONS.find((option) => option.leaderId === requestedLeaderId) ?? DEFAULT_LEADER_OPTION;
+  const leaderId = leaderOption.leaderId;
+  const leaderName = leaderOption.label;
+
+  const mountRef = useRef<HTMLDivElement>(null);
+  const [bridge, setBridge] = useState<CombatBridge | null>(null);
+
+  useEffect(() => {
+    let game: Phaser.Game | null = null;
+    let cancelled = false; // guarda contra doble-construcción si el efecto se limpia antes de que
+                            // buildCombatSetup() resuelva (StrictMode monta/desmonta en dev)
+
+    void buildCombatSetup({ leaderId }).then(({ bridge: newBridge, boardContext }) => {
+      if (cancelled) return;
+      game = new Phaser.Game({
+        type: Phaser.AUTO,
+        width: COMBAT_SCENE_VIEWPORT.width,
+        height: COMBAT_SCENE_VIEWPORT.height,
+        parent: mountRef.current!, // elemento DOM real, no un id de string — evita colisión si
+                                    // hubiera más de un <CombatScreen> montado
+        scale: {
+          mode: Phaser.Scale.FIT,
+          autoCenter: Phaser.Scale.CENTER_BOTH,
+          width: COMBAT_SCENE_VIEWPORT.width,
+          height: COMBAT_SCENE_VIEWPORT.height,
+        },
+        scene: [], // se añade/arranca a mano abajo, para poder pasarle `CombatSceneInitData` en
+                   // el `start()` (Phaser no permite inyectar `data` de init a una escena listada
+                   // directamente en `scene: [...]` de la config del Game).
+      });
+      game.events.once(Phaser.Core.Events.READY, () => {
+        const scene = game!.scene.add('CombatScene', CombatScene, false);
+        game!.scene.start('CombatScene', { bridge: newBridge, boardContext });
+        void scene; // solo para dejar constancia del mismo patrón que main.ts (H2.7)
+      });
+      setBridge(newBridge); // dispara el montaje del HUD React tan pronto el bridge existe, sin
+                            // esperar a que Phaser termine su propio arranque asíncrono
+    });
+
+    return () => {
+      cancelled = true;
+      game?.destroy(true); // true: también remueve el <canvas> del DOM
+    };
+  }, [leaderId]);
+
   return (
-    <div>
-      <p>Combate — pantalla pendiente de montar Phaser (ver H2.9).</p>
-      <div id="phaser-mount" />
+    <div style={{ position: 'relative' }}>
+      <div ref={mountRef} id="phaser-mount" />
+      {!bridge && <p>Cargando combate…</p>}
+      {bridge && <CombatHudOverlay bridge={bridge} leaderName={leaderName} />}
     </div>
+  );
+}
+
+/**
+ * "Chrome" no-juice de React, montado como overlay/portal SOBRE el canvas
+ * (`architecture_stack.md` §2.3), nunca dentro de él. Separado en su propio componente para
+ * poder usar el hook `useCombatSnapshot` solo una vez `bridge` existe (evita el caso
+ * `bridge === null` dentro del hook).
+ */
+function CombatHudOverlay({
+  bridge,
+  leaderName,
+}: {
+  readonly bridge: CombatBridge;
+  readonly leaderName: string;
+}): JSX.Element {
+  const snapshot = useCombatSnapshot(bridge);
+  return (
+    <>
+      <CombatHud
+        snapshot={snapshot}
+        onEndTurn={() => bridge.dispatch({ type: 'END_TURN' })}
+        leaderName={leaderName}
+      />
+      {snapshot.status !== 'IN_PROGRESS' && <CombatResultModal snapshot={snapshot} />}
+    </>
   );
 }

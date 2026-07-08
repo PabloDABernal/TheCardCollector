@@ -11,6 +11,7 @@
     "packages/data",
     "packages/cli",
     "packages/combat-scene",
+    "packages/combat-bridge",
     "packages/ui-shared",
     "apps/shell"
   ],

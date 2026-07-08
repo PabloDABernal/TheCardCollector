@@ -18,7 +18,8 @@ export default tseslint.config(
         { type: 'cli', pattern: 'packages/cli/**' }, // NUEVO H1.19 — ver spec §0.1
         { type: 'combat-scene', pattern: 'packages/combat-scene/**' }, // NUEVO H2.1
         { type: 'ui-shared', pattern: 'packages/ui-shared/**' }, // NUEVO H2.1
-        { type: 'shell', pattern: 'apps/shell/**' } // NUEVO H2.2
+        { type: 'shell', pattern: 'apps/shell/**' }, // NUEVO H2.2
+        { type: 'combat-bridge', pattern: 'packages/combat-bridge/**' } // NUEVO H2.3
       ]
     },
     rules: {
@@ -30,9 +31,10 @@ export default tseslint.config(
           { from: 'domain-combat', allow: ['domain-shared', 'domain-catalog'] },
           { from: 'data', allow: [] },
           { from: 'cli', allow: ['domain-shared', 'domain-catalog', 'domain-combat'] }, // NUEVO H1.19
-          { from: 'combat-scene', allow: ['domain-shared', 'domain-catalog', 'domain-combat'] },
+          { from: 'combat-scene', allow: ['domain-shared', 'domain-catalog', 'domain-combat', 'combat-bridge'] }, // AMPLIADA H2.3
           { from: 'ui-shared', allow: [] },
-          { from: 'shell', allow: ['domain-shared', 'domain-catalog', 'domain-combat', 'combat-scene', 'ui-shared'] }
+          { from: 'shell', allow: ['domain-shared', 'domain-catalog', 'domain-combat', 'combat-scene', 'combat-bridge', 'ui-shared'] }, // AMPLIADA H2.3
+          { from: 'combat-bridge', allow: ['domain-shared', 'domain-combat'] } // NUEVO H2.3
         ]
       }]
     }

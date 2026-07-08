@@ -28,11 +28,16 @@ Se propone un monorepo con separación estricta por capas de dependencia (worksp
     /progression       # Colección permanente, matriz de completitud, Créditos, sobres
     /shared            # Tipos/utilidades comunes (ids, resultados, RNG determinista, event bus genérico)
 
-  /combat-scene      # Phaser. Consume /domain, nunca al revés.
+  /combat-scene      # Phaser. Consume /domain y /combat-bridge, nunca al revés.
     /scenes            # CombatScene, BoardScene (si se separa preload/board)
     /juice             # Recetas de efectos, EffectsDirector, config de mapeo evento→efecto (sección 3)
     /input             # InputAdapter: gestos táctiles/ratón → intents semánticos (sección 4)
     /view              # Traducción de estado de dominio a game objects (cartas, dados, tablero)
+
+  /combat-bridge     # NUEVO H2.3 — puente React↔Phaser (sección 2). Paquete neutral: sin 'react' ni
+                      # 'phaser' como dependencia runtime, consumido tanto por /combat-scene como por
+                      # /apps/shell (ver justificación de boundaries en docs/specs/H2.3_combat_bridge.md
+                      # §0.3 — enmienda a la ubicación originalmente descrita aquí, "apps/shell/combat-bridge").
 
   /ui-shared         # Componentes React reutilizables entre pantallas del shell (design system "habitación del coleccionista")
 
@@ -41,9 +46,9 @@ Se propone un monorepo con separación estricta por capas de dependencia (worksp
 
 /apps
   /shell             # React + Vite (o equivalente). Pantallas de menú, inicio de run, colección/deckbuilding,
-                      # descanso entre combates, economía. Aloja al <CombatScreen> que monta Phaser.
+                      # descanso entre combates, economía. Aloja al <CombatScreen> que monta Phaser, e
+                      # instancia el CombatBridge (de /packages/combat-bridge) inyectándolo a React/Phaser.
     /screens
-    /combat-bridge     # Puente React↔Phaser (sección 2)
     /pwa               # manifest, service worker, iconos (sección 4)
 ```
 
@@ -52,13 +57,21 @@ Se propone un monorepo con separación estricta por capas de dependencia (worksp
 ```mermaid
 graph LR
   data[/packages/data/] --> domain
-  domain[/packages/domain/] --> combatscene[/packages/combat-scene/]
+  domain[/packages/domain/] --> combatbridge[/packages/combat-bridge/]
+  domain --> combatscene[/packages/combat-scene/]
   domain --> shell[/apps/shell/]
+  combatbridge --> combatscene
+  combatbridge --> shell
   combatscene --> shell
   uishared[/packages/ui-shared/] --> shell
 ```
 
-`domain` no importa `react` ni `phaser` en ningún punto. `combat-scene` importa `domain` pero nunca al revés. Esto es lo que garantiza que las reglas del GDD se puedan testear con un test runner puro (unit tests contra `CombatEngine`), sin levantar Phaser ni un DOM.
+`domain` no importa `react` ni `phaser` en ningún punto. `combat-scene` importa `domain` y `combat-bridge`
+pero nunca al revés. `combat-bridge` (NUEVO H2.3) es, igual que `domain`, agnóstico de framework — no
+importa `react` ni `phaser` — y es consumido tanto por `combat-scene` como por `shell` sin que ninguno de
+los dos dependa del otro para acceder a él (ver `docs/specs/H2.3_combat_bridge.md` §0.3). Esto es lo que
+garantiza que las reglas del GDD se puedan testear con un test runner puro (unit tests contra
+`CombatEngine`), sin levantar Phaser ni un DOM.
 
 ---
 
@@ -115,7 +128,10 @@ type CombatEvent =
 ```
 
 ```
-// apps/shell/combat-bridge — instancia única por combate
+// packages/combat-bridge — instancia única por combate, agnóstica de framework (NUEVO H2.3;
+// ver docs/specs/H2.3_combat_bridge.md §0.3 — enmienda a la ubicación "apps/shell/combat-bridge"
+// originalmente descrita en esta sección). apps/shell instancia CombatBridge con un CombatEngine
+// ya construido y la inyecta a React/Phaser; el código de la clase vive en este paquete neutral.
 interface CombatBridge {
   readonly engine: CombatEngine
   subscribeHudEvents(listener: (e: CombatEvent) => void): Unsubscribe   // consumido por React (HUD no-juice)
@@ -151,6 +167,12 @@ packages/combat-scene/juice/
 ```
 
 ### 3.2 Contratos
+
+> **Nota (H2.4):** los contratos de `JuiceRecipe`/`EffectsDirector`/`JuiceConfig` mostrados a continuación
+> usan nombres de evento de un sketch previo a H1.3 (`CORE_ROLLED`, `DAMAGE_DEALT`, `PLOT_CHANGED`). El
+> contrato vigente, contra el `CombatEvent` real (23 variantes, `packages/domain/combat/src/types/events.ts`),
+> vive en `docs/specs/H2.4_effects_director.md` §2-§4 — mismo tipo de enmienda que H2.3 §0.3 aplicó a la
+> ubicación de `CombatBridge`.
 
 ```
 // packages/combat-scene/juice
@@ -286,7 +308,7 @@ graph TD
   shared[domain/shared] --> combatEngine
   shared --> runEngine
 
-  combatEngine --> bridge[apps/shell/combat-bridge]
+  combatEngine --> bridge[packages/combat-bridge]
   runEngine --> shellScreens[apps/shell/screens]
   progression --> shellScreens
 
