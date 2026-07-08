@@ -9,11 +9,24 @@
 > pseudocódigo de algoritmo y diagramas de flujo en texto. El Programmer implementa
 > contra esto.
 >
+> **Actualización 2026-07-08 (misma fecha, entrada posterior de decisions.md — "Vida de
+> Secuaz: mecánica mínima para HP propia"):** el Game Designer cerró el vacío que §3.2.1
+> de esta spec había dejado documentado como "gap, fuera de alcance" (Secuaces sin vida,
+> `HIGHEST_LIFE` no implementable). **§3.2, §3.2.1 y §3.8 quedan sustituidos** por el
+> nuevo §3.9 de esta misma sección, que añade vida a `MinionDefinition`/`MinionInPlay`
+> (paralelo directo a `AllyCardDefinition`/`AllyInPlay`, H1.15), un flujo de targeting
+> explícito de ataque del jugador (Enemigo o Secuaz, sin bloqueo automático salvo
+> Defensor) y `HIGHEST_LIFE`/`LOWEST_LIFE` en `MinionSelectionCriterion`. No se borra
+> texto antiguo (mismo criterio de todo este documento) — §3.2.1 se marca inline como
+> sustituida en vez de eliminarse.
+>
 > **Historias que esta spec cierra/reabre** (ver `.ai-studio/memory/backlog.md`):
 > H1.3 (reescrita), H1.13 (tests a reescribir contra el nuevo modelo), H1.16 (rediseño
-> de comportamiento de Secuaces), H1.8 (nuevo campo de catálogo), H1.18 (nueva
-> evaluación de fin de combate + paso previo de turno), H3.4 (implementación completa
-> del nuevo modelo de Núcleos), H3.6 (implementación completa del paso previo de
+> de comportamiento de Secuaces **+ vida de Secuaz y targeting de ataque, §3.9 — amplía
+> el alcance/criterios de aceptación de H1.16 en backlog.md; Coordinator debe ampliarlos
+> en su próxima pasada, ver nota en §3.9.7**), H1.8 (nuevo campo de catálogo), H1.18
+> (nueva evaluación de fin de combate + paso previo de turno), H3.4 (implementación
+> completa del nuevo modelo de Núcleos), H3.6 (implementación completa del paso previo de
 > turno). Valida sin cambios de contrato: H3.1, H3.2, H3.3 (con una nota de UI en H3.5).
 >
 > **Convención de documento:** esta spec es deliberadamente un único documento porque
@@ -49,24 +62,28 @@ packages/domain/combat/src/
   nucleo-pool.test.ts          # RENOMBRADO → nucleo-table.test.ts — reescrito contra el nuevo modelo
   types/turn-phase.ts          # NUEVO — estado del paso previo gratuito del turno del Líder
   types/hand.ts                # NUEVO — mano/mazo de robo del Líder
-  types/minion-behavior.ts     # NUEVO — MinionBehaviorSpec, MinionSelectionCriterion
-  minion-ai.ts                 # NUEVO — selectActingMinions (pura), sustituye lógica ad-hoc
+  types/minion.ts              # MODIFICADO — +maxLife/life en MinionDefinition/MinionInPlay (§3.9.1)
+  types/minion-behavior.ts     # NUEVO/MODIFICADO — MinionBehaviorSpec, MinionSelectionCriterion +HIGHEST_LIFE/LOWEST_LIFE (§3.9.4)
+  types/combat-target.ts       # NUEVO — AttackTarget (targeting explícito Enemigo/Secuaz, §3.9.2)
+  minion-ai.ts                 # NUEVO/MODIFICADO — selectActingMinions (pura), sustituye lógica ad-hoc; +HIGHEST_LIFE/LOWEST_LIFE (§3.9.4)
   types/victory-condition.ts   # NUEVO — AlternativeVictoryCondition (mirror de domain/catalog)
   types/config.ts              # MODIFICADO — tableMaxDice, leaderDeckCardIds, alternativeVictoryConditions, dramaturgiaDeck pasa a full DramaturgiaCardDefinition
   types/snapshot.ts            # MODIFICADO — nucleoTable reemplaza nucleoPool; +leaderHand, +freeStepState
-  types/commands.ts            # MODIFICADO — +DRAW_OR_GENERATE, +DRAW_CARD, +ADD_EXTRA_NUCLEO_DIE (interno)
-  types/events.ts              # MODIFICADO — NUCLEO_TABLE_REROLLED reemplaza NUCLEO_POOL_ROLLED, +NUCLEO_DIE_ADDED, +LEADER_HAND_CARD_DRAWN, +LEADER_HAND_DRAW_SKIPPED, +ENERGY_GENERATE_SKIPPED, +FREE_STEP_RESOLVED, +MINION_ACTION_RESOLVED (repetible), COMBAT_ENDED +alternativeConditionKind
-  types/errors.ts              # MODIFICADO — +NUCLEO_ALREADY_SPENT, +CARD_NOT_IN_HAND, +FREE_STEP_ALREADY_TAKEN
-  combat-engine.ts             # MODIFICADO — ver §1.4, §2.4, §3.3, §4.3
-  catalog-adapter.ts           # MODIFICADO — dramaturgiaDeck pasa objetos completos; alternativeVictoryConditions; leaderDeckCardIds
+  types/commands.ts            # MODIFICADO — +DRAW_OR_GENERATE, +DRAW_CARD, +ADD_EXTRA_NUCLEO_DIE (interno); PLAY_CARD +target?: AttackTarget (§3.9.2)
+  types/playable-card.ts       # MODIFICADO — ATTACK_ENEMY effect +arrollar?: boolean (§3.9.3)
+  types/events.ts              # MODIFICADO — NUCLEO_TABLE_REROLLED reemplaza NUCLEO_POOL_ROLLED, +NUCLEO_DIE_ADDED, +LEADER_HAND_CARD_DRAWN, +LEADER_HAND_DRAW_SKIPPED, +ENERGY_GENERATE_SKIPPED, +FREE_STEP_RESOLVED, +MINION_ACTION_RESOLVED (repetible), +MINION_DAMAGED, +MINION_DEFEATED (§3.9.3), COMBAT_ENDED +alternativeConditionKind; ENEMY_DAMAGED pierde la restricción "nunca Secuaz"
+  types/errors.ts              # MODIFICADO — +NUCLEO_ALREADY_SPENT, +CARD_NOT_IN_HAND, +FREE_STEP_ALREADY_TAKEN, +PLAY_CARD_TARGET_REQUIRED, +ATTACK_TARGET_NOT_FOUND, +MUST_TARGET_DEFENSOR (§3.9.2)
+  combat-engine.ts             # MODIFICADO — ver §1.4, §2.4, §3.3, §3.9, §4.3
+  catalog-adapter.ts           # MODIFICADO — dramaturgiaDeck pasa objetos completos; alternativeVictoryConditions; leaderDeckCardIds; minionDefinitions +maxLife
 
 packages/domain/catalog/src/
   types/dramaturgia-card.ts    # MODIFICADO — +minionBehavior?: MinionBehaviorSpec
-  types/minion-behavior.ts     # NUEVO — mirror estructural (catalog no importa combat, mismo patrón que enemy-ai.ts)
+  types/minion-behavior.ts     # NUEVO/MODIFICADO — mirror estructural (catalog no importa combat, mismo patrón que enemy-ai.ts); +HIGHEST_LIFE/LOWEST_LIFE
   types/enemy.ts               # MODIFICADO — +alternativeVictoryConditions?
   types/scenario.ts            # MODIFICADO — +alternativeVictoryConditions?
   types/victory-condition.ts   # NUEVO — mirror estructural
-  validation/schema.ts         # MODIFICADO — valida minionBehavior, alternativeVictoryConditions
+  types/minion.ts              # MODIFICADO (si existe definición de catálogo propia del Secuaz — ver nota §3.9.1) — +maxLife
+  validation/schema.ts         # MODIFICADO — valida minionBehavior, alternativeVictoryConditions, maxLife de Secuaz
 
 packages/combat-scene/view/    # MODIFICADO — ver §5
 packages/combat-scene/juice/   # MODIFICADO (JuiceConfig, fuera de alcance de esta spec en detalle) — ver §5
@@ -640,7 +657,9 @@ import type { MinionDefinitionId } from './minion'; // si no existe ya un tipo d
 export type MinionSelectionCriterion =
   | { readonly kind: 'ALL' }                                            // "Tus secuaces atacan"
   | { readonly kind: 'RANDOM_ONE' }                                     // azar EXPLÍCITO de contenido, no del motor por defecto
-  | { readonly kind: 'HIGHEST_PLANO_ATTACK' }                           // proxy MVP de "el más fuerte" — ver §3.2.1
+  | { readonly kind: 'HIGHEST_PLANO_ATTACK' }                           // "el más fuerte" (ataque plano más alto)
+  | { readonly kind: 'HIGHEST_LIFE' }                                   // NUEVO §3.9.4 — "el secuaz con más vida ACTUAL"
+  | { readonly kind: 'LOWEST_LIFE' }                                    // NUEVO §3.9.4 — "el secuaz con menos vida ACTUAL" (rematar al debilitado)
   | { readonly kind: 'SPECIFIC_DEFINITION'; readonly minionDefinitionId: MinionDefinitionId }; // "el Secuaz X actúa"
 
 export interface MinionBehaviorSpec {
@@ -655,20 +674,26 @@ estructural intencional que `EnemyAbilityBranch`/`EnemyAbilityTier` entre
 `enemy.ts` como *"catalog no puede importar ese validador"* — aquí aplica la misma regla
 de dirección de dependencia, `catalog` nunca importa `combat`).
 
-#### 3.2.1 Gap documentado: `HIGHEST_LIFE` no es implementable todavía
+#### 3.2.1 ⚠️ SUSTITUIDA por §3.9 — `HIGHEST_LIFE` ya es implementable
 
-El ejemplo textual de decisions.md es *"Ataca el secuaz con más vida"* — pero
-`MinionInPlay`/`MinionDefinition` (H1.16 original) **no tienen campo de vida** (nota
-explícita en `types/minion.ts`: *"Sin campo de vida... no existe todavía ningún
-mecanismo por el que el jugador dañe al Enemigo o a sus Secuaces"*). Añadir vida a los
-Secuaces es una historia de contenido/sistema propia (fuera de alcance de este cierre
-de loop — el Director Creativo no lo pidió explícitamente, solo dio un ejemplo
-ilustrativo). **Esta spec NO añade vida a los Secuaces** y sustituye ese ejemplo por
-`HIGHEST_PLANO_ATTACK` (criterio real y disponible hoy) como el criterio "ataca el más
-fuerte" del contenido de juguete. Se señala explícitamente a Coordinator: si el
-Director Creativo confirma que quiere `HIGHEST_LIFE` en contenido real (no solo de
-juguete), hace falta una historia nueva que añada vida/daño a Secuaces antes de que el
-catálogo pueda usar ese criterio — no bloquea el cierre del loop jugable actual.
+Esta subsección documentaba el gap: *"Ataca el secuaz con más vida"* no era
+implementable porque `MinionInPlay`/`MinionDefinition` (H1.16 original) no tenían campo
+de vida, y proponía sustituir ese ejemplo por `HIGHEST_PLANO_ATTACK` como proxy
+temporal. **Se conserva el texto original abajo como archivo histórico (nunca se borra
+texto antiguo), pero queda sustituida por completo**: el Game Designer cerró el vacío el
+mismo día (decisions.md, "Vida de Secuaz: mecánica mínima para HP propia") y confirmó
+vida propia para los Secuaces. §3.9 añade `maxLife`/`life` a `MinionDefinition`/
+`MinionInPlay` (paralelo a Aliados, H1.15) y `HIGHEST_LIFE`/`LOWEST_LIFE` ya están en el
+union de §3.2 arriba, operando sobre vida ACTUAL. `HIGHEST_PLANO_ATTACK` NO se elimina
+del vocabulario — sigue siendo un criterio válido e independiente (el Enemigo puede
+querer "el que más pega" en vez de "el que más vida tiene"); ambos coexisten.
+
+> Texto original (histórico, ya no aplica): *"El ejemplo textual de decisions.md es
+> 'Ataca el secuaz con más vida' — pero `MinionInPlay`/`MinionDefinition` (H1.16
+> original) no tienen campo de vida (...). Añadir vida a los Secuaces es una historia de
+> contenido/sistema propia (fuera de alcance de este cierre de loop...). Esta spec NO
+> añade vida a los Secuaces y sustituye ese ejemplo por `HIGHEST_PLANO_ATTACK` (...) — no
+> bloquea el cierre del loop jugable actual."*
 
 ### 3.3 `DramaturgiaCardDefinition` — campo nuevo
 
@@ -875,6 +900,365 @@ Ningún `CombatCommandError` nuevo — `RESOLVE_MINION_ACTION` sigue sin payload
       actúa).
 - [ ] `catalog-adapter.ts` actualizado para pasar `DramaturgiaCardDefinition[]` completo
       en vez de mapear a solo `.icon` (§3.4).
+- [ ] Ver §3.9 para la Definition of Done completa de vida de Secuaz + targeting de
+      ataque + `HIGHEST_LIFE`/`LOWEST_LIFE` (§3.9.7) — es una extensión de esta misma
+      historia H1.16, no una historia aparte.
+
+---
+
+## 3.9 Vida de Secuaz y targeting explícito de ataque del jugador (extiende H1.16)
+
+> Cierra en diseño técnico la decisión de Game Designer registrada en
+> `.ai-studio/memory/decisions.md` (2026-07-08, "Vida de Secuaz: mecánica mínima para HP
+> propia") y `.ai-studio/memory/glossary.md` (términos "Vida de Secuaz" y
+> `minionBehavior` actualizado). Sustituye §3.2.1 (marcada arriba). Depende de §3.9.1-2
+> existiendo antes de que §3.2/§3.6 (`selectActingMinions`, `HIGHEST_LIFE`/`LOWEST_LIFE`)
+> tengan datos que leer — implementar en el orden 3.9.1 → 3.9.2 → 3.9.3 → 3.9.4.
+
+### 3.9.1 `MinionDefinition`/`MinionInPlay` — vida, paralelo directo a Aliado (H1.15)
+
+Mismo patrón exacto que `AllyCardDefinition.life`/`AllyInPlay.maxLife`/`AllyInPlay.life`
+(`packages/domain/combat/src/types/ally.ts`, citado arriba en este documento) — un campo
+fijo de vida máxima en la definición de catálogo, denormalizado a la instancia en mesa
+junto con la vida actual:
+
+```ts
+// packages/domain/combat/src/types/minion.ts — MODIFICADO
+export interface MinionDefinition {
+  readonly passiveEffect: MinionPassiveEffectDefinition;
+  readonly specialActionAbilityId?: AbilityId;
+  readonly planoAttackAmount: number;
+  readonly isDefensor: boolean;
+  /** NUEVO §3.9.1. Vida máxima del Secuaz — campo fijo de catálogo, igual patrón que
+   *  `AllyCardDefinition.life` (H1.15). Entero > 0 (un Secuaz sin vida no tiene sentido
+   *  de existir; a diferencia de `NucleoValue`, aquí NO se permite 0 como piso — un
+   *  Secuaz de 0 de vida está muerto por definición y `SUMMON_MINION` debe rechazarlo,
+   *  ver §3.9.3). No se calcula a partir de la vida del Enemigo ni es un valor global
+   *  compartido — decisions.md, punto 2. */
+  readonly maxLife: number;
+}
+
+export interface MinionInPlay {
+  readonly instanceId: CardInstanceId;
+  readonly definitionId: MinionDefinitionId;
+  readonly passiveEffect: MinionPassiveEffectDefinition;
+  readonly specialActionAbilityId?: AbilityId;
+  readonly planoAttackAmount: number;
+  readonly isDefensor: boolean;
+  /** NUEVO §3.9.1. Denormalizado de `MinionDefinition.maxLife` al invocar (mismo
+   *  patrón que `AllyInPlay.maxLife`). */
+  readonly maxLife: number;
+  /** NUEVO §3.9.1. Vida ACTUAL — es el campo que consumen `HIGHEST_LIFE`/`LOWEST_LIFE`
+   *  (§3.9.4), NO `maxLife` (decisions.md punto 4, explícito: "operan sobre vida
+   *  actual, no vida máxima"). */
+  readonly life: number;
+}
+```
+
+**Diferencia deliberada con `AllyInPlay` en el manejo de la muerte (ver §3.9.3):** un
+Aliado con `life === 0` permanece en `alliesInPlay` (H1.15 §0.6, "nunca se elimina...
+toda lectura de 'vivos' filtra explícitamente por `life > 0`"). Un Secuaz con `life`
+llegando a `<= 0` se **elimina de `minionsInPlay` de inmediato** (decisions.md punto 3:
+"sale de mesa de inmediato"). Esto significa que, a diferencia de Aliados,
+`minionsInPlay` nunca necesita el filtro `life > 0` — su sola presencia en el array ya
+implica `life > 0`. `selectActingMinions`/`MinionSelectionCriterion` (§3.2/§3.6) pueden
+asumir esto sin defensas adicionales.
+
+### 3.9.2 Targeting explícito: `AttackTarget` — nuevo tipo compartido
+
+```ts
+// packages/domain/combat/src/types/combat-target.ts (NUEVO)
+import type { CardInstanceId } from '@collector/domain-shared';
+
+/**
+ * decisions.md 2026-07-08 punto 1: el jugador elige explícitamente el objetivo de un
+ * ataque de un solo objetivo — Enemigo o cualquier Secuaz válido en mesa (referencia
+ * explícita: Marvel Champions). Tipo compartido — hoy solo lo usa
+ * `PlayableCardEffectDefinition.ATTACK_ENEMY` vía `PLAY_CARD` (§3.9.3), porque es el
+ * único efecto de daño de un solo objetivo que el Líder puede originar en el motor
+ * actual (`AbilityEffectDefinition.ATTACK` sigue restringido a `side: 'ENEMY'`,
+ * `ability-effect.ts` — ninguna habilidad de Líder tiene hoy un efecto ATTACK). Si una
+ * historia de contenido futura añade una "habilidad de Ataque" del Líder
+ * (`ACTIVATE_ABILITY` con un efecto de daño a un solo objetivo), debe reutilizar este
+ * mismo tipo y el mismo flujo de validación de §3.9.3 — no inventar un segundo
+ * mecanismo de targeting.
+ */
+export type AttackTarget =
+  | { readonly kind: 'ENEMY' }
+  | { readonly kind: 'MINION'; readonly minionInstanceId: CardInstanceId };
+```
+
+### 3.9.3 `PLAY_CARD` — target explícito, validación de Defensor, resolución de daño
+
+**Comando** (`types/commands.ts`, extiende la variante `PLAY_CARD` ya definida arriba en
+este documento):
+
+```ts
+| {
+    readonly type: 'PLAY_CARD';
+    readonly cardId: CardId;
+    readonly sourceId: string;
+    readonly nucleoInstanceId?: NucleoInstanceId;
+    /**
+     * NUEVO §3.9.2/§3.9.3. Objetivo explícito del ataque — OBLIGATORIO en tiempo de
+     * ejecución (no se puede forzar por tipos, igual que `nucleoInstanceId`, porque
+     * depende de `def.effect.kind` en runtime) si y solo si
+     * `PlayableCardEffectDefinition.effect.kind === 'ATTACK_ENEMY'`. Ausente/irrelevante
+     * para cualquier otro `effect.kind` (`PLOT`, `SHIELD`, ausente).
+     */
+    readonly target?: AttackTarget;
+  }
+```
+
+**`PlayableCardEffectDefinition.ATTACK_ENEMY`** gana `arrollar` (reutiliza la keyword ya
+definida para Aliados/Enemigo, `AbilityEffectDefinition.ATTACK.arrollar` — mismo
+significado, mismo patrón, decisions.md punto 3: *"se reutiliza la misma keyword
+Arrollar ya definida para Aliados en vez de inventar una nueva"*):
+
+```ts
+// types/playable-card.ts — MODIFICADO
+| {
+    readonly kind: 'ATTACK_ENEMY';
+    readonly formula: { readonly baseFormula: UmbralFormula; readonly bonusFormula?: UmbralFormula };
+    /** NUEVO §3.9.3. Solo tiene efecto cuando el `target` resuelto en tiempo de comando
+     *  es `MINION` y el golpe mata al Secuaz con exceso de daño — ver `applyPlayableCardEffect`
+     *  abajo. Sin efecto cuando el target es `ENEMY` (no hay "escudo" del Enemigo que
+     *  arrollar en el motor actual). Default false/ausente, mismo criterio que el resto
+     *  de usos de Arrollar. */
+    readonly arrollar?: boolean;
+  }
+```
+
+**Validación en `handlePlayCard`** (inserción en la cadena de validaciones ya descrita
+en este documento, después de resolver `nucleo` y antes de mutar estado):
+
+```ts
+let resolvedTarget: AttackTarget | undefined;
+if (def.effect?.kind === 'ATTACK_ENEMY') {
+  if (!command.target) {
+    return err({ code: 'PLAY_CARD_TARGET_REQUIRED', cardId: command.cardId });
+  }
+
+  // decisions.md punto 1, excepción Defensor: "fuerza prioridad de ser el objetivo
+  // cuando está en mesa". Si hay >=1 Secuaz Defensor vivo, CUALQUIER target que no sea
+  // uno de esos Defensores se rechaza — el jugador puede elegir ENTRE los Defensores si
+  // hay varios, pero no puede saltárselos.
+  const liveDefensores = this.minionsInPlay.filter((m) => m.isDefensor);
+  if (liveDefensores.length > 0) {
+    const targetsAllowedDefensor =
+      command.target.kind === 'MINION' &&
+      liveDefensores.some((m) => m.instanceId === command.target!.minionInstanceId);
+    if (!targetsAllowedDefensor) {
+      return err({
+        code: 'MUST_TARGET_DEFENSOR',
+        cardId: command.cardId,
+        defensorInstanceIds: liveDefensores.map((m) => m.instanceId),
+      });
+    }
+  }
+
+  if (command.target.kind === 'MINION') {
+    const minion = this.minionsInPlay.find((m) => m.instanceId === command.target!.minionInstanceId);
+    if (!minion) {
+      return err({ code: 'ATTACK_TARGET_NOT_FOUND', minionInstanceId: command.target.minionInstanceId });
+    }
+  }
+
+  resolvedTarget = command.target;
+}
+```
+
+**Resolución de daño** — `applyPlayableCardEffect` (ya definida arriba en este
+documento para el `effect.kind === 'ATTACK_ENEMY'`) se ramifica por `resolvedTarget.kind`
+en vez de asumir siempre Enemigo:
+
+```ts
+if (effect.kind === 'ATTACK_ENEMY') {
+  const resolution = resolveAbilityUmbral(effect.formula, (nucleo as NucleoInstance).value);
+  const rawAmount = resolution.baseResolvedValue; // sin cambios respecto al cálculo ya descrito
+
+  if (resolvedTarget.kind === 'ENEMY') {
+    // Camino EXISTENTE, sin cambios de comportamiento — ver bloque ya documentado
+    // arriba en este documento (this.enemyDamage += rawAmount; ENEMY_DAMAGED).
+  } else {
+    // NUEVO §3.9.3 — camino Secuaz.
+    const minion = this.minionsInPlay.find((m) => m.instanceId === resolvedTarget.minionInstanceId)!;
+    const lifeBefore = minion.life;
+    const lifeAfter = Math.max(0, lifeBefore - rawAmount);
+    const excess = Math.max(0, rawAmount - lifeBefore);
+    const died = lifeAfter <= 0;
+    const appliedDamageToEnemy = died && effect.arrollar ? excess : 0;
+
+    if (died) {
+      // decisions.md punto 3: "sale de mesa de inmediato" — a diferencia de Aliado
+      // (H1.15), NO se conserva en minionsInPlay con life=0.
+      this.minionsInPlay = this.minionsInPlay.filter((m) => m.instanceId !== minion.instanceId);
+    } else {
+      this.minionsInPlay = this.minionsInPlay.map((m) =>
+        m.instanceId === minion.instanceId ? { ...m, life: lifeAfter } : m
+      );
+    }
+    this.enemyDamage += appliedDamageToEnemy;
+
+    const dmgEvent: CombatEvent = {
+      type: 'MINION_DAMAGED',
+      cardId: command.cardId,
+      sourceId: command.sourceId,
+      nucleoSpent: nucleo as NucleoInstance,
+      minionInstanceId: minion.instanceId,
+      rawAmount,
+      lifeBefore,
+      lifeAfter,
+      died,
+      excess,
+      appliedDamageToEnemy,
+      enemyDamageAfter: this.enemyDamage,
+    };
+    events.push(dmgEvent);
+    this.eventBus.emit(dmgEvent);
+
+    if (died) {
+      const defeatedEvent: CombatEvent = {
+        type: 'MINION_DEFEATED',
+        instanceId: minion.instanceId,
+        definitionId: minion.definitionId,
+        cause: 'PLAYER_ATTACK',
+      };
+      events.push(defeatedEvent);
+      this.eventBus.emit(defeatedEvent);
+    }
+  }
+}
+```
+
+**`SUMMON_MINION`** gana una validación de constructor/comando (mismo estilo que otras
+validaciones de referencia cruzada de este documento): `MinionDefinition.maxLife` debe
+ser un entero `> 0`; el motor inicializa `MinionInPlay.life = maxLife` al invocar (no
+hay Secuaces que entren a mesa ya heridos en el MVP — puerta abierta a contenido futuro,
+mismo criterio que "efecto al morir" de decisions.md punto 3).
+
+### 3.9.4 `CombatEvent`/`CombatCommandError` — nuevos tipos
+
+```ts
+// types/events.ts — NUEVOS, mismo patrón que ALLY_DAMAGED (H1.15)/ENEMY_DAMAGED (H1.18)
+| {
+    readonly type: 'MINION_DAMAGED';
+    readonly cardId: CardId;
+    readonly sourceId: string;
+    readonly nucleoSpent: NucleoInstance;
+    readonly minionInstanceId: CardInstanceId;
+    readonly rawAmount: number;
+    readonly lifeBefore: number;
+    readonly lifeAfter: number;
+    readonly died: boolean;
+    /** Exceso sobre la vida del Secuaz (rawAmount - lifeBefore), ANTES de decidir Arrollar. */
+    readonly excess: number;
+    /** `excess` si `died && effect.arrollar`, si no 0 — mismo criterio que `ALLY_DAMAGED.appliedDamageToLeader`. */
+    readonly appliedDamageToEnemy: number;
+    readonly enemyDamageAfter: number;
+  }
+| {
+    /** NUEVO §3.9.3. Un Secuaz sale de mesa — sin trigger por defecto (decisions.md
+     *  punto 3). `cause` deja la puerta abierta a un futuro `'ON_DEATH_EFFECT'` u otras
+     *  fuentes de daño a Secuaz sin ampliar el tipo hoy más allá de lo que el motor
+     *  produce (solo `PLAYER_ATTACK` en esta historia). */
+    readonly type: 'MINION_DEFEATED';
+    readonly instanceId: CardInstanceId;
+    readonly definitionId: MinionDefinitionId;
+    readonly cause: 'PLAYER_ATTACK';
+  }
+```
+
+```ts
+// types/errors.ts — NUEVOS
+| { readonly code: 'PLAY_CARD_TARGET_REQUIRED'; readonly cardId: CardId }
+| { readonly code: 'ATTACK_TARGET_NOT_FOUND'; readonly minionInstanceId: CardInstanceId }
+| { readonly code: 'MUST_TARGET_DEFENSOR'; readonly cardId: CardId; readonly defensorInstanceIds: readonly CardInstanceId[] }
+```
+
+`ENEMY_DAMAGED` (ya definido en este documento para H1.18) pierde la restricción de
+comentario *"siempre objetivo directo, nunca Secuaz"* — sigue siendo el evento correcto
+para `resolvedTarget.kind === 'ENEMY'`, simplemente ya no es la única rama posible.
+
+### 3.9.5 `MinionSelectionCriterion.HIGHEST_LIFE`/`LOWEST_LIFE` — `selectActingMinions`
+
+Extiende el `switch` de `selectActingMinions` (§3.6, ya definida en este documento) con
+2 casos nuevos, mismo patrón de desempate que `HIGHEST_PLANO_ATTACK` (empate → 1 sola
+vía `randomSource.pick`):
+
+```ts
+case 'HIGHEST_LIFE': {
+  const max = Math.max(...minionsInPlay.map((m) => m.life));
+  const top = minionsInPlay.filter((m) => m.life === max);
+  return [top.length === 1 ? (top[0] as MinionInPlay) : randomSource.pick(top)];
+}
+case 'LOWEST_LIFE': {
+  const min = Math.min(...minionsInPlay.map((m) => m.life));
+  const bottom = minionsInPlay.filter((m) => m.life === min);
+  return [bottom.length === 1 ? (bottom[0] as MinionInPlay) : randomSource.pick(bottom)];
+}
+```
+
+Como `minionsInPlay` nunca contiene un Secuaz con `life <= 0` (§3.9.1, eliminación
+inmediata), no hace falta filtrar "vivos" aquí — a diferencia de un hipotético criterio
+sobre Aliados, donde sí habría que filtrar `life > 0` explícitamente.
+
+### 3.9.6 Impacto en la capa visual (H2) — extiende §5.3
+
+Se añaden 2 filas a la tabla de §5.3 (mismo criterio: sin recetas `JuiceConfig`
+concretas, solo qué debe ocurrir):
+
+| Evento (`CombatEvent.type`) | Qué debe pasar visualmente |
+|---|---|
+| `MINION_DAMAGED` | El sprite del Secuaz (mismo layout de mesa que ya usa H1.16/H2 para Secuaces) reproduce la receta `hitImpact` (H2.5) y actualiza su barra/indicador de vida a `lifeAfter`. |
+| `MINION_DEFEATED` | El sprite del Secuaz sale de mesa (animación de salida — reutilizar el lenguaje visual ya definido para muerte de Aliado en H1.15/H2 si existe, o una variante simple de fade/shrink si no). |
+
+`InputAdapter` (§5.4) gana, en la misma familia que `SELECT_NUCLEO_DIE`, un intent para
+targeting de ataque:
+
+```ts
+| { type: 'SELECT_ATTACK_TARGET', target: AttackTarget }
+```
+
+Emitido cuando el jugador, tras elegir jugar una carta con efecto `ATTACK_ENEMY`, hace
+tap en el sprite del Enemigo o en el sprite de un Secuaz — antes de que
+`CombatBridge.dispatch(PLAY_CARD)` incluya `target` en el comando final. Si hay un
+Defensor vivo en mesa, el HUD debe reflejar visualmente qué sprites son objetivo válido
+(mismo lenguaje que "solo puedes tocar esto"), aunque el motor sea la fuente de verdad
+del rechazo (`MUST_TARGET_DEFENSOR`) — decisión de UX de detalle, no de este documento.
+
+### 3.9.7 Definition of Done de §3.9 (extensión de H1.16)
+
+- [ ] `MinionDefinition.maxLife`, `MinionInPlay.maxLife`/`life` añadidos (§3.9.1).
+- [ ] `types/combat-target.ts` nuevo con `AttackTarget` (§3.9.2).
+- [ ] `PLAY_CARD` command gana `target?: AttackTarget`; `PlayableCardEffectDefinition.ATTACK_ENEMY`
+      gana `arrollar?: boolean` (§3.9.3).
+- [ ] `handlePlayCard`: validación `PLAY_CARD_TARGET_REQUIRED`, validación de Defensor
+      (`MUST_TARGET_DEFENSOR`), validación `ATTACK_TARGET_NOT_FOUND`, y la rama de
+      resolución de daño a Secuaz en `applyPlayableCardEffect` (§3.9.3).
+- [ ] `SUMMON_MINION` valida `maxLife > 0` e inicializa `life = maxLife`.
+- [ ] `CombatEvent` añade `MINION_DAMAGED`, `MINION_DEFEATED`; `CombatCommandError` añade
+      `PLAY_CARD_TARGET_REQUIRED`, `ATTACK_TARGET_NOT_FOUND`, `MUST_TARGET_DEFENSOR`
+      (§3.9.4).
+- [ ] `MinionSelectionCriterion` gana `HIGHEST_LIFE`/`LOWEST_LIFE`; `selectActingMinions`
+      implementa ambos casos con el mismo desempate por `randomSource.pick` que
+      `HIGHEST_PLANO_ATTACK` (§3.9.5).
+- [ ] Tests nuevos: atacar al Enemigo directamente con Secuaces vivos en mesa (sin
+      Defensor) sigue funcionando sin bloqueo; atacar a un Secuaz sin matarlo reduce
+      `life`; atacar a un Secuaz y matarlo lo elimina de `minionsInPlay`; exceso de daño
+      con `arrollar: true` pasa a `enemyDamage`, sin `arrollar` se pierde; con Defensor
+      vivo, intentar atacar al Enemigo o a un Secuaz no-Defensor devuelve
+      `MUST_TARGET_DEFENSOR`; `target` ausente en una carta `ATTACK_ENEMY` devuelve
+      `PLAY_CARD_TARGET_REQUIRED`; `HIGHEST_LIFE`/`LOWEST_LIFE` con semilla fija para
+      verificar reproducibilidad del desempate, incluyendo el caso de mesa con un único
+      Secuaz (ambos criterios deben devolverlo trivialmente).
+- [ ] **Nota para Coordinator (no se toca `backlog.md` desde esta spec):** el criterio de
+      aceptación de H1.16 en `backlog.md` debe ampliarse para cubrir (a) targeting
+      explícito de ataque del jugador Enemigo/Secuaz sin bloqueo automático, (b) la
+      keyword Defensor forzando prioridad de objetivo, (c) vida de Secuaz como campo de
+      catálogo y su consumo en muerte/Arrollar, y (d) `HIGHEST_LIFE`/`LOWEST_LIFE` como
+      criterios de Dramaturgia disponibles para contenido — hoy el texto de H1.16 en
+      backlog.md solo cubre la selección determinista por Dramaturgia sin estos 4 puntos.
 
 ---
 
@@ -884,11 +1268,17 @@ Ningún `CombatCommandError` nuevo — `RESOLVE_MINION_ACTION` sigue sin payload
 
 El motor solo puede evaluar condiciones sobre datos que YA mantiene en estado interno:
 `scenarioPlot`, `turnNumber`, `enemyDamage`, `leaderDamage`. **No** incluye
-`ALL_MINIONS_DEFEATED` (el ejemplo textual de decisions.md) porque los Secuaces no
-tienen vida ni mecanismo de derrota en el motor actual (mismo gap documentado en §3.2.1)
-— se deja como vocabulario futuro, explícitamente no soportado en el schema del
-catálogo todavía, para que `CatalogLoader` nunca acepte contenido que el motor no puede
-evaluar.
+`ALL_MINIONS_DEFEATED` (el ejemplo textual de decisions.md) — el motivo original (los
+Secuaces no tenían vida ni mecanismo de derrota, mismo gap que documentaba §3.2.1) queda
+**parcialmente resuelto por §3.9**: los Secuaces ya tienen vida y salen de mesa al
+morir, así que `minionsInPlay.length === 0` es ahora una señal evaluable en principio.
+**Sigue fuera de alcance de esta spec, deliberadamente**: `ALL_MINIONS_DEFEATED` no se
+añade al vocabulario cerrado de `AlternativeVictoryCondition` en este documento —
+añadirlo exige decidir matices que ni decisions.md ni el Game Designer han cerrado (¿se
+evalúa solo si el Enemigo llegó a invocar al menos 1 Secuaz? ¿es un evento puntual o un
+estado sostenido?). Se deja como vocabulario futuro explícito, no soportado en el schema
+del catálogo todavía — señalado a Coordinator/Game Designer para una decisión de diseño
+propia si se quiere cerrar, no bloquea nada de lo ya especificado aquí.
 
 ```ts
 // packages/domain/catalog/src/types/victory-condition.ts (NUEVO)
