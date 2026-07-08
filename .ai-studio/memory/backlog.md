@@ -241,19 +241,22 @@ Conectar los últimos piezas que faltan para que el combate sea realmente jugabl
 
 ---
 
-### H1.16: Secuaces del enemigo (presencia pasiva, acción selectiva)
+### H1.16: Secuaces del enemigo (presencia pasiva, comportamiento dirigido por Dramaturgia)
 
-**Descripción:** implementar que Secuaces aportan efecto pasivo mientras están en mesa, solo 1 actúa por turno enemigo (selección aleatoria con filtro de validez), Defensor fuerza ser atacado primero.
+**Descripción:** implementar que Secuaces aportan efecto pasivo mientras están en mesa, tienen HP propio (definido en catálogo), pueden morir al llegar a 0 de vida, y su acción/comportamiento es dictado por el **efecto textual de la carta de Dramaturgia** del Enemigo (no selección aleatoria del motor). Keyword Defensor sigue forzando prioridad de ataque.
 
 **Criterio de aceptación:**
-- Secuaz entra en mesa con efecto pasivo declarado.
-- Efecto pasivo es leído por `CombatEngine` cada turno del enemigo.
-- Selección de Secuaz que actúa: uno al azar entre los válidos (no CD, Núcleo disponible).
-- Keyword Defensor: Secuaz es atacado primero o si ya está en mesa no se puede ignorar.
+- Secuaz define su vida máxima como campo fijo en `CardDefinition` (igual que Aliados).
+- Secuaz entra en mesa con efecto pasivo declarado; el pasivo es leído por `CombatEngine` cada turno.
+- **Comportamiento en Dramaturgia:** la carta de Dramaturgia especifica cómo actúan los Secuaces ese turno vía `minionBehavior` (ver abajo). El motor valida que Secuaces existe y cumple la condición, pero NO elige aleatoriamente.
+- Secuaz recibe daño dirigido y pierde vida; al llegar a 0, sale de mesa inmediatamente sin trigger por defecto.
+- Exceso de daño que mata un Secuaz: se pierde salvo que el ataque tenga Arrollar (keyword reutilizado de Aliados), en cuyo caso el exceso pasa al Enemigo.
+- Keyword Defensor: fuerza que ese Secuaz específico sea atacado primero si está en mesa.
+- **Vocabulario de `minionBehavior` en Dramaturgia:** valores soportados: `ALL` (todos actúan), `RANDOM_ONE` (uno al azar entre válidos), `SPECIFIC_DEFINITION` (un Secuaz de una definición concreta), `HIGHEST_PLANO_ATTACK` (el de mayor ataque), **`HIGHEST_LIFE` (el de más vida actual)**, **`LOWEST_LIFE` (el de menos vida actual, típicamente el más cerca de morir)**.
 
-**Referencia:** GDD §3.8.
+**Referencia:** GDD §3.8, decisions.md 2026-07-08 "Vida de Secuaz" + "Secuaces del Enemigo: comportamiento en Dramaturgia", glossary.md.
 
-⚠️ **Reabierta 2026-07-08:** Criterio "Selección de Secuaz que actúa: uno al azar entre los válidos" es obsoleto. La nueva regla (decisions.md 2026-07-08) es: la selección y activación de Secuaces ya NO es aleatoria del motor — está dictada por el **efecto de la carta de Dramaturgia jugada** (ej. "Tus secuaces atacan" o "Ataca el secuaz con más vida"). El motor debe validar que un Secuaz existe y cumple la condición especificada por la Dramaturgia, pero la selección NO es responsabilidad del `CombatEngine`. Esta historia debe rediseñarse antes de H3 para reflejar el nuevo flujo.
+⚠️ **Reabierta 2026-07-08:** Completamente rediseñada. La nueva regla es: selección y acción de Secuaces dictada por Dramaturgia (no motor), HP propio del Secuaz permite criterios `HIGHEST_LIFE`/`LOWEST_LIFE`. Refactorizar validación de motor ANTES de H3 para reflejar el nuevo flujo.
 
 ---
 
@@ -659,6 +662,57 @@ Conectar los últimos piezas que faltan para que el combate sea realmente jugabl
   - Caso 6: Segunda llamada a `DRAW_OR_GENERATE` en el mismo turno → rechazado, solo una vez.
 
 **Referencia:** decisions.md (2026-07-08) "Estructura de turno del jugador ampliada", H3.5 (UI de decisión de turno debe mostrar esta opción gratis), H1.18 (motor de combate, debe modelar esta fase).
+
+---
+
+### H3.7: Targeting explícito de ataques — elegir objetivo (Enemigo o Secuaz)
+
+⚠️ **PRIORITARIO / BLOQUEANTE PARA JUGABILIDAD REAL**
+
+**Descripción:** implementar el sistema de targeting explícito que permite al jugador elegir el destino de un ataque: puede dirigirse al Enemigo directo o a cualquier Secuaz válido en mesa. Esta decisión es táctica y requiere interfaz clara en el motor (campo `targetId` en comando `PLAY_CARD` / `ACTIVATE_ABILITY` cuando el efecto es dañante) y en la UI (indicador visual de objetivo seleccionado antes de confirmar el ataque).
+
+**Por qué es bloqueante:** sin targeting explícito, un combate contra un Enemigo rodeado de Secuaces no es jugable de forma completa — el jugador no puede tomar la decisión principal del combate (atacar al Enemigo vs. limpiar Secuaces). Esto hace que el cierre del loop jugable (E3) sea incompleto sin esta pieza.
+
+**Criterio de aceptación:**
+- Comando `PLAY_CARD` y `ACTIVATE_ABILITY` aceptan parámetro opcional `targetId: string` (ID del Secuaz) o `null`/undefined (Enemigo directo).
+- Motor valida que `targetId` corresponde a un Secuaz en mesa (si se proporciona).
+- Si es un Secuaz atacado y tiene keyword Defensor, valida que ese Defensor es atacado primero (rechazo si no).
+- Efecto del ataque (daño) se aplica al objetivo elegido.
+- Evento `DAMAGE_DEALT` incluye campo `targetId` para que la UI animar el daño al objetivo correcto.
+- **Interfaz de selección (H3.8 toca la UI visual; aquí es solo lógica de motor):**
+  - Antes de jugar una carta de Ataque o activar una habilidad de daño, el motor debe validar cuántos objetivos válidos hay.
+  - Si hay 0 Secuaces en mesa (solo Enemigo), targeting se asume automático al Enemigo (sin UI de selección).
+  - Si hay ≥1 Secuaz, comando requiere que `targetId` sea especificado explícitamente (la UI de H3.8 presenta las opciones).
+  - Si `targetId` falta en un caso donde es requerido, comando se rechaza con error `TARGET_REQUIRED`.
+- **Símetría con Aliados:** redirección de daño hacia Aliado propio (H1.15) sigue siendo automática (Aliado bloquea); redirección hacia Secuaz enemigo es manual (selección del jugador).
+- Tests parametrizados:
+  - Caso 1: Jugar Ataque, 0 Secuaces en mesa → targetId indiferente, daño va al Enemigo.
+  - Caso 2: Jugar Ataque, 1 Secuaz sin Defensor, targetId=secuazA → daño va a Secuaz.
+  - Caso 3: Jugar Ataque, 1 Secuaz sin Defensor, targetId=null → daño va al Enemigo (jugador eligió no atacar Secuaz).
+  - Caso 4: Jugar Ataque, 2 Secuaces (uno Defensor, otro normal), sin targetId → error `TARGET_REQUIRED`.
+  - Caso 5: Jugar Ataque, 1 Secuaz Defensor, targetId=otro Secuaz sin Defensor → error `DEFENDER_HAS_PRIORITY`, Defensor debe ser atacado.
+  - Caso 6: Daño > Vida Secuaz, Arrollar present → exceso va al Enemigo; sin Arrollar → exceso se pierde.
+
+**Referencia:** decisions.md 2026-07-08 "Vida de Secuaz: mecánica mínima para HP propia" §1 (Targeting), H1.15 (absorción de daño por Aliados, contraste), H1.16 (Secuaces con HP), GDD §3.8 (Secuaces), Marvel Champions (referencia explícita del Director Creativo).
+
+---
+
+### H3.8: UI visual de targeting — selector de objetivo antes de confirmar ataque
+
+**Descripción:** implementar en `packages/combat-scene/view` y `InputAdapter` la interfaz visual que permite al jugador elegir el objetivo de un ataque cuando hay múltiples opciones en mesa (Enemigo + Secuaces). Al seleccionar una carta de Ataque o habilidad de daño, si hay Secuaces en mesa, se abre un modal/overlay que muestra los objetivos válidos; el jugador toca/clickea el objetivo deseado y confirma, lo que dispara el comando al `CombatBridge` con `targetId` correcto.
+
+**Criterio de aceptación:**
+- Intent nuevo en `InputAdapter`: `{ type: 'SELECT_ATTACK_TARGET', targetId }` (targetId puede ser ID del Enemigo o de un Secuaz).
+- Cuando se selecciona una carta de Ataque con destino dañante (p.ej. palabra clave "Ataque"), antes de ejecutar se valida si hay Secuaces en mesa.
+- Si hay Secuaces (y no todos están con Defensor excepto uno), se abre selector de objetivo (modal overlay u overlay en tablero).
+- Selector muestra: miniatura/nombre del Enemigo + miniaturas/nombres de cada Secuaz en mesa, con estado visual (vida actual/máxima, icono Defensor si aplica).
+- Si hay un Defensor, se resalta visualmente forzando su selección (ej. botón deshabilitado en otros, o tooltip).
+- Al tocar un objetivo, comando `PLAY_CARD` o `ACTIVATE_ABILITY` se despacha con `targetId` correspondiente.
+- Si mano anterior se cierra sin seleccionar (tap fuera o ESC), selector se cancela y el ataque no se ejecuta.
+- Caso especial: si NO hay Secuaces en mesa, el selector no aparece — el ataque se ejecuta directamente al Enemigo sin pedir confirmación.
+- Tests visuales: levantar combate con Secuaces, simular selección de Ataque, verificar que overlay selector aparece y contiene opciones correctas.
+
+**Referencia:** H3.7 (lógica de targeting en motor), H2.8 (renderización de Secuaces), H2.7 (InputAdapter base), decisions.md "Targeting: el jugador SÍ puede dirigir daño explícitamente a un Secuaz".
 
 ---
 
