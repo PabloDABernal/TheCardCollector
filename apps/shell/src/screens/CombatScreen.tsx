@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import Phaser from 'phaser';
 import { CombatScene, COMBAT_SCENE_VIEWPORT } from '@collector/combat-scene';
 import type { CombatBridge } from '@collector/combat-bridge';
@@ -6,16 +7,28 @@ import { buildCombatSetup } from '../combat/build-combat-setup';
 import { useCombatSnapshot } from '../combat/use-combat-snapshot';
 import { CombatHud } from '../combat/CombatHud';
 import { CombatResultModal } from '../combat/CombatResultModal';
+import { LEADER_OPTIONS, DEFAULT_LEADER_OPTION } from '../combat/leader-options';
+import type { RunStartNavigationState } from '../combat/run-start-navigation-state';
 
 /**
  * H2.9 — reescritura completa: sustituye el placeholder vacío de H2.2. Patrón estándar de
  * "librería imperativa dentro de React": `ref` al contenedor DOM + `useEffect` que construye el
- * recurso externo en el montaje y lo destruye en el cleanup, con array de dependencias vacío
- * (`[]`) para que se ejecute exactamente una vez por montaje del componente
- * (`architecture_stack.md` §2.3: "`<CombatScreen>` monta un `<PhaserMount>` una única vez por
- * combate").
+ * recurso externo en el montaje y lo destruye en el cleanup.
+ *
+ * H2.14 — lee `location.state` (navegación desde `RunStartScreen`) para saber qué Líder eligió el
+ * jugador; si se monta sin `state` (navegación directa a `/combat`, tests existentes, o futuro
+ * deep-link), usa el mismo Líder por defecto de siempre (`DEFAULT_LEADER_OPTION`). El array de
+ * dependencias del efecto pasa a `[leaderId]` (spec §3.3) — sin cambio de comportamiento observable
+ * respecto a `[]`, ya que React Router desmonta/remonta `CombatScreen` en cada navegación real a la
+ * misma ruta con `state` distinto.
  */
 export function CombatScreen(): JSX.Element {
+  const location = useLocation();
+  const leaderId =
+    (location.state as RunStartNavigationState | null)?.leaderId ?? DEFAULT_LEADER_OPTION.leaderId;
+  const leaderName =
+    LEADER_OPTIONS.find((option) => option.leaderId === leaderId)?.label ?? DEFAULT_LEADER_OPTION.label;
+
   const mountRef = useRef<HTMLDivElement>(null);
   const [bridge, setBridge] = useState<CombatBridge | null>(null);
 
@@ -24,7 +37,7 @@ export function CombatScreen(): JSX.Element {
     let cancelled = false; // guarda contra doble-construcción si el efecto se limpia antes de que
                             // buildCombatSetup() resuelva (StrictMode monta/desmonta en dev)
 
-    void buildCombatSetup().then(({ bridge: newBridge, boardContext }) => {
+    void buildCombatSetup({ leaderId }).then(({ bridge: newBridge, boardContext }) => {
       if (cancelled) return;
       game = new Phaser.Game({
         type: Phaser.AUTO,
@@ -55,12 +68,13 @@ export function CombatScreen(): JSX.Element {
       cancelled = true;
       game?.destroy(true); // true: también remueve el <canvas> del DOM
     };
-  }, []);
+  }, [leaderId]);
 
   return (
     <div style={{ position: 'relative' }}>
       <div ref={mountRef} id="phaser-mount" />
-      {bridge && <CombatHudOverlay bridge={bridge} />}
+      {!bridge && <p>Cargando combate…</p>}
+      {bridge && <CombatHudOverlay bridge={bridge} leaderName={leaderName} />}
     </div>
   );
 }
@@ -71,11 +85,21 @@ export function CombatScreen(): JSX.Element {
  * poder usar el hook `useCombatSnapshot` solo una vez `bridge` existe (evita el caso
  * `bridge === null` dentro del hook).
  */
-function CombatHudOverlay({ bridge }: { readonly bridge: CombatBridge }): JSX.Element {
+function CombatHudOverlay({
+  bridge,
+  leaderName,
+}: {
+  readonly bridge: CombatBridge;
+  readonly leaderName: string;
+}): JSX.Element {
   const snapshot = useCombatSnapshot(bridge);
   return (
     <>
-      <CombatHud snapshot={snapshot} onEndTurn={() => bridge.dispatch({ type: 'END_TURN' })} />
+      <CombatHud
+        snapshot={snapshot}
+        onEndTurn={() => bridge.dispatch({ type: 'END_TURN' })}
+        leaderName={leaderName}
+      />
       {snapshot.status !== 'IN_PROGRESS' && <CombatResultModal snapshot={snapshot} />}
     </>
   );

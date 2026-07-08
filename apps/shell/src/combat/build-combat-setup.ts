@@ -5,13 +5,21 @@ import { CombatEngine, buildCombatEngineConfig, cardHasAttackEffect } from '@col
 import { createCombatBridge } from '@collector/combat-bridge';
 import type { BoardViewContext, HandCardViewData, AbilityViewData, DefaultCombatSetup } from '@collector/combat-scene';
 import { loadRawContent } from './load-raw-content';
+import { DEFAULT_LEADER_OPTION } from './leader-options';
 
-// Mismos 3 ids de contenido 2×2×2 que `build-default-combat-bridge.ts` (retirado, H2.9 spec §1.3)
-// ya usaba — sin cambio de contenido, decisions.md "2026-07-06" fija reutilizar el 2×2×2 de H1.
-const DEFAULT_LEADER_ID = 'leader-soldado-base';
+// Enemigo/Escenario del contenido 2×2×2 que `build-default-combat-bridge.ts` (retirado, H2.9 spec
+// §1.3) ya usaba — sin cambio de contenido, decisions.md "2026-07-06" fija reutilizar el 2×2×2 de
+// H1. El Líder ya no es una constante fija aquí (H2.14): ahora es parámetro opcional, ver
+// `BuildCombatSetupParams` abajo.
 const DEFAULT_ENEMY_ID = 'enemy-bestia-base';
 const DEFAULT_SCENARIO_ID = 'scenario-bosque-encantado-base';
 const SHELL_SEED = 1;
+
+export interface BuildCombatSetupParams {
+  /** ID de `LeaderDefinition` a cargar — NUEVO H2.14. Si se omite, usa el mismo Líder por defecto que
+   *  `apps/shell` ya jugaba antes de esta historia (`DEFAULT_LEADER_OPTION.leaderId`). */
+  readonly leaderId?: string;
+}
 
 /**
  * Reemplaza a `buildDefaultCombatBridge` de `combat-scene` (retirada, H2.9 spec §1.3) — mismo
@@ -21,11 +29,13 @@ const SHELL_SEED = 1;
  * `CombatBridge` → `BoardViewContext` (`architecture_stack.md` §2.3: "el CombatEngine se crea en
  * React/factory de apps/shell").
  */
-export async function buildCombatSetup(): Promise<DefaultCombatSetup> {
+export async function buildCombatSetup(params: BuildCombatSetupParams = {}): Promise<DefaultCombatSetup> {
+  const leaderId = params.leaderId ?? DEFAULT_LEADER_OPTION.leaderId;
+
   const rawInput = await loadRawContent();
   const catalog = await new CatalogLoader(rawInput).load();
 
-  const leader = catalog.leaders.get(createId<'LeaderId'>('LeaderId', DEFAULT_LEADER_ID) as LeaderId)!;
+  const leader = catalog.leaders.get(createId<'LeaderId'>('LeaderId', leaderId) as LeaderId)!;
   const enemy = catalog.enemies.get(createId<'EnemyId'>('EnemyId', DEFAULT_ENEMY_ID) as EnemyId)!;
   const scenario = catalog.scenarios.get(createId<'ScenarioId'>('ScenarioId', DEFAULT_SCENARIO_ID) as ScenarioId)!;
 
