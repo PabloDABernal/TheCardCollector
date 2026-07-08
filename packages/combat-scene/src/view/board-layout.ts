@@ -27,16 +27,14 @@ export const ENEMY_ABILITIES_ROW_Y = ENEMY_POSITION.y + 180;
 // desde `ability-cooldown-view.ts`) para no crear una dependencia cruzada solo por un número —
 // mismo criterio de aislamiento que ya separa esos módulos. Exportadas para que
 // `board-layout.test.ts` pueda verificar los rangos verticales sin duplicar los valores.
-const ROW_GAP_PX = 20;
 export const MINION_TILE_HEIGHT_PX = 180; // = CARD_PLACEHOLDER_HEIGHT (juice/recipes/placeholder.ts)
 export const ABILITY_ICON_HEIGHT_PX = 24; // = ICON_HEIGHT (ability-cooldown-view.ts)
 
-// ENEMY_ABILITIES_ROW_Y + ABILITY_ICON_HEIGHT_PX/2 + MINION_TILE_HEIGHT_PX/2 + ROW_GAP_PX
+// ENEMY_ABILITIES_ROW_Y + ABILITY_ICON_HEIGHT_PX/2 + MINION_TILE_HEIGHT_PX/2 + margen de 20px
 // = 480 + 12 + 90 + 20 = 602 → redondeado a 620 para dejar margen legible (no pixel-perfect al
-// límite) — ver FIX_combat_viewport_and_layout.md §2.1.
+// límite) — ver FIX_combat_viewport_and_layout.md §2.1. 620 es un valor fijado y verificado en la
+// spec, no recalculado en runtime.
 export const MINIONS_ROW_Y = 620;
-void ROW_GAP_PX; // documenta el margen de seguridad usado en el redondeo de arriba, sin recomputar
-                  // el valor en runtime (620 ya es el resultado fijado y verificado en la spec).
 
 // FIX_combat_viewport_and_layout.md §2.2 — antes: 100. A 14px, la etiqueta más larga del catálogo
 // MVP ("Grito de Guerra 2/4", ~20 caracteres) ocupa ~170-180px renderizados — muy por encima de los
