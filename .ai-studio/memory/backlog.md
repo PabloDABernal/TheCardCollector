@@ -16,6 +16,12 @@ Montar la capa visual del combate sobre el motor de dominio (validado en H1). In
 
 ---
 
+### E3: Cierre del ciclo jugable de combate — cableado de input, Generar Energía, ajuste de pool
+
+Conectar los últimos piezas que faltan para que el combate sea realmente jugable tras probar el vertical slice de H2 desplegado: permitir que el jugador active habilidades del Líder mediante tap/clic (H2.7 lo dejó fuera deliberadamente), implementar la acción "Generar Energía" como decisión explícita de ritmo (consumiendo 1 acción, sin regeneración automática), y ajustar el pool de Núcleos a 8 fichas para mejorar la varianza de color. Incluye UI visual que comunique claras decisiones disponibles en cada turno. Todos los cambios son cierre de mecánicas ya cerradas de diseño, sin contenido nuevo ni expansión de scope.
+
+---
+
 ## Historias
 
 ### H1.1: Setup del monorepo y tooling de base
@@ -515,6 +521,94 @@ Montar la capa visual del combate sobre el motor de dominio (validado en H1). In
 - Estrategia: cache-first para `.js, .css, .png, .webp`; network-first para catálogo si es remoto en futuro (hoy empaquetado, cache-first).
 
 **Referencia:** `docs/architecture_stack.md` §4.1, vision.md (PWA instalable).
+
+---
+
+### H3.1: Cableado de input — tap en habilidad del Líder → ACTIVATE_ABILITY
+
+**Descripción:** conectar el gesto de tap/clic en el sprite visual de una habilidad del Líder (renderizada en H2.8) con el comando `ACTIVATE_ABILITY` del engine. El `InputAdapter` ya traduce taps a intents semánticos; esta historia consume ese intent de "SELECT_ABILITY" (nuevo tipo) y lo enruta al `CombatBridge.dispatch(ACTIVATE_ABILITY)`.
+
+**Criterio de aceptación:**
+- `InputAdapter` detecta tap en un game object de tipo "habilidad del Líder" y emite intent `{ type: 'SELECT_ABILITY', abilityId }`.
+- `PlayerIntent` tipo extendido con nuevo caso `SELECT_ABILITY`.
+- `CombatBridge` mapea `SELECT_ABILITY` → comando `ACTIVATE_ABILITY` (validación de CD, Núcleo disponible, acciones, etc. queda en el engine).
+- Tap en habilidad con CD > 0 o sin Núcleos: comando se rechaza en el engine, se muestra feedback visual (ej. shake rojo, sonido negativo).
+- Tap en habilidad válida: comando se ejecuta, Núcleo se gasta, animación de impacto ocurre, CD se actualiza visualmente.
+- Test: simular tap en sprite de habilidad, verificar que `CombatBridge.dispatch()` fue llamado con `ACTIVATE_ABILITY`.
+
+**Referencia:** H2.7 (InputAdapter), H2.8 (renderización de habilidades), decisions.md "Activar una habilidad NO tiene coste adicional de diseño más allá de lo que el motor ya exige hoy".
+
+---
+
+### H3.2: Comando GENERATE_ENERGY en el motor de dominio
+
+**Descripción:** implementar en `packages/domain/combat` el nuevo comando `GENERATE_ENERGY` y su lógica: validar que el Líder es quien actúa, que tiene una acción disponible (de las 2 del turno), que Energía < 5 (máximo), gastar la acción, sumar +1 Energía, emitir evento `ENERGY_GENERATED`.
+
+**Criterio de aceptación:**
+- Tipo `GenerateEnergyCommand` definido en `packages/domain/combat/src/types/commands.ts`.
+- `CombatEngine.handleGenerateEnergy()` implementado:
+  - Valida que es turno del Líder.
+  - Valida que tiene ≥1 acción disponible.
+  - Valida que Energía < 5.
+  - Si una validación falla, rechaza el comando y retorna error (ej. `CombatError` con tipo `INVALID_ACTION`).
+  - Si válida, resta 1 acción, suma 1 Energía (tope 5), emite `CombatEvent { type: 'ENERGY_GENERATED', amount: 1 }`.
+- `CombatStateSnapshot` refleja cambio de Energía y acciones.
+- Tests unitarios parametrizados:
+  - Case 1: Energía 0 → Energía 1, acción gasta.
+  - Case 2: Energía 4 → Energía 5, tope respetado.
+  - Case 3: Energía 5 → error, ya en máximo.
+  - Case 4: Sin acciones disponibles → error.
+  - Case 5: Turno enemigo → error, no es turno del Líder.
+
+**Referencia:** decisions.md "Generar Energía es una acción explícita del jugador que consume 1 de las 2 acciones del turno", GDD §2.2.
+
+---
+
+### H3.3: Integración de GENERATE_ENERGY en CombatBridge y InputAdapter
+
+**Descripción:** extender `InputAdapter` para que reconozca un gesto/botón nuevo de "generar energía" (ej. un botón visible en el HUD o un gesto largo/doble-tap reservado); mapear ese intent a comando `GENERATE_ENERGY` en `CombatBridge.dispatch()`.
+
+**Criterio de aceptación:**
+- Intent nuevo `{ type: 'GENERATE_ENERGY' }` agregado a `PlayerIntent`.
+- `InputAdapter` expone un método para registrar listener de botón o gesto de "generar energía" (pode ser un wrapper de `onIntent`).
+- `CombatBridge.dispatch()` maneja comando `GENERATE_ENERGY`.
+- Evento `ENERGY_GENERATED` es publicado a ambos canales (HUD + Scene).
+- Test: emular intent de "generar energía", verificar que `CombatBridge` lo traduce a `handleGenerateEnergy()` en el engine.
+
+**Referencia:** H2.7 (InputAdapter), H2.3 (CombatBridge), decisions.md "Generar Energía es una decisión de ritmo real".
+
+---
+
+### H3.4: Aumento del pool de Núcleos a 8 y ajuste de tests
+
+**Descripción:** cambiar la constante `DEFAULT_NUCLEO_POOL_SIZE` de 6 a 8 en `packages/domain/combat/src/config.ts` (o donde esté definida). Actualizar cualquier test o spec que asumía tamaño 6 (principalmente H1.3 y H1.13) para que se refiera al nuevo tamaño o sea parametrizado.
+
+**Criterio de aceptación:**
+- Constante `DEFAULT_NUCLEO_POOL_SIZE = 8` (era 6).
+- Tests de "relanzamiento de pool" siguen pasando con tamaño 8 (sin hardcodeos de "6 fichas").
+- Tests parametrizados de varianza de color no asumen cobertura de 5 colores en un ciclo (el reparto sigue siendo al azar puro).
+- Al menos un test documenta el cambio: "con 8 fichas, la probabilidad de que ningún color aparezca es [X]%" (evidencia de intención).
+- Pool generado en nuevo combate de juguete contiene 8 fichas.
+
+**Referencia:** decisions.md "Pool de Núcleos: tamaño final 8 (sube de 6)", H1.3 (original del motor de pool).
+
+---
+
+### H3.5: UI visual para decisión de turno — botones/estados claros de "jugar", "habilidad", "generar energía"
+
+**Descripción:** en `packages/combat-scene/view` y `apps/shell/screens`, diseñar y renderizar un HUD de decisión que comunique visualmente al jugador cuáles son sus opciones en cada turno: "jugar una carta (si tienes cartas)", "activar una habilidad (si CD=0 y hay Núcleo)", "generar energía (si Energía<5)". El estado debe cambiar dinámicamente según validaciones del engine (ej. si no tienes Núcleo, opción de habilidad se deshabilita/greyed out).
+
+**Criterio de aceptación:**
+- En el HUD/overlay visual de combate, existen 3 botones o áreas interactuables: "Jugar Carta", "Activar Habilidad", "Generar Energía".
+- Botones cambian de estado (activo/deshabilitado/greyed out) según `CombatStateSnapshot`:
+  - "Jugar Carta": deshabilitado si mano está vacía.
+  - "Activar Habilidad": deshabilitado si no hay Núcleos disponibles O todos los CD > 0.
+  - "Generar Energía": deshabilitado si Energía ≥ 5 O sin acciones disponibles.
+- Al menos uno de los tres está siempre disponible (no puedes quedar bloqueado en el menú de selección).
+- Evento `ACTION_SPENT` actualiza los botones para reflejar el cambio de estado.
+- Visual claro (diferente color, opacidad, tooltip) que distingue "disponible" de "no disponible".
+
+**Referencia:** H2.9 (flujo end-to-end), H3.1 (cableado de habilidad), H3.3 (integración de generar energía), decisions.md sobre estructura de decisión de turno.
 
 ---
 
