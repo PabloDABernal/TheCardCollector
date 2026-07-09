@@ -31,6 +31,8 @@ function createRoleTile(
     fontSize: '20px',
     color: '#ffffff',
     align: 'center',
+    stroke: '#000000',
+    strokeThickness: 3,
   });
   text.setOrigin(0.5, 0);
 
