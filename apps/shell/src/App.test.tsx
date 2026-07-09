@@ -68,12 +68,17 @@ const fakeBridge = {
   subscribeSceneEvents: vi.fn(() => vi.fn()),
 } as unknown as CombatBridge;
 
-const buildCombatSetupMock = vi.fn((_params: { readonly leaderId?: string }) =>
-  Promise.resolve({ bridge: fakeBridge, boardContext: { leaderAbilities: [] } })
+const buildCombatSetupMock = vi.fn(
+  (_params: { readonly leaderId?: string; readonly enemyId?: string; readonly scenarioId?: string }) =>
+    Promise.resolve({ bridge: fakeBridge, boardContext: { leaderAbilities: [] } })
 );
 
 vi.mock('./combat/build-combat-setup', () => ({
-  buildCombatSetup: (params: { readonly leaderId?: string }) => buildCombatSetupMock(params),
+  buildCombatSetup: (params: {
+    readonly leaderId?: string;
+    readonly enemyId?: string;
+    readonly scenarioId?: string;
+  }) => buildCombatSetupMock(params),
 }));
 
 // `App.tsx` construye el router (`createBrowserRouter`) como singleton en el ámbito del módulo,
@@ -105,7 +110,11 @@ describe('App routing', () => {
     expect(document.getElementById('phaser-mount')).not.toBeNull();
     expect(await screen.findByText('Fin de turno')).toBeInTheDocument();
     expect(screen.getByText('Líder: Soldado Base')).toBeInTheDocument();
-    expect(buildCombatSetupMock).toHaveBeenCalledWith({ leaderId: 'leader-soldado-base' });
+    expect(buildCombatSetupMock).toHaveBeenCalledWith({
+      leaderId: 'leader-soldado-base',
+      enemyId: 'enemy-bestia-base',
+      scenarioId: 'scenario-bosque-encantado-base',
+    });
   });
 
   it('H2.14 — elegir "Mago Base" en RunStartScreen viaja de punta a punta hasta el HUD de combate', async () => {
@@ -122,7 +131,11 @@ describe('App routing', () => {
     expect(await screen.findByText('Fin de turno')).toBeInTheDocument();
     expect(screen.getByText('Líder: Mago Base')).toBeInTheDocument();
     expect(screen.queryByText('Líder: Soldado Base')).not.toBeInTheDocument();
-    expect(buildCombatSetupMock).toHaveBeenCalledWith({ leaderId: 'leader-mago-base' });
+    expect(buildCombatSetupMock).toHaveBeenCalledWith({
+      leaderId: 'leader-mago-base',
+      enemyId: 'enemy-bestia-base',
+      scenarioId: 'scenario-bosque-encantado-base',
+    });
   });
 
   it('H2.14 bug fix — navegar a /combat con un leaderId inválido en state no crashea y cae al Líder por defecto', async () => {
@@ -137,6 +150,10 @@ describe('App routing', () => {
     expect(document.getElementById('phaser-mount')).not.toBeNull();
     expect(await screen.findByText('Fin de turno')).toBeInTheDocument();
     expect(screen.getByText('Líder: Soldado Base')).toBeInTheDocument();
-    expect(buildCombatSetupMock).toHaveBeenCalledWith({ leaderId: 'leader-soldado-base' });
+    expect(buildCombatSetupMock).toHaveBeenCalledWith({
+      leaderId: 'leader-soldado-base',
+      enemyId: 'enemy-bestia-base',
+      scenarioId: 'scenario-bosque-encantado-base',
+    });
   });
 });

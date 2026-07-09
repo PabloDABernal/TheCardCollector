@@ -10,6 +10,8 @@ import { useCombatSnapshot } from '../combat/use-combat-snapshot';
 import { CombatHud } from '../combat/CombatHud';
 import { CombatResultModal } from '../combat/CombatResultModal';
 import { LEADER_OPTIONS, DEFAULT_LEADER_OPTION } from '../combat/leader-options';
+import { ENEMY_OPTIONS, DEFAULT_ENEMY_OPTION } from '../combat/enemy-options';
+import { SCENARIO_OPTIONS, DEFAULT_SCENARIO_OPTION } from '../combat/scenario-options';
 import type { RunStartNavigationState } from '../combat/run-start-navigation-state';
 
 /**
@@ -36,6 +38,19 @@ export function CombatScreen(): JSX.Element {
   const leaderId = leaderOption.leaderId;
   const leaderName = leaderOption.label;
 
+  // NUEVO H4.x — mismo saneamiento contra el catálogo de opciones que `leaderId` (bug fix de
+  // H2.14): evita que un `state` manipulado/corrupto llegue a `buildCombatSetup` con un
+  // enemyId/scenarioId inexistente en el catálogo.
+  const requestedEnemyId = (location.state as RunStartNavigationState | null)?.enemyId;
+  const enemyOption =
+    ENEMY_OPTIONS.find((option) => option.enemyId === requestedEnemyId) ?? DEFAULT_ENEMY_OPTION;
+  const enemyId = enemyOption.enemyId;
+
+  const requestedScenarioId = (location.state as RunStartNavigationState | null)?.scenarioId;
+  const scenarioOption =
+    SCENARIO_OPTIONS.find((option) => option.scenarioId === requestedScenarioId) ?? DEFAULT_SCENARIO_OPTION;
+  const scenarioId = scenarioOption.scenarioId;
+
   const mountRef = useRef<HTMLDivElement>(null);
   const [bridge, setBridge] = useState<CombatBridge | null>(null);
   // FIX Reviewer post-H3 (commit `cce72a3`) — `CombatHud` necesita las `leaderAbilities` del
@@ -48,7 +63,7 @@ export function CombatScreen(): JSX.Element {
     let cancelled = false; // guarda contra doble-construcción si el efecto se limpia antes de que
                             // buildCombatSetup() resuelva (StrictMode monta/desmonta en dev)
 
-    void buildCombatSetup({ leaderId }).then(({ bridge: newBridge, boardContext }) => {
+    void buildCombatSetup({ leaderId, enemyId, scenarioId }).then(({ bridge: newBridge, boardContext }) => {
       if (cancelled) return;
       game = new Phaser.Game({
         type: Phaser.AUTO,
@@ -80,7 +95,7 @@ export function CombatScreen(): JSX.Element {
       cancelled = true;
       game?.destroy(true); // true: también remueve el <canvas> del DOM
     };
-  }, [leaderId]);
+  }, [leaderId, enemyId, scenarioId]);
 
   return (
     <div className="combat-screen-root">
