@@ -54,6 +54,13 @@ export function createMinionsView(scene: Phaser.Scene): MinionsView {
           const text = scene.add.text(x, y, '', {
             fontSize: '14px',
             color: '#ffffff',
+            // FIX QA (bug cosmético — texto "Vida X/Y" ilegible: blanco sobre relleno blanco
+            // permanente del tile, ver `card-flip.ts`) — contorno oscuro garantiza contraste del
+            // texto contra CUALQUIER color de fondo del tile (blanco, gris neutro, o cualquier
+            // futuro tinte de daño/estado), no solo el gris neutro que el placeholder tenía antes
+            // del bug.
+            stroke: '#000000',
+            strokeThickness: 3,
             align: 'center',
           });
           text.setOrigin(0.5, 0.5);

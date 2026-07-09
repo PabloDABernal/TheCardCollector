@@ -43,6 +43,11 @@ export function createAlliesView(scene: Phaser.Scene): AlliesView {
           const text = scene.add.text(x, y, '', {
             fontSize: '14px',
             color: '#ffffff',
+            // FIX QA (mismo patrón que `minions-view.ts` — bug cosmético de texto ilegible tras el
+            // relleno blanco permanente que dejaba `card-flip.ts`) — contorno oscuro garantiza
+            // contraste contra cualquier color de fondo del tile.
+            stroke: '#000000',
+            strokeThickness: 3,
             align: 'center',
           });
           text.setOrigin(0.5, 0.5);
