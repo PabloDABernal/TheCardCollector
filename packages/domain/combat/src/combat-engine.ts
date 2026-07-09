@@ -1808,10 +1808,9 @@ export class CombatEngine {
     // NUEVO §3.10.2 — registra este Secuaz como "invocado en este turno de Enemigo" para
     // que `handleResolveMinionAction` lo excluya de un `minionBehavior` que opere en el
     // mismo dispatch (ver spec §3.10.2, un Secuaz recién invocado no actúa el turno en
-    // que aparece).
-    if (this.turnOwner === 'ENEMY') {
-      this.minionInstanceIdsSummonedThisEnemyTurn.add(instanceId);
-    }
+    // que aparece). Sin condicional: el guard `this.turnOwner !== 'ENEMY'` de arriba ya
+    // garantiza que solo llegamos aquí en turno de Enemigo.
+    this.minionInstanceIdsSummonedThisEnemyTurn.add(instanceId);
 
     const event: CombatEvent = {
       type: 'MINION_SUMMONED',

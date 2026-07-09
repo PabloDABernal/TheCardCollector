@@ -46,7 +46,7 @@ function minionDefinitions(
  *  explícito, sustituye la vieja selección aleatoria del motor. NUEVO §3.10.1 —
  *  `summonEffect` opcional, independiente de `minionBehavior`. */
 function dramaturgiaCard(
-  behaviorKind?: 'ALL' | 'RANDOM_ONE' | 'HIGHEST_PLANO_ATTACK' | { specific: MinionDefinitionId },
+  behaviorKind?: 'ALL' | 'RANDOM_ONE' | 'HIGHEST_PLANO_ATTACK' | 'HIGHEST_LIFE' | 'LOWEST_LIFE' | { specific: MinionDefinitionId },
   summonMinionDefinitionId?: MinionDefinitionId
 ): DramaturgiaCardDefinition {
   const criterion =
@@ -458,6 +458,77 @@ describe('CombatEngine — §3.10: SUMMON_MINION disparado automáticamente por 
     }
     // El Secuaz SÍ quedó en mesa — solo no actuó este turno.
     expect(engine.getSnapshot().minionsInPlay).toHaveLength(1);
+  });
+
+  it('mesa mixta (Secuaces preexistentes + 1 recién invocado por summonEffect) con RANDOM_ONE: el recién invocado nunca es seleccionado, un preexistente sí actúa', () => {
+    const engine = buildEngine({
+      initialTurnOwner: 'ENEMY',
+      enemyAbilityAiProfiles: enemyAiProfiles,
+      dramaturgiaDeck: [dramaturgiaCard('RANDOM_ONE', MINION_PLANO)],
+    });
+    const preexisting1 = summonMinion(engine, MINION_DEFENSOR);
+    const preexisting2 = summonMinion(engine, MINION_PLANO);
+
+    engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
+    const result = engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY: summonEffect + RESOLVE_MINION_ACTION
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      const summoned = result.value.find((e) => e.type === 'MINION_SUMMONED') as Extract<
+        CombatEvent,
+        { type: 'MINION_SUMMONED' }
+      >;
+      expect(summoned).toBeDefined();
+      const newInstanceId = summoned.instanceId;
+
+      const resolved = result.value.filter(
+        (e) => e.type === 'MINION_ACTION_RESOLVED'
+      ) as Extract<CombatEvent, { type: 'MINION_ACTION_RESOLVED' }>[];
+      expect(resolved).toHaveLength(1);
+      expect(resolved[0]!.instanceId).not.toBe(newInstanceId);
+      expect([preexisting1.instanceId, preexisting2.instanceId]).toContain(resolved[0]!.instanceId);
+
+      // Ningún evento de acción menciona al recién invocado.
+      expect(
+        result.value.some(
+          (e) => e.type === 'MINION_ACTION_RESOLVED' && (e as Extract<CombatEvent, { type: 'MINION_ACTION_RESOLVED' }>).instanceId === newInstanceId
+        )
+      ).toBe(false);
+    }
+  });
+
+  it('HIGHEST_LIFE ignora al Secuaz recién invocado por summonEffect aunque su vida (maxLife de entrada) "ganara" la comparación frente al preexistente', () => {
+    const lowLifeDef: MinionDefinitionId = 'minion-low-life';
+    const highLifeDef: MinionDefinitionId = 'minion-high-life';
+    const engine = buildEngine({
+      initialTurnOwner: 'ENEMY',
+      enemyAbilityAiProfiles: enemyAiProfiles,
+      dramaturgiaDeck: [dramaturgiaCard('HIGHEST_LIFE', highLifeDef)],
+      minionDefinitions: minionDefinitions([
+        [lowLifeDef, { passiveEffect: { kind: 'PLOT', amount: 0 }, planoAttackAmount: 1, isDefensor: false, maxLife: 3 }],
+        [highLifeDef, { passiveEffect: { kind: 'PLOT', amount: 0 }, planoAttackAmount: 1, isDefensor: false, maxLife: 10 }],
+      ]),
+    });
+    const preexisting = summonMinion(engine, lowLifeDef);
+
+    engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
+    const result = engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      const summoned = result.value.find((e) => e.type === 'MINION_SUMMONED') as Extract<
+        CombatEvent,
+        { type: 'MINION_SUMMONED' }
+      >;
+      expect(summoned).toBeDefined();
+      expect(summoned.minionDefinitionId).toBe(highLifeDef); // vida de entrada (10) > preexistente (3)
+
+      const resolved = result.value.filter(
+        (e) => e.type === 'MINION_ACTION_RESOLVED'
+      ) as Extract<CombatEvent, { type: 'MINION_ACTION_RESOLVED' }>[];
+      // Sin la exclusión, HIGHEST_LIFE elegiría al recién invocado (vida 10 > 3).
+      expect(resolved).toHaveLength(1);
+      expect(resolved[0]!.instanceId).toBe(preexisting.instanceId);
+      expect(resolved[0]!.instanceId).not.toBe(summoned.instanceId);
+    }
   });
 
   it('tope maxMinionsInPlay alcanzado: summonEffect emite MINION_SUMMON_SKIPPED y minionsInPlay.length no cambia', () => {

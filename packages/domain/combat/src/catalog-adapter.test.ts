@@ -221,6 +221,26 @@ describe('buildCombatEngineConfig — §3.10.4: minionDefinitions resuelto desde
     }
     expect(engine.getSnapshot().minionsInPlay).toHaveLength(1);
   });
+
+  it('regresión: enemy-espectro-base (sin campo minions en su JSON) produce config.minionDefinitions vacío, sin romper contenido existente', async () => {
+    const loader = new CatalogLoader(buildRawInput());
+    const catalog = await loader.load();
+    const leader = loader.getLeader(createId<'LeaderId'>('LeaderId', 'leader-soldado-base') as LeaderId);
+    const enemy = loader.getEnemy(createId<'EnemyId'>('EnemyId', 'enemy-espectro-base') as EnemyId);
+    const scenario = loader.getScenario(
+      createId<'ScenarioId'>('ScenarioId', 'scenario-templo-en-ruinas-base') as ScenarioId
+    );
+
+    const config = buildCombatEngineConfig({
+      catalog,
+      leader,
+      enemy,
+      scenario,
+      randomSource: new SeededRandomSource(1),
+    });
+
+    expect(config.minionDefinitions!.size).toBe(0);
+  });
 });
 
 describe('cardHasAttackEffect (H2.9 spec §4.2.1)', () => {
