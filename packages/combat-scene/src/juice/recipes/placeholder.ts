@@ -6,8 +6,17 @@ import type Phaser from 'phaser';
  * virtual 1080×1920 (H2.6 §criterio ScaleManager) — sustituido por posiciones reales cuando H2.8
  * introduzca los sprites del tablero.
  */
+// FIX QA post-`6d14b52` — `leader.y` (antes 1700) y `CARD_HAND_POSITION.y` (antes 1600, abajo) se
+// recalcularon: el tile REAL del Líder (200×200, `view/role-view.ts`) invadía visualmente el panel
+// vecino "Mano" (`view/board-layout.ts` `PANEL_ZONES`/`panel-hand`) — con 1700, el borde superior del
+// tile (1700-100=1600) coincidía exactamente con el centro de la fila de Mano. Los nuevos valores
+// (1708/1498) son el resultado de la misma derivación por bounding-box + `CONTENT_GAP_PX` (20) que
+// `view/board-layout.ts` usa para `ALLIES_ROW_Y`/`NUCLEO_TABLE_ROW_Y` — no se deriva aquí en runtime
+// porque este archivo es importado POR `board-layout.ts`, no al revés (evita un ciclo de imports).
+// Ver comentario extenso en `view/board-layout.ts` junto a `LEADER_POSITION`/`HAND_ROW_POSITION`, y
+// la cobertura de `board-layout.test.ts` (bounding box de cada tile dentro de su panel).
 export const PLACEHOLDER_POSITIONS: Record<string, { x: number; y: number }> = {
-  leader: { x: 540, y: 1700 },
+  leader: { x: 540, y: 1708 },
   enemy: { x: 540, y: 300 },
   scenario: { x: 540, y: 960 },
 };
@@ -17,8 +26,9 @@ export const PLACEHOLDER_POSITIONS: Record<string, { x: number; y: number }> = {
 export const DEFAULT_PLACEHOLDER_POSITION = { x: 540, y: 960 };
 
 /** Posición de "mano/mesa" genérica para placeholders de carta cuyo `focusId` no es uno de los 3
- *  roles fijos (spec §3.2 punto 1). */
-export const CARD_HAND_POSITION = { x: 540, y: 1600 };
+ *  roles fijos (spec §3.2 punto 1). FIX QA post-`6d14b52` — `y` antes 1600, ver comentario extenso
+ *  junto a `PLACEHOLDER_POSITIONS.leader` arriba. */
+export const CARD_HAND_POSITION = { x: 540, y: 1498 };
 
 const GENERIC_PLACEHOLDER_SIZE = 96;
 const CARD_PLACEHOLDER_WIDTH = 120;
