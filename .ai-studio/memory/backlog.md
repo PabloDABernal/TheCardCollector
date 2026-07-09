@@ -716,4 +716,80 @@ Conectar los últimos piezas que faltan para que el combate sea realmente jugabl
 
 ---
 
+### E4: Rediseño de UI/UX — usabilidad visual y delimitación en interfaz de combate
+
+Overhaul visual de la pantalla de combate y pantalla de inicio de run para mejorar legibilidad, delimitación de zonas y comunicación clara de estados. El feedback explícito del Director Creativo tras jugar H2 desplegado: "el feeling no me gusta, el negro de la pantalla de selección no se ve, me gustaría que los inicios de turno se vieran bien, que estuviera todo bien delimitado, que la elección fuera en un popup". Scope acotado: rediseño de layout y componentes visuales (no cambio de mecánicas, que ya están cerradas y validadas por QA). Prioridad: el "feel" visual que ya era objetivo explícito del Director Creativo en decisions.md 2026-07-06 ("prioridad explícita: el feel chulo del combate por encima de la simplicidad de implementación"), ahora evidenciado en la laguna real del H2 desplegado.
+
+---
+
+### H4.1: Popup/modal de selección de Líder/Enemigo/Escenario en RunStartScreen
+
+**Descripción:** refactorizar la pantalla `RunStartScreen` que hoy muestra selectores planos (radio buttons sin contraste sobre fondo negro). Reemplazar con un **popup/modal centrado y bien delimitado** que presenta opciones visuales (tarjetas con nombre/arte del Líder, con Enemigo/Escenario seleccionable también en modal separado o en cascade). Modal debe tener fondo con contraste suficiente (p.ej. fondo translúcido oscuro con panel interior de color sólido o gradiente), bordes claros, y botones de confirmación/cancelación obvios. El flujo debe ser: 1. Modal de selección de Líder (tarjetas grandes, navegables), 2. Modal de selección de Enemigos/Escenarios (pool visual 3+3), 3. Vista previa del sorteo/asignación, 4. Botón de inicio.
+
+**Criterio de aceptación:**
+- `RunStartScreen` reemplaza selectores planos por modal centrado con fondo diferenciado.
+- Líder, Enemigos y Escenarios se presentan como tarjetas visuales (no listas de texto).
+- Modal tiene bordes y separación clara del fondo de la pantalla (p.ej. `border-radius`, `box-shadow`, fondo translúcido fuera del modal).
+- Botones de confirmar/cancelar son visibles y bien delimitados (suficiente tamaño táctil ≥44px en móvil).
+- Flujo es claro: no hay ambigüedad sobre qué se está seleccionando en cada paso.
+- Pantalla de vista previa del sorteo (3 cruces Enemigo×Escenario) muestra orden de combates de forma clara (N1, N2, N3) antes de iniciar.
+
+**Referencia:** decisions.md 2026-07-05 "El sorteo cruza, el jugador ordena"; GDD §7.2 (orden de run); feedback del Director Creativo.
+
+---
+
+### H4.2: Sistema de paneles y delimitación visual en pantalla de combate
+
+**Descripción:** rediseñar el layout de `CombatScene` para que todas las zonas de la pantalla estén **claramente delimitadas por paneles visuales con contraste y jerarquía**. Identificar las 6-8 zonas principales (Núcleos/Pool en el centro, mano del jugador (abajo), Líder (arriba en columna vertical o esquina), Enemigo (arriba contrario), Escenario (lado contrario), Aliados/Secuaces (lado contrario), HUD de info (esquinas, barra superior)). Cada zona debe tener su propio **panel de fondo**, **borde/separador**, y **padding/spacing consistente** que las distingua visualmente. Tema oscuro pero legible (no negro plano #000): fondo base ~#0a0a0a a #1a1a1a, paneles secundarios ~#222-#333, textos claros, acentos en color temático.
+
+**Criterio de aceptación:**
+- Layout de combate divide el canvas en 6-8 zonas etiquetadas visualmente.
+- Cada zona tiene su propio panel de fondo (color, opacidad, borde) diferenciado.
+- Núcleos/Pool: área central clara, dados visibles con espacio.
+- Mano del jugador: panel inferior con fondo distinguible, cartas organizadas en fan o lista legible.
+- Líder: panel con vida/Trama visibles, en posición clara (arriba o esquina).
+- Enemigo: panel contrario al Líder, simétrico en legibilidad.
+- Escenario: panel independiente que muestra identidad y contador de Trama.
+- Aliados/Secuaces: zonas separadas para ambos lados, sin superposición.
+- HUD de info (turno, acciones disponibles, Energía): posición fija (p.ej. barra superior o esquina) con fondo semi-transparente si es overlay.
+- Paleta de color coherente: fondo base oscuro, paneles en grises neutrales, acentos en colores temáticos de los Núcleos (rojo/azul/verde/amarillo/púrpura).
+- Espaciado y alineación consistentes en toda la pantalla (se ve profesional, no flotando sin jerarquía).
+
+**Referencia:** vision.md (referencias forcetable.net/strawtable.net para feel); decisions.md 2026-07-06 "prioridad explícita: el feel chulo del combate por encima de la simplicidad de implementación"; feedback del Director Creativo.
+
+---
+
+### H4.3: Indicador visual claro de inicio/cambio de turno
+
+**Descripción:** implementar un sistema visual que comunique **explícitamente cuándo cambia el turno entre el jugador y el Enemigo**. Opciones visuales (Architect elige una o combina varias): (a) animación de transición: screen fade a negro/efecto overlay con texto "Tu turno" / "Turno del Enemigo", (b) icono/banner en el HUD que se anima/pulsa cuando cambia, (c) animación de los dados/nucleo pool que señala "nueva ronda disponible", (d) efecto de screen shake suave al cambiar de turno. El evento `TURN_CHANGED` ya existe en dominio (H1.18); esta historia conecta ese evento a una receta visual clara. No debe ser molesto (no bloquear el juego >1 segundo), pero sí **inevitable que el jugador lo vea**.
+
+**Criterio de aceptación:**
+- Evento `TURN_CHANGED` (o equivalente que dispara cambio de turno) desencadena una receta de juice visual.
+- Receta incluye al menos uno de: transición de pantalla (fade/overlay con texto), animación de icono/banner en HUD, efecto sobre los Núcleos, screen shake suave.
+- Duración total del efecto: <1 segundo (no bloquea acción; si hay animaciones paralelas, todo resuelve antes de que el juego pida siguiente acción).
+- Indicador es lo suficientemente obvio que un jugador casual lo verá sin necesidad de tutorial (no es un texto pequeño, no es un color muy similar al fondo).
+- Después del efecto, el HUD refleja claramente quién tiene turno ahora (p.ej. texto "Tu turno" con countdown de acciones, o resalte de zona de decisión del jugador).
+- Tests visuales: reproducir secuencia de turno (Líder → Enemigo → Líder), verificar que efecto se dispara cada vez.
+
+**Referencia:** H1.18 (evento `TURN_CHANGED` en motor); H2.5 (recetas de juice base); H2.4 (EffectsDirector, mapeo evento→juice); decisions.md 2026-07-08 "Estructura del turno del jugador" (ahora con transición visual explícita).
+
+---
+
+### H4.4: Comunicación clara de opciones de acción disponibles en el HUD de turno
+
+**Descripción:** mejorar el HUD/overlay de decisión de turno (parcialmente cubierto en H3.5) para que comunique **de forma cristalina** cuáles son las 4 opciones de acción del jugador en cada turno y cuál es su estado validado: (1) Jugar Carta (deshabilitado si mano vacía), (2) Activar Habilidad (deshabilitado si no hay Núcleos o todos los CD > 0), (3) Generar Energía (deshabilitado si Energía ≥ 5 o sin acciones), (4) Pasar Turno. Cada opción debe ser **distinguible visualmente** (botón, tooltip, icono + texto claro). El HUD debe refrescar en tiempo real según `CombatStateSnapshot` — si se gasta un Núcleo, "Activar Habilidad" se deshabilita si era el último; si se roba una carta, "Jugar Carta" se habilita. Layout: si es posible, todas las opciones en el mismo panel HUD sin scrolling en móvil (layout responsivo, ajustar tamaño de texto/botones si es necesario). Incluir también contador de "acciones disponibles del turno" (2/2, 1/2, 0/2) visible siempre.
+
+**Criterio de aceptación:**
+- HUD de turno muestra 4 botones/áreas de opción: Jugar Carta, Activar Habilidad, Generar Energía, Pasar Turno.
+- Cada opción tiene estado visual claro: activo (color normal, clickeable), deshabilitado (greyed out, opacity reducida, no clickeable), en-cooldown (tooltip/icono que explica por qué está deshabilitado).
+- Estados se actualizan en tiempo real cuando `CombatStateSnapshot` cambia.
+- Contador de acciones visibles siempre en el HUD (p.ej. "Acciones: 2/2", y disminuye cada vez que se gasta una).
+- Tooltip o icono sobre botones deshabilitados que brevemente explica por qué (p.ej. "Sin Núcleos disponibles" en "Activar Habilidad" si no hay Núcleos).
+- Layout responsivo: en móvil (viewport <600px ancho), todos los botones caben sin overflow o necesidad de scroll del HUD; en desktop, similar sin ocupar >20% de la pantalla.
+- Feedback visual al hacer clic: estado que cambia, o animation de click (p.ej. brief pulse/tint change) que confirma la interacción.
+
+**Referencia:** H3.5 (UI de decisión de turno inicial); H3.1-H3.3 (cableado de input); decisions.md 2026-07-08 "Estructura del turno del jugador" (4 opciones explícitas).
+
+---
+
 ## Bugs

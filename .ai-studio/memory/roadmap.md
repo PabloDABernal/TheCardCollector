@@ -65,4 +65,26 @@ Nunca tareas.
 - Pool de 8 fichas se rolla al vaciarse; tests de Núcleos pasan con nuevo tamaño.
 - Flujo de decisión en turno es claro: "jugar carta", "activar habilidad" o "generar energía".
 
-**Próximo hito:** H4 (meta-progresión, sorteo cruzado, pantalla de colección, selección de mazo).
+**Próximo hito:** H4 (rediseño visual de UI/UX — usabilidad, delimitación, indicadores de turno).
+
+---
+
+### H4: Rediseño visual de UI/UX — usabilidad y delimitación en interfaz de combate
+
+**Objetivo:** cerrar la laguna de "feel" visual detectada por el Director Creativo tras jugar H2 desplegado. El feedback es claro: pantalla de selección de run no visible (negro plano, sin contraste), falta de delimitación de zonas en combate (todo flota sin jerarquía), ausencia de indicadores visuales para cambios de turno. Scope: refactorizar layout de combate con paneles delimitados, reemplazar selectores planos de RunStartScreen por modales visuales, y conectar evento de cambio de turno a efecto visual obvio. **Sin cambios de mecánicas** — todas las reglas de H1+H2+H3 se mantienen; esto es solo pulimiento visual.
+
+**Alcance:**
+- `RunStartScreen`: popup/modal centrado con tarjetas visuales para Líder/Enemigos/Escenarios (reemplaza selectores planos).
+- `CombatScene/view`: refactorizar layout en 6-8 paneles delimitados (Núcleos, mano, Líder, Enemigo, Escenario, Aliados/Secuaces, HUD) con contraste visual y jerarquía clara.
+- Paleta de color: tema oscuro legible (~#0a0a0a base, ~#222-#333 paneles, textos claros, acentos en colores temáticos).
+- `EffectsDirector/JuiceConfig`: receta visual para evento `TURN_CHANGED` (transición, icono/banner, screen shake — Architect elige).
+- HUD de turno mejorado: 4 opciones de acción con estado visual claro, tooltip para deshabilitados, contador de acciones siempre visible.
+
+**Criterio de éxito:**
+- RunStartScreen: popup modal visible sin ambigüedad, bordes y contraste claros, flow intuitivo (Líder → Enemigos/Escenarios → vista previa → inicio).
+- CombatScene: todas las 6-8 zonas delimitadas por paneles, cada una con borde/fondo/spacing consistente, layout responsivo en móvil/desktop.
+- Cambio de turno: efecto visual <1s que es inevitable de ver (fade overlay con texto, animación en HUD, o screen shake).
+- HUD: 4 botones de acción con estado en tiempo real, tooltip, contador de acciones siempre visible, layout responsivo sin scroll en móvil.
+- Feedback cualitativo: Director Creativo juega la build y confirma que "se ve bien, está delimitado, es usable".
+
+**Próximo hito:** H5 (meta-progresión, pantalla de descanso entre combates, evolución de cartas, Level-Up del Líder entre batallas).
