@@ -9,8 +9,8 @@ export type { AlliesView } from './allies-view';
 export { createAlliesView } from './allies-view';
 export type { MinionsView } from './minions-view';
 export { createMinionsView } from './minions-view';
-export type { NucleoPoolView } from './nucleo-pool-view';
-export { createNucleoPoolView } from './nucleo-pool-view';
+export type { NucleoTableView } from './nucleo-table-view';
+export { createNucleoTable } from './nucleo-table-view';
 export type { AbilityCooldownView } from './ability-cooldown-view';
 export { createAbilityCooldownView, abilityIconGroupName } from './ability-cooldown-view';
 export { createBoard } from './board';
@@ -19,7 +19,7 @@ export {
   ENEMY_POSITION,
   SCENARIO_POSITION,
   HAND_ROW_POSITION,
-  NUCLEO_POOL_ROW_Y,
+  NUCLEO_TABLE_ROW_Y,
   ALLIES_ROW_Y,
   MINIONS_ROW_Y,
   TILE_SEPARATION_PX,

@@ -10,7 +10,10 @@ import type { AbilityEffectDefinition } from './types/ability-effect';
 import type { PlayableCardDefinition, PlayableCardEffectDefinition } from './types/playable-card';
 import type { AllyCardDefinition } from './types/ally';
 import type { ContratiempoCardDefinition } from './types/contratiempo';
-import type { EnemyAbilityAiProfile, DramaturgiaCardIcon } from './types/enemy-ai';
+import type { EnemyAbilityAiProfile } from './types/enemy-ai';
+import type { DramaturgiaCardDefinition } from '@collector/domain-catalog';
+import type { AlternativeVictoryCondition } from './types/victory-condition';
+import type { MinionDefinition, MinionDefinitionId } from './types/minion'; // NUEVO §3.10.4
 
 /**
  * H1.19 §2.1 — ver spec para el contrato completo. `packages/cli` (H1.19) es hoy el
@@ -72,8 +75,23 @@ export function buildCombatEngineConfig(params: BuildCombatEngineConfigParams): 
   const enemyAbilityAiProfiles = new Map<AbilityId, EnemyAbilityAiProfile>(
     enemy.abilities.map((a) => [a.id, a.aiProfile])
   );
-  const dramaturgiaDeck: DramaturgiaCardIcon[] = [...enemy.dramaturgiaDeck, ...scenario.dramaturgiaDeck].map(
-    (c) => c.icon
+  // MODIFICADO H1.16 (rediseño) — la carta COMPLETA, no solo el icono (§3.4).
+  const dramaturgiaDeck: DramaturgiaCardDefinition[] = [...enemy.dramaturgiaDeck, ...scenario.dramaturgiaDeck];
+
+  // NUEVO H3.6 — MVP: el mazo de combate del Líder es su pool completo de cartas (§2.9).
+  const leaderDeckCardIds: CardId[] = [...leader.cardPoolIds];
+
+  // NUEVO H1.8+H1.18 — merge Enemigo + Escenario (§4.3).
+  const alternativeVictoryConditions: AlternativeVictoryCondition[] = [
+    ...(enemy.alternativeVictoryConditions ?? []),
+    ...(scenario.alternativeVictoryConditions ?? []),
+  ];
+
+  // NUEVO §3.10.4 — mismo merge Enemigo+Escenario que alternativeVictoryConditions.
+  // `domain/catalog`'s MinionDefinition es un mirror estructural EXACTO del de
+  // `domain/combat` — asignación directa (cast estructural, sin conversión de campos).
+  const minionDefinitions = new Map<MinionDefinitionId, MinionDefinition>(
+    [...(enemy.minions ?? []), ...(scenario.minions ?? [])].map((m) => [m.id, m as MinionDefinition])
   );
 
   return {
@@ -92,7 +110,9 @@ export function buildCombatEngineConfig(params: BuildCombatEngineConfigParams): 
     enemyMaxHealth: enemy.maxHealth,
     leaderMaxHealth: leader.maxHealth,
     scenarioPlotDefeatThreshold: Math.max(...scenario.plotThresholds.map((t) => t.atLeast)),
-    minionDefinitions: new Map(),
+    minionDefinitions,
+    leaderDeckCardIds,
+    alternativeVictoryConditions,
   };
 }
 

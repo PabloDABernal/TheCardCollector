@@ -1,11 +1,12 @@
-import type { AbilityId, CardId, CardInstanceId } from '@collector/domain-shared';
-import type { NucleoInstance } from './nucleo';
+import type { AbilityId, CardId, CardInstanceId, NucleoColor } from '@collector/domain-shared';
+import type { NucleoInstance, NucleoDie } from './nucleo';
 import type { CombatSide } from './turn';
 import type { AbilityCooldownSnapshot } from './cooldown';
 import type { ContratiempoUndoScope, UndoableEnemyActionLogEntry } from './contratiempo';
 import type { MinionDefinitionId } from './minion';
 import type { DramaturgiaCardIcon } from './enemy-ai'; // NUEVO H1.18
 import type { CombatOutcome, DefeatReason } from './combat-status'; // NUEVO H1.18
+import type { AlternativeVictoryCondition } from './victory-condition'; // NUEVO H1.8+H1.18
 
 /**
  * Slice de H1.3 del union completo esbozado en architecture_stack.md §2.2. Ese
@@ -20,10 +21,26 @@ import type { CombatOutcome, DefeatReason } from './combat-status'; // NUEVO H1.
  */
 export type CombatEvent =
   | {
-      readonly type: 'NUCLEO_POOL_ROLLED';
-      readonly pool: readonly NucleoInstance[];
-      /** Regla GDD §2.3: quien tenga el turno en este instante "elige primero" del nuevo pool. */
+      /** RENOMBRADO H3.4 de `NUCLEO_POOL_ROLLED` — reroll colectivo de la mesa de dados
+       *  (5 fijos + extras), emitido cuando se gasta el último dado AVAILABLE. */
+      readonly type: 'NUCLEO_TABLE_REROLLED';
+      readonly dice: readonly NucleoDie[];
+      /** Regla GDD §2.3: quien tenga el turno en este instante "elige primero" de la mesa. */
       readonly priorityTurnOwner: CombatSide;
+    }
+  | {
+      /** NUEVO H3.4. Un dado EXTRA se añadió a la mesa (`ADD_NUCLEO_DIE`, tope no alcanzado). */
+      readonly type: 'NUCLEO_DIE_ADDED';
+      readonly color: NucleoColor;
+      readonly dieId: NucleoInstance['id'];
+      readonly tableSizeAfter: number;
+    }
+  | {
+      /** NUEVO H3.4. Intento de añadir dado EXTRA ignorado — la mesa ya está al tope
+       *  (`tableMaxDice`). No es un error de comando (decisions.md: "se ignoran"). */
+      readonly type: 'NUCLEO_DIE_ADD_SKIPPED';
+      readonly color: NucleoColor;
+      readonly reason: 'TABLE_AT_MAX';
     }
   | {
       readonly type: 'ABILITY_ACTIVATED';
@@ -184,6 +201,15 @@ export type CombatEvent =
       readonly isDefensor: boolean;
     }
   | {
+      /** NUEVO §3.10.3. Intento de `SUMMON_MINION` ignorado — `minionsInPlay.length` ya
+       *  está en `maxMinionsInPlay`. No es un `CombatCommandError` (caso de juego válido,
+       *  mismo patrón que `NUCLEO_DIE_ADD_SKIPPED`). */
+      readonly type: 'MINION_SUMMON_SKIPPED';
+      readonly minionDefinitionId: MinionDefinitionId;
+      readonly sourceId: string;
+      readonly reason: 'TABLE_AT_MAX';
+    }
+  | {
       /**
        * NUEVO H1.16. Emitido cuando `RESOLVE_MINION_ACTION` ejecuta la acción de un
        * Secuaz — mismo payload semántico que `ABILITY_ACTIVATED` + `LEADER_DAMAGED`/
@@ -197,9 +223,38 @@ export type CombatEvent =
       readonly mechanism: 'SPECIAL_ACTION' | 'PLANO_ATTACK';
     }
   | {
-      /** NUEVO H1.16. `RESOLVE_MINION_ACTION` sin ningún Secuaz en mesa — no es un error. */
+      /** NUEVO H1.16. `RESOLVE_MINION_ACTION` sin ningún Secuaz que actúe — no es un
+       *  error. `NOT_SPECIFIED_BY_DRAMATURGIA` (NUEVO rediseño H1.16) — hay Secuaces en
+       *  mesa pero la carta de Dramaturgia de este turno no menciona Secuaces (o su
+       *  criterio no resolvió a ninguno). */
       readonly type: 'MINION_ACTION_SKIPPED';
-      readonly reason: 'NO_MINIONS_IN_PLAY';
+      readonly reason: 'NO_MINIONS_IN_PLAY' | 'NOT_SPECIFIED_BY_DRAMATURGIA';
+    }
+  | {
+      /** NUEVO §3.9.3. Un ataque del jugador (`PLAY_CARD`, `ATTACK_ENEMY`) golpea a un
+       *  Secuaz en vez de al Enemigo — mismo patrón que `ALLY_DAMAGED`/`ENEMY_DAMAGED`. */
+      readonly type: 'MINION_DAMAGED';
+      readonly cardId: CardId;
+      readonly sourceId: string;
+      readonly nucleoSpent: NucleoInstance;
+      readonly minionInstanceId: CardInstanceId;
+      readonly rawAmount: number;
+      readonly lifeBefore: number;
+      readonly lifeAfter: number;
+      readonly died: boolean;
+      /** Exceso sobre la vida del Secuaz (rawAmount - lifeBefore), ANTES de decidir Arrollar. */
+      readonly excess: number;
+      /** `excess` si `died && effect.arrollar`, si no 0. */
+      readonly appliedDamageToEnemy: number;
+      readonly enemyDamageAfter: number;
+    }
+  | {
+      /** NUEVO §3.9.3. Un Secuaz sale de mesa — sin trigger por defecto (decisions.md
+       *  punto 3). `cause` deja la puerta abierta a un futuro `'ON_DEATH_EFFECT'`. */
+      readonly type: 'MINION_DEFEATED';
+      readonly instanceId: CardInstanceId;
+      readonly definitionId: MinionDefinitionId;
+      readonly cause: 'PLAYER_ATTACK';
     }
   | {
       /**
@@ -290,4 +345,39 @@ export type CombatEvent =
       readonly type: 'COMBAT_ENDED';
       readonly outcome: CombatOutcome;
       readonly defeatReason?: DefeatReason;
+      /** NUEVO H1.8+H1.18. Presente solo si el desenlace vino de una
+       *  `AlternativeVictoryCondition` (§4.4) en vez de la lógica por defecto. */
+      readonly alternativeConditionKind?: AlternativeVictoryCondition['kind'];
+    }
+  | {
+      /** NUEVO H3.6. Emitido tras resolver `DRAW_OR_GENERATE` — envuelve el efecto
+       *  concreto (`LEADER_HAND_CARD_DRAWN`/`LEADER_HAND_DRAW_SKIPPED`/
+       *  `ENERGY_GENERATED`/`ENERGY_GENERATE_SKIPPED`) ya emitido antes que este. */
+      readonly type: 'FREE_STEP_RESOLVED';
+      readonly action: 'draw' | 'generate';
+      readonly outcome: 'APPLIED' | 'SKIPPED';
+    }
+  | {
+      /** NUEVO H3.6. Robo exitoso (paso previo o `DRAW_CARD` pagado). */
+      readonly type: 'LEADER_HAND_CARD_DRAWN';
+      readonly cardId: CardId;
+      readonly handSizeAfter: number;
+      readonly deckRemainingAfter: number;
+    }
+  | {
+      /** NUEVO H3.6. Robo no-op — mano llena o mazo vacío (decisions.md: "no ocurre
+       *  nada, no se pierde el paso"). */
+      readonly type: 'LEADER_HAND_DRAW_SKIPPED';
+      readonly reason: 'HAND_FULL' | 'DECK_EMPTY';
+    }
+  | {
+      /** NUEVO H3.6. Generar Energía exitoso — reutilizable desde el paso previo. */
+      readonly type: 'ENERGY_GENERATED';
+      readonly amount: number;
+      readonly leaderEnergyAfter: number;
+    }
+  | {
+      /** NUEVO H3.6. Generar Energía no-op — ya al tope. */
+      readonly type: 'ENERGY_GENERATE_SKIPPED';
+      readonly reason: 'ENERGY_AT_MAX';
     };

@@ -38,7 +38,7 @@ describe('CombatEngine — H1.17: PHASE_CHANGED por TURN_COUNT_AT_LEAST (Enemigo
       { phaseNumber: 1, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 2 } },
       { phaseNumber: 2, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 9999 } },
     ];
-    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -73,7 +73,7 @@ describe('CombatEngine — H1.17: PHASE_CHANGED por SCENARIO_PLOT_AT_LEAST (Esce
       { phaseNumber: 1, changeCondition: { kind: 'SCENARIO_PLOT_AT_LEAST', amount: 3 } },
       { phaseNumber: 2, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 9999 } },
     ];
-    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(2),
       abilityCoreCosts: costs([ENEMY_PLOT]),
       abilityCooldowns: cooldowns([[ENEMY_PLOT, { side: 'ENEMY', baseCooldown: 1 }]]),
@@ -81,7 +81,7 @@ describe('CombatEngine — H1.17: PHASE_CHANGED por SCENARIO_PLOT_AT_LEAST (Esce
       initialTurnOwner: 'ENEMY',
       scenarioPhases,
     });
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
 
     const result = engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_PLOT, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
@@ -113,7 +113,7 @@ describe('CombatEngine — H1.17: HEALTH_BELOW_PERCENT vía initialEnemyDamage (
       { phaseNumber: 1, changeCondition: { kind: 'HEALTH_BELOW_PERCENT', percent: 50 } },
       { phaseNumber: 2, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 9999 } },
     ];
-    const engine = new CombatEngine({ leaderMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    const engine = new CombatEngine({ leaderMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(3),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -142,7 +142,7 @@ describe('CombatEngine — H1.17: tope de 2 Level-Ups alcanzado — "no hace nad
       { phaseNumber: 1, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 2 } },
       { phaseNumber: 2, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 9999 } },
     ];
-    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(4),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -174,7 +174,7 @@ describe('CombatEngine — H1.17: Enemigo y Escenario cambian de fase en el mism
       { phaseNumber: 1, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 2 } },
       { phaseNumber: 2, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 9999 } },
     ];
-    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(5),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -203,7 +203,7 @@ describe('CombatEngine — H1.17: Enemigo y Escenario cambian de fase en el mism
 
 describe('CombatEngine — H1.17: sin fases configuradas (compatibilidad hacia atrás)', () => {
   it('enemyPhases/scenarioPhases omitidos: ningún PHASE_CHANGED/LEADER_LEVELED_UP, leaderState en su valor inicial', () => {
-    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(6),
       abilityCoreCosts: costs([ENEMY_PLOT]),
       abilityCooldowns: cooldowns([[ENEMY_PLOT, { side: 'ENEMY', baseCooldown: 1 }]]),
@@ -211,7 +211,7 @@ describe('CombatEngine — H1.17: sin fases configuradas (compatibilidad hacia a
       initialTurnOwner: 'ENEMY',
     });
 
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     const r1 = engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_PLOT, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
     });
@@ -243,19 +243,18 @@ describe('CombatEngine — H1.17: Contratiempo NO revierte una fase ya cambiada 
       { phaseNumber: 1, changeCondition: { kind: 'SCENARIO_PLOT_AT_LEAST', amount: 3 } },
       { phaseNumber: 2, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 9999 } },
     ];
-    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [CARD_FULL_TURN],
       randomSource: new SeededRandomSource(7),
       abilityCoreCosts: costs([ENEMY_PLOT]),
       abilityCooldowns: cooldowns([[ENEMY_PLOT, { side: 'ENEMY', baseCooldown: 1 }]]),
       abilityEffects: effects([[ENEMY_PLOT, { kind: 'PLOT', amount: 3 }]]),
       contratiempoCards: contratiempoCards([[CARD_FULL_TURN, { energyCost: 2, undoScope: 'FULL_TURN' }]]),
       scenarioPhases,
-      poolSize: 6,
       initialLeaderEnergy: 2,
     });
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_PLOT, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
     });
@@ -283,7 +282,7 @@ describe('CombatEngine — H1.17: cascada de 3+ fases en el mismo dispatch() (ge
       { phaseNumber: 2, changeCondition: { kind: 'SCENARIO_PLOT_AT_LEAST', amount: 5 } },
       { phaseNumber: 3, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 9999 } },
     ];
-    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(8),
       abilityCoreCosts: costs([ENEMY_PLOT]),
       abilityCooldowns: cooldowns([[ENEMY_PLOT, { side: 'ENEMY', baseCooldown: 1 }]]),
@@ -291,7 +290,7 @@ describe('CombatEngine — H1.17: cascada de 3+ fases en el mismo dispatch() (ge
       initialTurnOwner: 'ENEMY',
       scenarioPhases,
     });
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
 
     const result = engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_PLOT, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
@@ -341,7 +340,7 @@ describe('CombatEngine — H1.17: validación de configuración (fallos rápidos
   });
 
   it('lanza si scenarioPhases incluye HEALTH_BELOW_PERCENT (el Escenario no tiene vida)', () => {
-    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -353,7 +352,7 @@ describe('CombatEngine — H1.17: validación de configuración (fallos rápidos
   });
 
   it('lanza si phaseNumber no es secuencial (huecos)', () => {
-    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -365,7 +364,7 @@ describe('CombatEngine — H1.17: validación de configuración (fallos rápidos
   });
 
   it('lanza si initialLeaderLevelUpsSpent excede LEADER_LEVEL_UPS_MAX (2)', () => {
-    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -374,7 +373,7 @@ describe('CombatEngine — H1.17: validación de configuración (fallos rápidos
   });
 
   it('lanza si initialEnemyDamage excede enemyMaxHealth', () => {
-    expect(() => new CombatEngine({ leaderMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),

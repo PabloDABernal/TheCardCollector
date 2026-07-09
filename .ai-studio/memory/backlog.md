@@ -63,6 +63,8 @@ Conectar los últimos piezas que faltan para que el combate sea realmente jugabl
 
 **Referencia:** GDD §2.3, `docs/architecture_stack.md` §2.2 (interfaces `CombatCommand`, `CombatEvent`).
 
+⚠️ **Reabierta 2026-07-08:** La descripción y criterios de aceptación asumen un modelo de pool de fichas homogéneo que se vacía por completo. Este modelo ha sido reemplazado por uno nuevo (ver decisions.md 2026-07-08): 5 dados fijos en mesa (uno por color), con valor 1-4 independiente al tirarse; cartas/equipo pueden añadir dados EXTRA de color específico; tope duro de dados en mesa (sugerido 10); reroll ocurre cuando se gasta el ÚLTIMO dado disponible (todos se re-tiran a la vez). Esta historia debe revisarse ANTES de que Architect diseñe el nuevo modelo en H3.4.
+
 ---
 
 ### H1.4: Cooldowns (por vuelta, no por acción)
@@ -135,6 +137,8 @@ Conectar los últimos piezas que faltan para que el combate sea realmente jugabl
 
 **Referencia:** `docs/architecture_stack.md` §5, architecture_stack.md §7.2-7.3 (pasos del Programmer).
 
+⚠️ **Reabierta 2026-07-08:** Las interfaces `EnemyDefinition` y `ScenarioDefinition` necesitan un nuevo campo opcional `alternativeVictoryConditions?: VictoryCondition[]` que permita definir reglas de victoria/derrota adicionales o alternativas a las por defecto (vida Líder a 0, Trama a umbral, vida Enemigo a 0). Ejemplos: "Ganador: todos los Secuaces del Enemigo mueren", "Perdedor: el contador de Trama llega a -5". Este campo debe ser validado por el schema de `CatalogLoader`.
+
 ---
 
 ### H1.9: Contenido de juguete — Líderes (2)
@@ -205,6 +209,8 @@ Conectar los últimos piezas que faltan para que el combate sea realmente jugabl
 
 **Referencia:** `docs/architecture_stack.md` §2.4 (testabilidad).
 
+⚠️ **Reabierta 2026-07-08:** Los tests de Núcleos asumen el modelo viejo de pool de fichas homogéneo (ver H1.3 reapertura). Los tests deben revisarse ANTES de H3.4 para validar contra el nuevo modelo de 5 dados fijos por color + extras + tope en mesa.
+
 ---
 
 ### H1.14: Combo y Contratiempo — lógica de motor
@@ -235,17 +241,22 @@ Conectar los últimos piezas que faltan para que el combate sea realmente jugabl
 
 ---
 
-### H1.16: Secuaces del enemigo (presencia pasiva, acción selectiva)
+### H1.16: Secuaces del enemigo (presencia pasiva, comportamiento dirigido por Dramaturgia)
 
-**Descripción:** implementar que Secuaces aportan efecto pasivo mientras están en mesa, solo 1 actúa por turno enemigo (selección aleatoria con filtro de validez), Defensor fuerza ser atacado primero.
+**Descripción:** implementar que Secuaces aportan efecto pasivo mientras están en mesa, tienen HP propio (definido en catálogo), pueden morir al llegar a 0 de vida, y su acción/comportamiento es dictado por el **efecto textual de la carta de Dramaturgia** del Enemigo (no selección aleatoria del motor). Keyword Defensor sigue forzando prioridad de ataque.
 
 **Criterio de aceptación:**
-- Secuaz entra en mesa con efecto pasivo declarado.
-- Efecto pasivo es leído por `CombatEngine` cada turno del enemigo.
-- Selección de Secuaz que actúa: uno al azar entre los válidos (no CD, Núcleo disponible).
-- Keyword Defensor: Secuaz es atacado primero o si ya está en mesa no se puede ignorar.
+- Secuaz define su vida máxima como campo fijo en `CardDefinition` (igual que Aliados).
+- Secuaz entra en mesa con efecto pasivo declarado; el pasivo es leído por `CombatEngine` cada turno.
+- **Comportamiento en Dramaturgia:** la carta de Dramaturgia especifica cómo actúan los Secuaces ese turno vía `minionBehavior` (ver abajo). El motor valida que Secuaces existe y cumple la condición, pero NO elige aleatoriamente.
+- Secuaz recibe daño dirigido y pierde vida; al llegar a 0, sale de mesa inmediatamente sin trigger por defecto.
+- Exceso de daño que mata un Secuaz: se pierde salvo que el ataque tenga Arrollar (keyword reutilizado de Aliados), en cuyo caso el exceso pasa al Enemigo.
+- Keyword Defensor: fuerza que ese Secuaz específico sea atacado primero si está en mesa.
+- **Vocabulario de `minionBehavior` en Dramaturgia:** valores soportados: `ALL` (todos actúan), `RANDOM_ONE` (uno al azar entre válidos), `SPECIFIC_DEFINITION` (un Secuaz de una definición concreta), `HIGHEST_PLANO_ATTACK` (el de mayor ataque), **`HIGHEST_LIFE` (el de más vida actual)**, **`LOWEST_LIFE` (el de menos vida actual, típicamente el más cerca de morir)**.
 
-**Referencia:** GDD §3.8.
+**Referencia:** GDD §3.8, decisions.md 2026-07-08 "Vida de Secuaz" + "Secuaces del Enemigo: comportamiento en Dramaturgia", glossary.md.
+
+⚠️ **Reabierta 2026-07-08:** Completamente rediseñada. La nueva regla es: selección y acción de Secuaces dictada por Dramaturgia (no motor), HP propio del Secuaz permite criterios `HIGHEST_LIFE`/`LOWEST_LIFE`. Refactorizar validación de motor ANTES de H3 para reflejar el nuevo flujo.
 
 ---
 
@@ -278,6 +289,11 @@ Conectar los últimos piezas que faltan para que el combate sea realmente jugabl
 - `CombatStateSnapshot` refleja estado después de cada comando.
 
 **Referencia:** `docs/architecture_stack.md` §2.2-2.3, decisions.md "Energía inicial del Líder: 1" y "Coste de Energía de las habilidades".
+
+⚠️ **Reabierta 2026-07-08:** Añadir soporte para condiciones de victoria/derrota alternativas (ver H1.8 reapertura). El chequeo al final de cada turno debe:
+- Validar condiciones por defecto (vida Líder ≤0, Trama ≥ umbral, vida Enemigo ≤0).
+- Si existen `alternativeVictoryConditions` en la definición del Enemigo/Escenario activo, también evaluarlas (ej. "todos los Secuaces mueren" → victoria, "Trama < -5" → derrota).
+- Retornar resultado de combate si cualquier condición se cumple.
 
 ---
 
@@ -579,18 +595,31 @@ Conectar los últimos piezas que faltan para que el combate sea realmente jugabl
 
 ---
 
-### H3.4: Aumento del pool de Núcleos a 8 y ajuste de tests
+### H3.4: Rediseño del modelo de Núcleos — 5 dados fijos + extras + tope en mesa + reroll al vaciar
 
-**Descripción:** cambiar la constante `DEFAULT_NUCLEO_POOL_SIZE` de 6 a 8 en `packages/domain/combat/src/config.ts` (o donde esté definida). Actualizar cualquier test o spec que asumía tamaño 6 (principalmente H1.3 y H1.13) para que se refiera al nuevo tamaño o sea parametrizado.
+**Descripción:** implementar el nuevo modelo de pool de Núcleos que reemplaza completamente el anterior (ver decisions.md 2026-07-08). El motor debe:
+1. Mantener **5 dados fijos en mesa**, uno por color temático (Rojo, Azul, Verde, Amarillo, Púrpura), más un 6º dado Neutro (⬜) que acepta cualquier coste.
+2. Cada dado, al tirarse (inicio de turno o después de gasto), genera un **valor 1-4 de forma independiente**.
+3. **Dados EXTRA de color específico** pueden ser añadidos a la mesa por efectos de cartas/equipo del Líder. Ejemplo: "Equipo que añade +1 dado Rojo al pool".
+4. Implementar un **tope duro de dados en mesa** (sugerido 10 como valor inicial; ajustable en config para balanceo). Intentos de añadir dados que exceden el tope se ignoran.
+5. **Reroll ocurre cuando se gasta el ÚLTIMO dado disponible en mesa** (sin importar color ni dueño). En ese momento se re-tiran **TODOS los dados a la vez** (5 fijos + todos los extras), generando nuevos valores 1-4.
+6. Los costes de Núcleo en habilidades y cartas siguen siendo por color/Neutro (no por número mínimo). Validación: se puede pagar un coste ⚫ (Neutro) con cualquier dado en mesa; se puede pagar 🔴 (Rojo) con cualquier dado Rojo en mesa o con un Neutro.
+7. Refactorizar H1.3 y H1.13 para validarse contra este nuevo modelo antes de cerrar H3.4.
 
 **Criterio de aceptación:**
-- Constante `DEFAULT_NUCLEO_POOL_SIZE = 8` (era 6).
-- Tests de "relanzamiento de pool" siguen pasando con tamaño 8 (sin hardcodeos de "6 fichas").
-- Tests parametrizados de varianza de color no asumen cobertura de 5 colores en un ciclo (el reparto sigue siendo al azar puro).
-- Al menos un test documenta el cambio: "con 8 fichas, la probabilidad de que ningún color aparezca es [X]%" (evidencia de intención).
-- Pool generado en nuevo combate de juguete contiene 8 fichas.
+- `CorePool` refactorizado a: array de 5 `FixedCore` (fijos, solo trackean valor) + array de `ExtraCore` (dinámicos, llevan color y valor).
+- Función `addExtraCore(color: CoreColor)` valida tope en mesa antes de añadir.
+- Función `rollAllCores()` se dispara cuando `countRemainingCores() === 1` y se gasta ese último. Genera nuevos valores para todos (fijos + extras).
+- Validación de gasto: `canPayCost(coreColor)` retorna true si existe dado en mesa del color requerido O si es Neutro.
+- Tests parametrizados:
+  - Caso 1: 5 dados fijos solo, valor 1-4 cada uno, reroll en último.
+  - Caso 2: 5 fijos + 2 extras (ej. 2 Rojo), total 7, reroll en último.
+  - Caso 3: Intento de añadir extra cuando hay 10 dados → se rechaza, tope respetado.
+  - Caso 4: Secuencia: gasta 1 Rojo (quedan 6), gasta 1 Neutro (quedan 5), gasta un Azul (quedan 4)... hasta quedan 1 (fijo Púrpura), al gastarlo todos se re-tiran.
+  - Caso 5: Pago de coste 🔴 con Rojo disponible vs. fallido si no hay Rojo ni Neutro.
+- Pool inicial de juguete: 5 fijos + 0 extras, tope 10.
 
-**Referencia:** decisions.md "Pool de Núcleos: tamaño final 8 (sube de 6)", H1.3 (original del motor de pool).
+**Referencia:** decisions.md "Pool de Núcleos" (2026-07-08), H1.3 (motor de turnos, necesita reapertura), H1.13 (tests, necesita reapertura), glossary.md "Pool de Núcleos".
 
 ---
 
@@ -609,6 +638,81 @@ Conectar los últimos piezas que faltan para que el combate sea realmente jugabl
 - Visual claro (diferente color, opacidad, tooltip) que distingue "disponible" de "no disponible".
 
 **Referencia:** H2.9 (flujo end-to-end), H3.1 (cableado de habilidad), H3.3 (integración de generar energía), decisions.md sobre estructura de decisión de turno.
+
+---
+
+### H3.6: Paso previo gratis de turno — robar carta o generar energía
+
+**Descripción:** implementar una **nueva fase al inicio del turno del Líder, antes de las 2 acciones pagadas**: el Líder puede elegir entre **robar 1 carta de su mazo** o **generar +1 Energía** (máximo 5). Esta acción es **gratis** (no consume ninguna de las 2 acciones del turno) y ocurre una sola vez al inicio, antes de cualquier otra decisión. Si el mazo está vacío, la opción de robo se deshabilita (pero generar energía sigue disponible).
+
+**Criterio de aceptación:**
+- Nuevo comando `DRAW_OR_GENERATE` en el motor que acepta parámetro `action: 'draw' | 'generate'`.
+- El comando es válido solo al inicio del turno del Líder y solo una vez por turno.
+- Si `action: 'draw'`, roba 1 carta (mano aumenta en 1, respetando tope de 7; si mazo vacío, rechaza con error `CANNOT_DRAW_EMPTY_DECK`).
+- Si `action: 'generate'`, suma +1 Energía (tope 5; si ya en máximo, rechaza con error `ENERGY_AT_MAX`).
+- Evento emitido: `DRAW_OR_GENERATE_EXECUTED { action, result }` (ej. `{ action: 'draw', result: cardId }` o `{ action: 'generate', result: newEnergyAmount }`).
+- Después de ejecutar, el turno avanza a la fase de 2 acciones pagadas normales (H3.1, H3.3).
+- Mano inicial fijada en 5 cartas (era undefined en H1, ahora se especifica); tope de mano en 7.
+- Tests parametrizados:
+  - Caso 1: Turno del Líder, elige draw, mazo con cartas → 1 carta entra en mano, acción gratis gastada, faltan 2 acciones pagadas.
+  - Caso 2: Turno del Líder, elige draw, mazo vacío → error `CANNOT_DRAW_EMPTY_DECK`.
+  - Caso 3: Turno del Líder, elige generate, Energía < 5 → +1 Energía, acción gratis gastada.
+  - Caso 4: Turno del Líder, elige generate, Energía = 5 → error `ENERGY_AT_MAX`.
+  - Caso 5: Turno enemigo → comando rechazado, no es válido.
+  - Caso 6: Segunda llamada a `DRAW_OR_GENERATE` en el mismo turno → rechazado, solo una vez.
+
+**Referencia:** decisions.md (2026-07-08) "Estructura de turno del jugador ampliada", H3.5 (UI de decisión de turno debe mostrar esta opción gratis), H1.18 (motor de combate, debe modelar esta fase).
+
+---
+
+### H3.7: Targeting explícito de ataques — elegir objetivo (Enemigo o Secuaz)
+
+⚠️ **PRIORITARIO / BLOQUEANTE PARA JUGABILIDAD REAL**
+
+**Descripción:** implementar el sistema de targeting explícito que permite al jugador elegir el destino de un ataque: puede dirigirse al Enemigo directo o a cualquier Secuaz válido en mesa. Esta decisión es táctica y requiere interfaz clara en el motor (campo `targetId` en comando `PLAY_CARD` / `ACTIVATE_ABILITY` cuando el efecto es dañante) y en la UI (indicador visual de objetivo seleccionado antes de confirmar el ataque).
+
+**Por qué es bloqueante:** sin targeting explícito, un combate contra un Enemigo rodeado de Secuaces no es jugable de forma completa — el jugador no puede tomar la decisión principal del combate (atacar al Enemigo vs. limpiar Secuaces). Esto hace que el cierre del loop jugable (E3) sea incompleto sin esta pieza.
+
+**Criterio de aceptación:**
+- Comando `PLAY_CARD` y `ACTIVATE_ABILITY` aceptan parámetro opcional `targetId: string` (ID del Secuaz) o `null`/undefined (Enemigo directo).
+- Motor valida que `targetId` corresponde a un Secuaz en mesa (si se proporciona).
+- Si es un Secuaz atacado y tiene keyword Defensor, valida que ese Defensor es atacado primero (rechazo si no).
+- Efecto del ataque (daño) se aplica al objetivo elegido.
+- Evento `DAMAGE_DEALT` incluye campo `targetId` para que la UI animar el daño al objetivo correcto.
+- **Interfaz de selección (H3.8 toca la UI visual; aquí es solo lógica de motor):**
+  - Antes de jugar una carta de Ataque o activar una habilidad de daño, el motor debe validar cuántos objetivos válidos hay.
+  - Si hay 0 Secuaces en mesa (solo Enemigo), targeting se asume automático al Enemigo (sin UI de selección).
+  - Si hay ≥1 Secuaz, comando requiere que `targetId` sea especificado explícitamente (la UI de H3.8 presenta las opciones).
+  - Si `targetId` falta en un caso donde es requerido, comando se rechaza con error `TARGET_REQUIRED`.
+- **Símetría con Aliados:** redirección de daño hacia Aliado propio (H1.15) sigue siendo automática (Aliado bloquea); redirección hacia Secuaz enemigo es manual (selección del jugador).
+- Tests parametrizados:
+  - Caso 1: Jugar Ataque, 0 Secuaces en mesa → targetId indiferente, daño va al Enemigo.
+  - Caso 2: Jugar Ataque, 1 Secuaz sin Defensor, targetId=secuazA → daño va a Secuaz.
+  - Caso 3: Jugar Ataque, 1 Secuaz sin Defensor, targetId=null → daño va al Enemigo (jugador eligió no atacar Secuaz).
+  - Caso 4: Jugar Ataque, 2 Secuaces (uno Defensor, otro normal), sin targetId → error `TARGET_REQUIRED`.
+  - Caso 5: Jugar Ataque, 1 Secuaz Defensor, targetId=otro Secuaz sin Defensor → error `DEFENDER_HAS_PRIORITY`, Defensor debe ser atacado.
+  - Caso 6: Daño > Vida Secuaz, Arrollar present → exceso va al Enemigo; sin Arrollar → exceso se pierde.
+
+**Referencia:** decisions.md 2026-07-08 "Vida de Secuaz: mecánica mínima para HP propia" §1 (Targeting), H1.15 (absorción de daño por Aliados, contraste), H1.16 (Secuaces con HP), GDD §3.8 (Secuaces), Marvel Champions (referencia explícita del Director Creativo).
+
+---
+
+### H3.8: UI visual de targeting — selector de objetivo antes de confirmar ataque
+
+**Descripción:** implementar en `packages/combat-scene/view` y `InputAdapter` la interfaz visual que permite al jugador elegir el objetivo de un ataque cuando hay múltiples opciones en mesa (Enemigo + Secuaces). Al seleccionar una carta de Ataque o habilidad de daño, si hay Secuaces en mesa, se abre un modal/overlay que muestra los objetivos válidos; el jugador toca/clickea el objetivo deseado y confirma, lo que dispara el comando al `CombatBridge` con `targetId` correcto.
+
+**Criterio de aceptación:**
+- Intent nuevo en `InputAdapter`: `{ type: 'SELECT_ATTACK_TARGET', targetId }` (targetId puede ser ID del Enemigo o de un Secuaz).
+- Cuando se selecciona una carta de Ataque con destino dañante (p.ej. palabra clave "Ataque"), antes de ejecutar se valida si hay Secuaces en mesa.
+- Si hay Secuaces (y no todos están con Defensor excepto uno), se abre selector de objetivo (modal overlay u overlay en tablero).
+- Selector muestra: miniatura/nombre del Enemigo + miniaturas/nombres de cada Secuaz en mesa, con estado visual (vida actual/máxima, icono Defensor si aplica).
+- Si hay un Defensor, se resalta visualmente forzando su selección (ej. botón deshabilitado en otros, o tooltip).
+- Al tocar un objetivo, comando `PLAY_CARD` o `ACTIVATE_ABILITY` se despacha con `targetId` correspondiente.
+- Si mano anterior se cierra sin seleccionar (tap fuera o ESC), selector se cancela y el ataque no se ejecuta.
+- Caso especial: si NO hay Secuaces en mesa, el selector no aparece — el ataque se ejecuta directamente al Enemigo sin pedir confirmación.
+- Tests visuales: levantar combate con Secuaces, simular selección de Ataque, verificar que overlay selector aparece y contiene opciones correctas.
+
+**Referencia:** H3.7 (lógica de targeting en motor), H2.8 (renderización de Secuaces), H2.7 (InputAdapter base), decisions.md "Targeting: el jugador SÍ puede dirigir daño explícitamente a un Secuaz".
 
 ---
 

@@ -16,19 +16,23 @@ export interface DiceRollParams {
   readonly poolOrigin?: { x: number; y: number };
 }
 
-/** H2.5 spec §3.1 — dados rodando + `particleBurst` embebido. Dispara con `NUCLEO_POOL_ROLLED`;
- *  itera internamente sobre `target.event.pool` (un único step de `EffectsDirector`, no uno por
- *  Núcleo — H2.4 §4). */
+/** H2.5 spec §3.1 — dados rodando + `particleBurst` embebido. RENOMBRADO H3.4: disparaba con
+ *  `NUCLEO_POOL_ROLLED`, ahora con `NUCLEO_TABLE_REROLLED` (payload `dice` en vez de `pool`, mismo
+ *  espíritu — ver `types/events.ts`); itera internamente sobre `target.event.dice` (un único step
+ *  de `EffectsDirector`, no uno por Núcleo — H2.4 §4). NOTA: `JUICE_CONFIG.NUCLEO_TABLE_REROLLED`
+ *  usa `soundOnly` en vez de esta receta (H2.12/H2.13 — el "dado rodando" real vive en
+ *  `nucleo-table-view.ts`, que anima el sprite PERSISTENTE); esta receta se conserva registrada
+ *  para el caso en que un consumidor futuro la reutilice contra un evento con la misma forma. */
 export const diceRoll: JuiceRecipe<DiceRollParams> = {
   id: 'diceRoll',
   play(scene, target, params) {
-    if (target.event.type !== 'NUCLEO_POOL_ROLLED') {
+    if (target.event.type !== 'NUCLEO_TABLE_REROLLED') {
       // No debería alcanzarse en la práctica (único mapeo de JUICE_CONFIG para esta receta) —
       // resuelve sin efecto en vez de lanzar, mismo criterio defensivo de `resolveJuiceTarget`.
       return Promise.resolve();
     }
 
-    const pool = target.event.pool;
+    const pool = target.event.dice;
     const origin = params.poolOrigin ?? DEFAULT_PLACEHOLDER_POSITION;
     const startX = origin.x - ((pool.length - 1) * DIE_SEPARATION_PX) / 2;
 

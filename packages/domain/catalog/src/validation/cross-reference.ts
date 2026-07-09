@@ -14,6 +14,7 @@ export function validateCrossReferences(catalog: Catalog): void {
   validateLeaderLevelUpAbilityRefs(catalog);
   validateEvolutionTemplateBespokeRefs(catalog);
   validateGlobalAbilityIdUniqueness(catalog);
+  validateDramaturgiaSummonEffectRefs(catalog);
 }
 
 function validateLeaderCardPools(catalog: Catalog): void {
@@ -83,6 +84,37 @@ function validateGlobalAbilityIdUniqueness(catalog: Catalog): void {
   for (const [enemyId, enemy] of catalog.enemies) {
     for (const ability of enemy.abilities) {
       registerAbilityId(seen, ability.id, `enemies["${String(enemyId)}"].abilities`);
+    }
+  }
+}
+
+/**
+ * NUEVO §3.10.4. `DramaturgiaCardDefinition.summonEffect.minionDefinitionId` debe existir
+ * entre los `minions[].id` del Enemigo/Escenario propietario de esa carta de Dramaturgia
+ * (mismo Enemigo/Escenario cuyo `dramaturgiaDeck` contiene la carta) — mismo estilo
+ * fail-fast que el resto de esta función.
+ */
+function validateDramaturgiaSummonEffectRefs(catalog: Catalog): void {
+  for (const [enemyId, enemy] of catalog.enemies) {
+    const ownMinionIds = new Set((enemy.minions ?? []).map((m) => m.id));
+    for (const [i, card] of enemy.dramaturgiaDeck.entries()) {
+      if (card.summonEffect && !ownMinionIds.has(card.summonEffect.minionDefinitionId)) {
+        fail(
+          `enemies["${String(enemyId)}"].dramaturgiaDeck[${i}].summonEffect.minionDefinitionId`,
+          `referencia a MinionDefinitionId "${card.summonEffect.minionDefinitionId}" que no existe en "enemies[\"${String(enemyId)}\"].minions"`
+        );
+      }
+    }
+  }
+  for (const [scenarioId, scenario] of catalog.scenarios) {
+    const ownMinionIds = new Set((scenario.minions ?? []).map((m) => m.id));
+    for (const [i, card] of scenario.dramaturgiaDeck.entries()) {
+      if (card.summonEffect && !ownMinionIds.has(card.summonEffect.minionDefinitionId)) {
+        fail(
+          `scenarios["${String(scenarioId)}"].dramaturgiaDeck[${i}].summonEffect.minionDefinitionId`,
+          `referencia a MinionDefinitionId "${card.summonEffect.minionDefinitionId}" que no existe en "scenarios[\"${String(scenarioId)}\"].minions"`
+        );
+      }
     }
   }
 }

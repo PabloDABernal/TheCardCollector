@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { parseCardDefinition, parseLeaderDefinition, parseEnemyDefinition, parseEvolutionTemplate } from './schema';
+import {
+  parseCardDefinition,
+  parseLeaderDefinition,
+  parseEnemyDefinition,
+  parseEvolutionTemplate,
+  parseScenarioDefinition,
+} from './schema';
 import { validateCrossReferences } from './cross-reference';
 import type { Catalog } from '../types/catalog';
 
@@ -48,6 +54,27 @@ function enemyRaw(overrides: Record<string, unknown> = {}): Record<string, unkno
       { id: 'dramacard-2', name: 'Carta 2', icon: 'ATTACK' },
       { id: 'dramacard-3', name: 'Carta 3', icon: 'PLOT' },
       { id: 'dramacard-4', name: 'Carta 4', icon: 'PLOT' },
+    ],
+    ...overrides,
+  };
+}
+
+function scenarioRaw(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'scenario-1',
+    name: 'Escenario de Prueba',
+    plotThresholds: [
+      { atLeast: 2, description: 'umbral 1' },
+      { atLeast: 4, description: 'umbral 2' },
+      { atLeast: 6, description: 'umbral 3' },
+    ],
+    passives: [],
+    phases: [{ phaseNumber: 1, changeCondition: { kind: 'TURN_COUNT_AT_LEAST', turn: 1 } }],
+    dramaturgiaDeck: [
+      { id: 'dramacard-s1', name: 'Carta S1', icon: 'ATTACK' },
+      { id: 'dramacard-s2', name: 'Carta S2', icon: 'ATTACK' },
+      { id: 'dramacard-s3', name: 'Carta S3', icon: 'PLOT' },
+      { id: 'dramacard-s4', name: 'Carta S4', icon: 'PLOT' },
     ],
     ...overrides,
   };
@@ -212,5 +239,119 @@ describe('validateCrossReferences', () => {
     // la violación de cardPoolIds se detecta primero — el mensaje NO debe mencionar la
     // referencia rota de levelUpOptions (documenta el orden fail-fast).
     expect(() => validateCrossReferences(catalog)).toThrow(/cardPoolIds/);
+  });
+
+  // ---------------------------------------------------------------------------
+  // NUEVO §3.10.4 — DramaturgiaCardDefinition.summonEffect.minionDefinitionId
+  // ---------------------------------------------------------------------------
+
+  it('Enemigo con summonEffect.minionDefinitionId que existe en su propio minions[] → no lanza', () => {
+    const enemy = parseEnemyDefinition(
+      enemyRaw({
+        minions: [
+          {
+            id: 'minion-1',
+            name: 'Secuaz',
+            passiveEffect: { kind: 'ATTACK', amount: 1 },
+            planoAttackAmount: 1,
+            isDefensor: false,
+            maxLife: 4,
+          },
+        ],
+        dramaturgiaDeck: [
+          { id: 'dramacard-1', name: 'Carta 1', icon: 'ATTACK', summonEffect: { minionDefinitionId: 'minion-1' } },
+          { id: 'dramacard-2', name: 'Carta 2', icon: 'ATTACK' },
+          { id: 'dramacard-3', name: 'Carta 3', icon: 'PLOT' },
+          { id: 'dramacard-4', name: 'Carta 4', icon: 'PLOT' },
+        ],
+      }),
+      'enemies[0]'
+    );
+    const catalog = catalogOf({ enemies: mapOf(enemy) });
+
+    expect(() => validateCrossReferences(catalog)).not.toThrow();
+  });
+
+  it('Enemigo con summonEffect.minionDefinitionId que NO existe en su minions[] → lanza mencionando el id roto y el Enemigo', () => {
+    const enemy = parseEnemyDefinition(
+      enemyRaw({
+        dramaturgiaDeck: [
+          {
+            id: 'dramacard-1',
+            name: 'Carta 1',
+            icon: 'ATTACK',
+            summonEffect: { minionDefinitionId: 'minion-no-existe' },
+          },
+          { id: 'dramacard-2', name: 'Carta 2', icon: 'ATTACK' },
+          { id: 'dramacard-3', name: 'Carta 3', icon: 'PLOT' },
+          { id: 'dramacard-4', name: 'Carta 4', icon: 'PLOT' },
+        ],
+      }),
+      'enemies[0]'
+    );
+    const catalog = catalogOf({ enemies: mapOf(enemy) });
+
+    expect(() => validateCrossReferences(catalog)).toThrow(/minion-no-existe/);
+    expect(() => validateCrossReferences(catalog)).toThrow(/enemy-1/);
+  });
+
+  it('Escenario con summonEffect.minionDefinitionId que NO existe en su minions[] → lanza', () => {
+    const scenario = parseScenarioDefinition(
+      scenarioRaw({
+        dramaturgiaDeck: [
+          {
+            id: 'dramacard-s1',
+            name: 'Carta S1',
+            icon: 'ATTACK',
+            summonEffect: { minionDefinitionId: 'minion-no-existe' },
+          },
+          { id: 'dramacard-s2', name: 'Carta S2', icon: 'ATTACK' },
+          { id: 'dramacard-s3', name: 'Carta S3', icon: 'PLOT' },
+          { id: 'dramacard-s4', name: 'Carta S4', icon: 'PLOT' },
+        ],
+      }),
+      'scenarios[0]'
+    );
+    const catalog = catalogOf({ scenarios: mapOf(scenario) });
+
+    expect(() => validateCrossReferences(catalog)).toThrow(/minion-no-existe/);
+  });
+
+  it('un Enemigo no puede resolver summonEffect contra el minions[] de OTRO Enemigo (aislamiento por propietario)', () => {
+    const enemyWithMinion = parseEnemyDefinition(
+      enemyRaw({
+        id: 'enemy-a',
+        minions: [
+          {
+            id: 'minion-1',
+            name: 'Secuaz',
+            passiveEffect: { kind: 'ATTACK', amount: 1 },
+            planoAttackAmount: 1,
+            isDefensor: false,
+            maxLife: 4,
+          },
+        ],
+      }),
+      'enemies[0]'
+    );
+    const enemyReferencingOthersMinion = parseEnemyDefinition(
+      enemyRaw({
+        id: 'enemy-b',
+        abilities: [
+          { ...abilityRaw('enemy-b-attack-basica', 1), aiProfile: { branch: 'ATTACK', tier: 'BASICA' } },
+          { ...abilityRaw('enemy-b-plot-basica', 1), aiProfile: { branch: 'PLOT', tier: 'BASICA' } },
+        ],
+        dramaturgiaDeck: [
+          { id: 'dramacard-b1', name: 'Carta B1', icon: 'ATTACK', summonEffect: { minionDefinitionId: 'minion-1' } },
+          { id: 'dramacard-b2', name: 'Carta B2', icon: 'ATTACK' },
+          { id: 'dramacard-b3', name: 'Carta B3', icon: 'PLOT' },
+          { id: 'dramacard-b4', name: 'Carta B4', icon: 'PLOT' },
+        ],
+      }),
+      'enemies[1]'
+    );
+    const catalog = catalogOf({ enemies: mapOf(enemyWithMinion, enemyReferencingOthersMinion) });
+
+    expect(() => validateCrossReferences(catalog)).toThrow(/enemy-b/);
   });
 });

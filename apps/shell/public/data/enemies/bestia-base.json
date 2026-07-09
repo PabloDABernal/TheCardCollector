@@ -43,9 +43,19 @@
   "dramaturgiaDeck": [
     { "id": "dramacard-bestia-base-01", "name": "Garras", "icon": "ATTACK" },
     { "id": "dramacard-bestia-base-02", "name": "Garras", "icon": "ATTACK" },
-    { "id": "dramacard-bestia-base-03", "name": "Mordisco Salvaje", "icon": "ATTACK", "effectDescription": "Invoca un secuaz menor (no ejecutable todavía, ver spec H1.10 §0.3 — H1.16)." },
+    { "id": "dramacard-bestia-base-03", "name": "Mordisco Salvaje", "icon": "ATTACK", "effectDescription": "Invoca un Cachorro Salvaje.", "summonEffect": { "minionDefinitionId": "minion-bestia-base-cachorro" }, "minionBehavior": { "criterion": { "kind": "ALL" } } },
     { "id": "dramacard-bestia-base-04", "name": "Instinto", "icon": "ATTACK" },
     { "id": "dramacard-bestia-base-05", "name": "Presencia Amenazante", "icon": "PLOT" },
     { "id": "dramacard-bestia-base-06", "name": "Territorio", "icon": "PLOT" }
+  ],
+  "minions": [
+    {
+      "id": "minion-bestia-base-cachorro",
+      "name": "Cachorro Salvaje",
+      "passiveEffect": { "kind": "ATTACK", "amount": 1 },
+      "planoAttackAmount": 1,
+      "isDefensor": false,
+      "maxLife": 4
+    }
   ]
 }

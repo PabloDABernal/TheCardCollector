@@ -73,7 +73,7 @@ describe('createCombatBridge (H2.3) — pub/sub en aislamiento contra CombatEngi
     bridge.subscribeSceneEvents(sceneListener);
 
     const snapshot = bridge.getSnapshot();
-    const nucleo = snapshot.nucleoPool[0]!;
+    const nucleo = snapshot.nucleoTable[0]!;
 
     // CD1 del Líder soldado-base ("Guardia Firme") acepta cualquier Núcleo (coreCost ANY).
     const result = bridge.dispatch({
@@ -105,7 +105,7 @@ describe('createCombatBridge (H2.3) — pub/sub en aislamiento contra CombatEngi
     bridge.subscribeSceneEvents((e) => sceneEvents.push(e));
 
     const snapshot = bridge.getSnapshot();
-    const nucleo = snapshot.nucleoPool[0]!;
+    const nucleo = snapshot.nucleoTable[0]!;
 
     hudUnsubscribe();
 
@@ -130,7 +130,7 @@ describe('createCombatBridge (H2.3) — pub/sub en aislamiento contra CombatEngi
     const bridge = createCombatBridge(engine);
 
     const snapshot = bridge.getSnapshot();
-    const nucleo = snapshot.nucleoPool[0]!;
+    const nucleo = snapshot.nucleoTable[0]!;
 
     bridge.dispatch({
       type: 'ACTIVATE_ABILITY',

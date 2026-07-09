@@ -7,8 +7,10 @@
  */
 export type CombatOutcome = 'VICTORY' | 'DEFEAT';
 
-/** Motivo de derrota — presente solo cuando `status === 'DEFEAT'` (ver spec §0.6). */
-export type DefeatReason = 'LEADER_HEALTH' | 'SCENARIO_PLOT';
+/** Motivo de derrota — presente solo cuando `status === 'DEFEAT'` (ver spec §0.6).
+ *  NUEVO H1.8+H1.18: `'ALTERNATIVE'` cuando el desenlace vino de una
+ *  `AlternativeVictoryCondition` con `outcome: 'DEFEAT'`. */
+export type DefeatReason = 'LEADER_HEALTH' | 'SCENARIO_PLOT' | 'ALTERNATIVE';
 
 /**
  * Campos que `CombatStateSnapshot` incorpora a nivel raíz (ver spec §0.6) — no viven

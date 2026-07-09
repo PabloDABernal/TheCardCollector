@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import Phaser from 'phaser';
 import { CombatScene, COMBAT_SCENE_VIEWPORT } from '@collector/combat-scene';
+import type { AbilityViewData } from '@collector/combat-scene';
 import type { CombatBridge } from '@collector/combat-bridge';
 import './CombatScreen.css';
 import { buildCombatSetup } from '../combat/build-combat-setup';
@@ -9,6 +10,8 @@ import { useCombatSnapshot } from '../combat/use-combat-snapshot';
 import { CombatHud } from '../combat/CombatHud';
 import { CombatResultModal } from '../combat/CombatResultModal';
 import { LEADER_OPTIONS, DEFAULT_LEADER_OPTION } from '../combat/leader-options';
+import { ENEMY_OPTIONS, DEFAULT_ENEMY_OPTION } from '../combat/enemy-options';
+import { SCENARIO_OPTIONS, DEFAULT_SCENARIO_OPTION } from '../combat/scenario-options';
 import type { RunStartNavigationState } from '../combat/run-start-navigation-state';
 
 /**
@@ -35,15 +38,32 @@ export function CombatScreen(): JSX.Element {
   const leaderId = leaderOption.leaderId;
   const leaderName = leaderOption.label;
 
+  // NUEVO H4.x — mismo saneamiento contra el catálogo de opciones que `leaderId` (bug fix de
+  // H2.14): evita que un `state` manipulado/corrupto llegue a `buildCombatSetup` con un
+  // enemyId/scenarioId inexistente en el catálogo.
+  const requestedEnemyId = (location.state as RunStartNavigationState | null)?.enemyId;
+  const enemyOption =
+    ENEMY_OPTIONS.find((option) => option.enemyId === requestedEnemyId) ?? DEFAULT_ENEMY_OPTION;
+  const enemyId = enemyOption.enemyId;
+
+  const requestedScenarioId = (location.state as RunStartNavigationState | null)?.scenarioId;
+  const scenarioOption =
+    SCENARIO_OPTIONS.find((option) => option.scenarioId === requestedScenarioId) ?? DEFAULT_SCENARIO_OPTION;
+  const scenarioId = scenarioOption.scenarioId;
+
   const mountRef = useRef<HTMLDivElement>(null);
   const [bridge, setBridge] = useState<CombatBridge | null>(null);
+  // FIX Reviewer post-H3 (commit `cce72a3`) — `CombatHud` necesita las `leaderAbilities` del
+  // `boardContext` (mismo dato ya resuelto por `buildCombatSetup`) para calcular disponibilidad de
+  // "Activar Habilidad" por color real (`isAnyLeaderAbilityActivatable`).
+  const [leaderAbilities, setLeaderAbilities] = useState<readonly AbilityViewData[]>([]);
 
   useEffect(() => {
     let game: Phaser.Game | null = null;
     let cancelled = false; // guarda contra doble-construcción si el efecto se limpia antes de que
                             // buildCombatSetup() resuelva (StrictMode monta/desmonta en dev)
 
-    void buildCombatSetup({ leaderId }).then(({ bridge: newBridge, boardContext }) => {
+    void buildCombatSetup({ leaderId, enemyId, scenarioId }).then(({ bridge: newBridge, boardContext }) => {
       if (cancelled) return;
       game = new Phaser.Game({
         type: Phaser.AUTO,
@@ -66,6 +86,7 @@ export function CombatScreen(): JSX.Element {
         game!.scene.start('CombatScene', { bridge: newBridge, boardContext });
         void scene; // solo para dejar constancia del mismo patrón que main.ts (H2.7)
       });
+      setLeaderAbilities(boardContext.leaderAbilities);
       setBridge(newBridge); // dispara el montaje del HUD React tan pronto el bridge existe, sin
                             // esperar a que Phaser termine su propio arranque asíncrono
     });
@@ -74,13 +95,15 @@ export function CombatScreen(): JSX.Element {
       cancelled = true;
       game?.destroy(true); // true: también remueve el <canvas> del DOM
     };
-  }, [leaderId]);
+  }, [leaderId, enemyId, scenarioId]);
 
   return (
     <div className="combat-screen-root">
       <div ref={mountRef} id="phaser-mount" />
       {!bridge && <p>Cargando combate…</p>}
-      {bridge && <CombatHudOverlay bridge={bridge} leaderName={leaderName} />}
+      {bridge && (
+        <CombatHudOverlay bridge={bridge} leaderName={leaderName} leaderAbilities={leaderAbilities} />
+      )}
     </div>
   );
 }
@@ -94,17 +117,21 @@ export function CombatScreen(): JSX.Element {
 function CombatHudOverlay({
   bridge,
   leaderName,
+  leaderAbilities,
 }: {
   readonly bridge: CombatBridge;
   readonly leaderName: string;
+  readonly leaderAbilities: readonly AbilityViewData[];
 }): JSX.Element {
   const snapshot = useCombatSnapshot(bridge);
   return (
     <>
       <CombatHud
         snapshot={snapshot}
+        bridge={bridge}
         onEndTurn={() => bridge.dispatch({ type: 'END_TURN' })}
         leaderName={leaderName}
+        leaderAbilities={leaderAbilities}
       />
       {snapshot.status !== 'IN_PROGRESS' && <CombatResultModal snapshot={snapshot} />}
     </>

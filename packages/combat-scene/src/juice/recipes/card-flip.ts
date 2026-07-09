@@ -16,12 +16,24 @@ const CARD_FRONT_COLOR = 0xffffff;
  *  terminar la animación, cada disparo del evento acumulaba un `Rectangle` huérfano nuevo en
  *  `CARD_HAND_POSITION` (leak visual/de memoria en sesiones largas). Cuando `target.focusId` es
  *  `undefined` el placeholder es efímero por definición (no hay nombre bajo el que reutilizarlo),
- *  así que se destruye al terminar el flip. */
+ *  así que se destruye al terminar el flip.
+ *
+ *  FIX QA (bug cosmético — tile de Secuaz/Aliado invocado queda con relleno blanco sólido
+ *  permanente): el punto medio del flip alternaba el color del placeholder a `CARD_FRONT_COLOR`
+ *  (blanco) para simular el "cambio de textura", pero nunca lo revertía — para placeholders NO
+ *  efímeros (`ALLY_ENTERED_PLAY`/`MINION_SUMMONED`, que persisten en mesa y siguen siendo
+ *  reutilizados por `allies-view.ts`/`minions-view.ts` en cada `syncFromSnapshot` posterior), el
+ *  tile se quedaba blanco para siempre tras la animación, dejando ilegible el texto de vida (blanco
+ *  sobre blanco). Se captura el color ORIGINAL del placeholder antes de animar y se restaura al
+ *  terminar el flip completo — el cambio de color a mitad de tween sigue dando el efecto visual de
+ *  "voltea y revela" sin dejar ningún estado final distinto al que tenía antes de la animación (no
+ *  hay textura real todavía, H2.8, así que no hay un color "final" correcto salvo el de partida). */
 export const cardFlip: JuiceRecipe = {
   id: 'cardFlip',
   play(scene, target) {
     const card = resolveOrCreateCardPlaceholder(scene, target.focusId);
     const isEphemeral = target.focusId === undefined;
+    const originalColor = card.fillColor;
 
     return new Promise<void>((resolve) => {
       scene.tweens.chain({
@@ -46,6 +58,10 @@ export const cardFlip: JuiceRecipe = {
         onComplete: () => {
           if (isEphemeral) {
             card.destroy();
+          } else {
+            // Restaura el color de partida — evita que el tile quede permanentemente en el color
+            // "cara" (blanco) usado solo como efecto transitorio a mitad de flip.
+            card.setFillStyle(originalColor);
           }
           resolve();
         },

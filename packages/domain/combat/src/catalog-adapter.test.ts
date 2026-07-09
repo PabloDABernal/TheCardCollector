@@ -108,15 +108,19 @@ describe('buildCombatEngineConfig (H1.19) — smoke test con contenido real de p
       expect(attackCardEntry).toBeDefined();
       const [cardId] = attackCardEntry!;
 
-      const engine = new CombatEngine(config);
+      // NUEVO H3.6 — `leaderDeckCardIds` (10 cartas) se baraja y solo 5 entran a la mano
+      // inicial; `initialHandSize: 10` garantiza que la carta de ataque encontrada esté
+      // en mano para este smoke test, sin depender de la semilla del shuffle.
+      const engine = new CombatEngine({ ...config, initialHandSize: 10 });
       const snapshot = engine.getSnapshot();
-      const nucleo = snapshot.nucleoPool[0]!;
+      const nucleo = snapshot.nucleoTable.find((d) => d.status === 'AVAILABLE')!;
 
       const result = engine.dispatch({
         type: 'PLAY_CARD',
         cardId,
         sourceId: 'leader',
         nucleoInstanceId: nucleo.id,
+        target: { kind: 'ENEMY' },
       });
 
       expect(result.ok).toBe(true);
@@ -158,6 +162,85 @@ describe('buildCombatEngineConfig (H1.19) — smoke test con contenido real de p
       }
     }
   );
+});
+
+describe('buildCombatEngineConfig — §3.10.4: minionDefinitions resuelto desde EnemyDefinition.minions', () => {
+  it('enemy-bestia-base declara minion-bestia-base-cachorro, y buildCombatEngineConfig lo resuelve a una MinionDefinition real (no al Map vacío de antes)', async () => {
+    const loader = new CatalogLoader(buildRawInput());
+    const catalog = await loader.load();
+    const leader = loader.getLeader(createId<'LeaderId'>('LeaderId', 'leader-soldado-base') as LeaderId);
+    const enemy = loader.getEnemy(createId<'EnemyId'>('EnemyId', 'enemy-bestia-base') as EnemyId);
+    const scenario = loader.getScenario(
+      createId<'ScenarioId'>('ScenarioId', 'scenario-bosque-encantado-base') as ScenarioId
+    );
+
+    const config = buildCombatEngineConfig({
+      catalog,
+      leader,
+      enemy,
+      scenario,
+      randomSource: new SeededRandomSource(1),
+    });
+
+    expect(config.minionDefinitions!.size).toBeGreaterThan(0);
+    const cachorro = config.minionDefinitions!.get('minion-bestia-base-cachorro');
+    expect(cachorro).toBeDefined();
+    expect(cachorro!.maxLife).toBe(4);
+    expect(cachorro!.planoAttackAmount).toBe(1);
+    expect(cachorro!.isDefensor).toBe(false);
+    expect(cachorro!.passiveEffect).toEqual({ kind: 'ATTACK', amount: 1 });
+  });
+
+  it('SUMMON_MINION contra el motor construido con este config resuelve MINION_SUMMONED (no MINION_DEFINITION_UNKNOWN)', async () => {
+    const loader = new CatalogLoader(buildRawInput());
+    const catalog = await loader.load();
+    const leader = loader.getLeader(createId<'LeaderId'>('LeaderId', 'leader-soldado-base') as LeaderId);
+    const enemy = loader.getEnemy(createId<'EnemyId'>('EnemyId', 'enemy-bestia-base') as EnemyId);
+    const scenario = loader.getScenario(
+      createId<'ScenarioId'>('ScenarioId', 'scenario-bosque-encantado-base') as ScenarioId
+    );
+
+    const config = buildCombatEngineConfig({
+      catalog,
+      leader,
+      enemy,
+      scenario,
+      randomSource: new SeededRandomSource(1),
+      initialTurnOwner: 'ENEMY',
+    });
+
+    const engine = new CombatEngine({ ...config, enemyAbilityAiProfiles: new Map(), dramaturgiaDeck: [] });
+    const result = engine.dispatch({
+      type: 'SUMMON_MINION',
+      minionDefinitionId: 'minion-bestia-base-cachorro',
+      sourceId: 'test',
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value[0]!.type).toBe('MINION_SUMMONED');
+    }
+    expect(engine.getSnapshot().minionsInPlay).toHaveLength(1);
+  });
+
+  it('regresión: enemy-espectro-base (sin campo minions en su JSON) produce config.minionDefinitions vacío, sin romper contenido existente', async () => {
+    const loader = new CatalogLoader(buildRawInput());
+    const catalog = await loader.load();
+    const leader = loader.getLeader(createId<'LeaderId'>('LeaderId', 'leader-soldado-base') as LeaderId);
+    const enemy = loader.getEnemy(createId<'EnemyId'>('EnemyId', 'enemy-espectro-base') as EnemyId);
+    const scenario = loader.getScenario(
+      createId<'ScenarioId'>('ScenarioId', 'scenario-templo-en-ruinas-base') as ScenarioId
+    );
+
+    const config = buildCombatEngineConfig({
+      catalog,
+      leader,
+      enemy,
+      scenario,
+      randomSource: new SeededRandomSource(1),
+    });
+
+    expect(config.minionDefinitions!.size).toBe(0);
+  });
 });
 
 describe('cardHasAttackEffect (H2.9 spec §4.2.1)', () => {

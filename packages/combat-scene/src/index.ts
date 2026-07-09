@@ -13,3 +13,8 @@ export { CombatScene, COMBAT_SCENE_VIEWPORT } from './scenes/CombatScene';
 export type { CombatSceneInitData } from './scenes/CombatScene';
 export type { BoardViewContext, HandCardViewData, AbilityViewData } from './view';
 export type { DefaultCombatSetup } from './default-combat-setup';
+// FIX Reviewer post-H3 (commit `cce72a3`) — `isAnyLeaderAbilityActivatable` SÍ se reexporta
+// (excepción puntual a "sin detalles internos" de arriba): `apps/shell` (`CombatHud.tsx`) lo
+// necesita para calcular la disponibilidad agregada de "Activar Habilidad" con el mismo criterio
+// de coste por color que `gesture-command-translator.ts` (interno) ya usaba.
+export { isAnyLeaderAbilityActivatable } from './interaction';

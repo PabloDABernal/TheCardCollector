@@ -1,5 +1,5 @@
 import type { NameLookup } from '@collector/domain-catalog';
-import type { AbilityId, CardId } from '@collector/domain-shared';
+import type { AbilityId, CardId, CoreCostRequirement } from '@collector/domain-shared';
 
 /**
  * Dato mínimo de una carta del pool fijo del Líder (spec H2.8 §0.1) necesario para pintar su tile de
@@ -27,6 +27,10 @@ export interface AbilityViewData {
   readonly abilityId: AbilityId;
   readonly name: string;
   readonly baseCooldown: number;
+  /** NUEVO H3 (spec §5.4) — coste de Núcleo de la habilidad, necesario para que
+   *  `GestureCommandTranslator` calcule qué dados de `nucleoTable` son válidos al tocar el icono de
+   *  esta habilidad (auto-selección si solo hay 1 dado válido; si no, pide `SELECT_NUCLEO_DIE`). */
+  readonly coreCost: CoreCostRequirement;
 }
 
 /**

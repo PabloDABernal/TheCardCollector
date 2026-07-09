@@ -7,18 +7,22 @@ import type { JuiceStep } from './juice-recipe';
 export type JuiceConfig = Record<CombatEvent['type'], JuiceStep[]>;
 
 /**
- * Tabla completa (23 tipos reales de `packages/domain/combat/src/types/events.ts`) — ver
- * `docs/specs/H2.4_effects_director.md` §4 para el razonamiento de cada entrada.
+ * Tabla completa de `packages/domain/combat/src/types/events.ts` — ver
+ * `docs/specs/H2.4_effects_director.md` §4 y `docs/specs/H3_cierre_loop_jugable_batalla.md` §5.3
+ * para el razonamiento de cada entrada nueva/renombrada por el cierre del loop jugable (H3).
  */
 export const JUICE_CONFIG: JuiceConfig = {
-  NUCLEO_POOL_ROLLED: [{ recipeId: 'soundOnly', mode: 'parallel', soundId: 'diceRoll' }], // NUEVO H2.13
-                          // antes: [] (H2.12). El "dado rodando" real sigue viviendo en
-                          // nucleo-pool-view.ts (BoardView) — ver spec H2.12 §0.1/§1.1 (el canal hud
-                          // siempre entrega antes que el canal scene, así que ninguna receta llegaría
-                          // a tiempo sobre el sprite real). `soundOnly` no anima nada; esta entrada
-                          // solo añade el cue de sonido (H2.13 spec §1.6/§3).
+  // RENOMBRADO H3.4 de NUCLEO_POOL_ROLLED — el "dado rodando" real vive en `nucleo-table-view.ts`
+  // (BoardView, canal HUD, que siempre entrega antes que el canal scene) sobre los sprites
+  // PERSISTENTES de mesa; esta entrada solo añade el cue de sonido (H2.13 spec §1.6/§3).
+  NUCLEO_TABLE_REROLLED: [{ recipeId: 'soundOnly', mode: 'parallel', soundId: 'diceRoll' }],
+  // NUEVO H3.4 — un dado EXTRA se añadió a mesa. La animación de "spawn" real vive en
+  // `nucleo-table-view.ts` (mismo criterio que el reroll); aquí solo el cue de sonido.
+  NUCLEO_DIE_ADDED: [{ recipeId: 'soundOnly', mode: 'parallel', soundId: 'diceRoll' }],
+  // NUEVO H3.4 — intento de añadir dado ignorado por tope de mesa (no hay dado que animar, spec §5.3).
+  NUCLEO_DIE_ADD_SKIPPED: [],
   ABILITY_ACTIVATED: [], // sin cambio — la animación de "Núcleo gastado" tampoco pasa por juice
-                         // (mismo razonamiento, §1.1); `nucleo-pool-view.ts` la resuelve internamente
+                         // (mismo razonamiento, §1.1); `nucleo-table-view.ts` la resuelve internamente
                          // leyendo el diff de snapshot, no el evento.
   TURN_ENDED: [],
   COOLDOWNS_TICKED: [{ recipeId: 'cooldownReady', mode: 'parallel' }], // NUEVO H2.10 (antes: [])
@@ -40,8 +44,21 @@ export const JUICE_CONFIG: JuiceConfig = {
   ],
   DAMAGE_REDIRECT_SET: [],
   MINION_SUMMONED: [{ recipeId: 'cardFlip', mode: 'parallel' }],
+  // NUEVO §3.10.3 — intento de invocación ignorado por tope de mesa (no hay Secuaz que
+  // animar, mismo criterio que NUCLEO_DIE_ADD_SKIPPED).
+  MINION_SUMMON_SKIPPED: [],
   MINION_ACTION_RESOLVED: [],
   MINION_ACTION_SKIPPED: [],
+  // NUEVO §3.9 — daño a un Secuaz por ataque directo del jugador (spec §3.9.6, misma receta que
+  // LEADER_DAMAGED/ALLY_DAMAGED: floatingNumber + hitImpact, resuelto contra el sprite del Secuaz
+  // vía `focusId = minionInstanceId`, ver `effects-director.ts` `resolveJuiceTarget`).
+  MINION_DAMAGED: [
+    { recipeId: 'floatingNumber', mode: 'parallel' },
+    { recipeId: 'hitImpact', mode: 'sequential', soundId: 'hit' },
+  ],
+  // NUEVO §3.9 — el Secuaz sale de mesa (spec §3.9.6): receta nueva `minionDefeated` (fade+shrink),
+  // sin receta reutilizable de "muerte" existente (H1.15 nunca elimina Aliados de mesa).
+  MINION_DEFEATED: [{ recipeId: 'minionDefeated', mode: 'sequential' }],
   MINION_PASSIVE_EFFECTS_APPLIED: [],
   PHASE_CHANGED: [{ recipeId: 'screenShake', mode: 'sequential' }],
   LEADER_LEVELED_UP: [],
@@ -55,4 +72,20 @@ export const JUICE_CONFIG: JuiceConfig = {
   DRAMATURGIA_CARD_DRAWN: [{ recipeId: 'cardFlip', mode: 'parallel' }],
   DRAMATURGIA_DECK_RESHUFFLED: [],
   COMBAT_ENDED: [{ recipeId: 'combatOutcomeSound', mode: 'parallel' }], // NUEVO H2.13, antes: []
+  // NUEVO H3.6 — paso previo gratuito del turno. Sin receta visual pesada (spec §5.3, "marca visual
+  // de que el paso previo ya se gastó" vive en el HUD, no en juice de canvas); el efecto concreto
+  // (`LEADER_HAND_CARD_DRAWN`/`ENERGY_GENERATED`/variantes SKIPPED) ya lleva su propia receta.
+  FREE_STEP_RESOLVED: [],
+  // NUEVO H3.6 — robo de carta (paso previo o `DRAW_CARD` pagado): reutiliza `cardFlip` (misma
+  // receta que `CARD_PLAYED`/`MINION_SUMMONED`, spec §5.3: "animación desde un mazo/pila visual
+  // hacia el abanico de mano — reutilizable con una variante de cardFlip").
+  LEADER_HAND_CARD_DRAWN: [{ recipeId: 'cardFlip', mode: 'parallel' }],
+  // NUEVO H3.6 — robo no-op (mano llena/mazo vacío): feedback informativo no bloqueante (spec §5.3).
+  // Sin cue de sonido dedicado todavía (`SoundCueId` no tiene un tono "rechazo" en este MVP, ver
+  // `audio/sound-manager.ts` — fuera de alcance de esta historia añadir uno nuevo); el HUD (React)
+  // es responsable del toast/feedback textual, no juice de canvas.
+  LEADER_HAND_DRAW_SKIPPED: [],
+  ENERGY_GENERATED: [],
+  // NUEVO H3.6 — Generar Energía no-op (ya al tope): mismo criterio que LEADER_HAND_DRAW_SKIPPED.
+  ENERGY_GENERATE_SKIPPED: [],
 };

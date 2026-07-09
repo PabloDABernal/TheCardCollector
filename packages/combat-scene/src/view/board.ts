@@ -4,7 +4,7 @@ import {
   ENEMY_POSITION,
   SCENARIO_POSITION,
   HAND_ROW_POSITION,
-  NUCLEO_POOL_ROW_Y,
+  NUCLEO_TABLE_ROW_Y,
   ALLIES_ROW_Y,
   MINIONS_ROW_Y,
 } from './board-layout';
@@ -25,7 +25,7 @@ export function createBoard(scene: Phaser.Scene): void {
     { y: ENEMY_POSITION.y - ZONE_HEIGHT, text: 'Enemigo' },
     { y: SCENARIO_POSITION.y - ZONE_HEIGHT, text: 'Escenario' },
     { y: ALLIES_ROW_Y - ZONE_HEIGHT, text: 'Aliados' },
-    { y: NUCLEO_POOL_ROW_Y - ZONE_HEIGHT, text: 'Núcleos' },
+    { y: NUCLEO_TABLE_ROW_Y - ZONE_HEIGHT, text: 'Núcleos' },
     { y: HAND_ROW_POSITION.y - ZONE_HEIGHT, text: 'Mano' },
     { y: LEADER_POSITION.y - ZONE_HEIGHT, text: 'Líder' },
   ];

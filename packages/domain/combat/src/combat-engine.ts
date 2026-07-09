@@ -12,6 +12,7 @@ import {
   type CardId,
   type CardInstanceId,
   type CoreCostRequirement,
+  type NucleoColor,
 } from '@collector/domain-shared';
 import type { CombatCommand } from './types/commands';
 import type { CombatEvent } from './types/events';
@@ -19,14 +20,14 @@ import type { CombatCommandResult } from './types/errors';
 import type { CombatStateSnapshot } from './types/snapshot';
 import type { CombatEngineConfig } from './types/config';
 import type { CombatSide } from './types/turn';
-import type { NucleoInstance } from './types/nucleo';
+import type { NucleoInstance, NucleoDie } from './types/nucleo';
 import type { AbilityCooldownDefinition, AbilityCooldownSnapshot } from './types/cooldown';
 import { ABILITY_BASE_COOLDOWN_MIN } from './types/cooldown';
 import type { AbilityEffectDefinition } from './types/ability-effect'; // NUEVO H1.6
 import { LEADER_SHIELD_MAX } from './types/ability-effect'; // NUEVO H1.6
 import { resolveAbilityUmbral } from './umbral'; // NUEVO H1.6 — conecta H1.5 con mutación real (spec §0.2)
 import type { UmbralFormula } from './types/umbral';
-import { rollPool, DEFAULT_NUCLEO_POOL_SIZE } from './nucleo-pool';
+import { rollFixedDice, rollExtraDie, rerollAllDice, countAvailableDice, DEFAULT_NUCLEO_TABLE_MAX_DICE } from './nucleo-table'; // MODIFICADO H3.4
 import { baseActionsForSide, COMBO_MAX_BONUS_ACTIONS_PER_TURN } from './types/action'; // NUEVO H1.14
 import { LEADER_ENERGY_MAX, LEADER_ENERGY_INITIAL_DEFAULT } from './types/energy'; // NUEVO H1.14
 import type {
@@ -35,6 +36,7 @@ import type {
 } from './types/contratiempo'; // NUEVO H1.14
 import type { AllyCardDefinition, AllyInPlay } from './types/ally'; // NUEVO H1.15
 import type { MinionDefinition, MinionDefinitionId, MinionInPlay } from './types/minion'; // NUEVO H1.16
+import { DEFAULT_MAX_MINIONS_IN_PLAY } from './types/minion'; // NUEVO §3.10.3
 import {
   poolHasValidNucleo,
   decideEnemyNucleoToSpend,
@@ -43,10 +45,15 @@ import {
   validateEnemyAbilityAiProfiles, // NUEVO H1.18
 } from './enemy-ai'; // NUEVO H1.16, reusa H1.7
 import type { EnemyAbilityAiProfile, EnemyAbilityCandidate, DramaturgiaCardIcon } from './types/enemy-ai'; // NUEVO H1.18, reusa H1.7
-import type { PhaseDefinition, PhaseChangeCondition } from '@collector/domain-catalog'; // NUEVO H1.17 — ver spec H1.17 §0.1
+import type { PhaseDefinition, PhaseChangeCondition, DramaturgiaCardDefinition } from '@collector/domain-catalog'; // NUEVO H1.17 — ver spec H1.17 §0.1; DramaturgiaCardDefinition MODIFICADO H1.16
 import { LEADER_LEVEL_BASE, LEADER_LEVEL_UPS_MAX } from './types/leader-state'; // NUEVO H1.17
 import type { PlayableCardDefinition, PlayableCardEffectDefinition } from './types/playable-card'; // NUEVO H1.18
 import type { CombatOutcome, DefeatReason } from './types/combat-status'; // NUEVO H1.18
+import { selectActingMinions } from './minion-ai'; // NUEVO H1.16 (rediseño)
+import type { AttackTarget } from './types/combat-target'; // NUEVO §3.9.2
+import type { AlternativeVictoryCondition } from './types/victory-condition'; // NUEVO H1.8+H1.18
+import { LEADER_INITIAL_HAND_SIZE, LEADER_HAND_SIZE_MAX } from './types/hand'; // NUEVO H3.6
+import type { LeaderFreeStepState } from './types/turn-phase'; // NUEVO H3.6
 
 /**
  * NUEVO H1.16 — fuente mínima común para armar `LEADER_DAMAGED`/`ALLY_DAMAGED`/
@@ -65,12 +72,12 @@ export class CombatEngine {
   private readonly abilityCoreCosts: ReadonlyMap<AbilityId, CoreCostRequirement>;
   private readonly abilityCooldowns: ReadonlyMap<AbilityId, AbilityCooldownDefinition>;
   private readonly abilityEffects: ReadonlyMap<AbilityId, AbilityEffectDefinition>; // NUEVO H1.6
-  private readonly poolSize: number;
+  private readonly tableMaxDice: number; // MODIFICADO H3.4 — antes poolSize
   private readonly eventBus: EventBus<CombatEvent>;
 
   private turnOwner: CombatSide;
   private turnNumber: number;
-  private nucleoPool: NucleoInstance[];
+  private nucleoTable: NucleoDie[]; // MODIFICADO H3.4 — antes nucleoPool: NucleoInstance[]
   private nucleoIdCounter: number;
   /** CD restante actual por abilityId. Contiene una entrada por cada clave de
    *  `abilityCooldowns` desde la construcción (Calentamiento, GDD §2.5). */
@@ -106,6 +113,23 @@ export class CombatEngine {
   private minionsInPlay: MinionInPlay[];
   private minionActionResolvedThisEnemyTurn: boolean;
   private minionInstanceIdCounter: number;
+  // NUEVO §3.10.3 — tope duro de Secuaces simultáneos en mesa.
+  private readonly maxMinionsInPlay: number;
+  // NUEVO §3.10.2 — instanceId de Secuaces invocados por `summonEffect` DURANTE el turno
+  // de Enemigo en curso; `handleResolveMinionAction` los excluye de `minionBehavior` de
+  // la MISMA carta que los invocó (spec §3.10.2: "un Secuaz recién invocado no puede ser
+  // seleccionado por el minionBehavior de su propia carta de aparición"). Reseteado en el
+  // mismo punto que `minionActionResolvedThisEnemyTurn`.
+  private minionInstanceIdsSummonedThisEnemyTurn: Set<CardInstanceId>;
+
+  // NUEVO H3.6 — ver spec §2.
+  private leaderHand: CardId[];
+  private leaderDeckDrawPile: CardId[];
+  private readonly handSizeMax: number;
+  private leaderFreeStepTakenThisTurn: boolean;
+
+  // NUEVO H1.8+H1.18 — ver spec §4.
+  private readonly alternativeVictoryConditions: readonly AlternativeVictoryCondition[];
 
   // NUEVO H1.17 — ver spec H1.17 §0.1/§0.3.
   private readonly enemyPhases: readonly PhaseDefinition[];
@@ -126,8 +150,9 @@ export class CombatEngine {
   // NUEVO H1.18 — ver spec H1.18 §0.5/§0.6.
   private readonly enemyAbilityAiProfiles: ReadonlyMap<AbilityId, EnemyAbilityAiProfile>;
   private readonly enemyAiEnabled: boolean;
-  private dramaturgiaDrawPile: DramaturgiaCardIcon[];
-  private dramaturgiaDiscardPile: DramaturgiaCardIcon[];
+  private dramaturgiaDrawPile: DramaturgiaCardDefinition[]; // MODIFICADO H1.16 — antes DramaturgiaCardIcon[]
+  private dramaturgiaDiscardPile: DramaturgiaCardDefinition[];
+  private currentEnemyDramaturgiaCard: DramaturgiaCardDefinition | undefined; // NUEVO H1.16 (rediseño)
 
   private combatStatus: 'IN_PROGRESS' | CombatOutcome;
   private defeatReason: DefeatReason | undefined;
@@ -141,7 +166,7 @@ export class CombatEngine {
     this.abilityEffects = config.abilityEffects ?? new Map(); // NUEVO H1.6
     this.validateAbilityEffectsConfig(); // NUEVO H1.6
 
-    this.poolSize = config.poolSize ?? DEFAULT_NUCLEO_POOL_SIZE;
+    this.tableMaxDice = config.tableMaxDice ?? DEFAULT_NUCLEO_TABLE_MAX_DICE;
     this.turnOwner = config.initialTurnOwner ?? 'LEADER';
     this.turnNumber = 1;
     this.nucleoIdCounter = 0;
@@ -184,6 +209,19 @@ export class CombatEngine {
     this.minionsInPlay = [];
     this.minionActionResolvedThisEnemyTurn = false;
     this.minionInstanceIdCounter = 0;
+    this.maxMinionsInPlay = config.maxMinionsInPlay ?? DEFAULT_MAX_MINIONS_IN_PLAY; // NUEVO §3.10.3
+    this.minionInstanceIdsSummonedThisEnemyTurn = new Set(); // NUEVO §3.10.2
+
+    // NUEVO H3.6 — ver spec §2.8/§2.9. Baraja el mazo de robo del Líder y reparte la
+    // mano inicial (5, o menos si el mazo tiene menos de 5). Sin evento (constructor).
+    this.handSizeMax = config.handSizeMax ?? LEADER_HAND_SIZE_MAX;
+    const initialHandSize = config.initialHandSize ?? LEADER_INITIAL_HAND_SIZE;
+    this.leaderDeckDrawPile = this.shuffle([...config.leaderDeckCardIds]);
+    this.leaderHand = [];
+    for (let i = 0; i < initialHandSize && this.leaderDeckDrawPile.length > 0; i++) {
+      this.leaderHand.push(this.leaderDeckDrawPile.pop() as CardId);
+    }
+    this.leaderFreeStepTakenThisTurn = false;
 
     // NUEVO H1.17 — ver spec H1.17 §0.1/§0.2/§0.3. Orden respecto a los campos de
     // H1.14/H1.15/H1.16 irrelevante, sin dependencias cruzadas.
@@ -217,7 +255,9 @@ export class CombatEngine {
     this.currentEnemyTurnLog = [];
     this.previousEnemyTurnLog = [];
 
-    this.nucleoPool = this.rollNewPool();
+    // NUEVO H3.4 — 5 dados fijos, uno por color, todos AVAILABLE. Sin dados EXTRA
+    // iniciales en el contenido de juguete (ver spec §1.5).
+    this.nucleoTable = rollFixedDice(this.randomSource, () => this.nextNucleoId());
 
     // GDD §2.2 paso 2 ("Cooldowns propios bajan en 1") se aplica también en el
     // primerísimo turno de la partida (turnNumber=1, antes de cualquier acción) — no
@@ -244,6 +284,10 @@ export class CombatEngine {
 
     this.dramaturgiaDrawPile = this.enemyAiEnabled ? this.shuffle([...dramaturgiaDeckRaw]) : [];
     this.dramaturgiaDiscardPile = [];
+    this.currentEnemyDramaturgiaCard = undefined; // NUEVO H1.16 (rediseño)
+
+    // NUEVO H1.8+H1.18 — ver spec §4.3.
+    this.alternativeVictoryConditions = config.alternativeVictoryConditions ?? [];
 
     this.combatStatus = 'IN_PROGRESS';
     this.defeatReason = undefined;
@@ -433,6 +477,13 @@ export class CombatEngine {
           `CombatEngine: minionDefinitions["${String(minionDefinitionId)}"].planoAttackAmount debe ser un entero >= 0, recibido ${def.planoAttackAmount}`
         );
       }
+      // NUEVO §3.9.1 (decisions.md, "Vida de Secuaz") — a diferencia de NucleoValue, un
+      // Secuaz de 0 de vida está muerto por definición: no se permite 0.
+      if (!Number.isInteger(def.maxLife) || def.maxLife < 1) {
+        throw new Error(
+          `CombatEngine: minionDefinitions["${String(minionDefinitionId)}"].maxLife debe ser un entero >= 1, recibido ${def.maxLife}`
+        );
+      }
       if (def.specialActionAbilityId !== undefined) {
         const cdDef = this.abilityCooldowns.get(def.specialActionAbilityId);
         if (!cdDef) {
@@ -527,7 +578,7 @@ export class CombatEngine {
    * NUEVO H1.18. Ver spec §0.5 — "IA a medias" es un error de configuración: o ambos
    * campos están poblados, o ninguno.
    */
-  private validateEnemyAiConfig(dramaturgiaDeckRaw: readonly DramaturgiaCardIcon[]): void {
+  private validateEnemyAiConfig(dramaturgiaDeckRaw: readonly DramaturgiaCardDefinition[]): void {
     if ((this.enemyAbilityAiProfiles.size > 0) !== (dramaturgiaDeckRaw.length > 0)) {
       throw new Error(
         'CombatEngine: enemyAbilityAiProfiles y dramaturgiaDeck deben proveerse juntos o ninguno (spec H1.18 §0.5) — IA a medias no es un estado válido'
@@ -590,14 +641,55 @@ export class CombatEngine {
     }
   }
 
+  /** NUEVO H3.6 — elimina UNA sola copia de `cardId` de `leaderHand` (nunca todas las
+   *  copias si el jugador lleva duplicados — `Array.filter` con `!==` borraría todas). */
+  private removeOneFromHand(cardId: CardId): void {
+    const idx = this.leaderHand.indexOf(cardId);
+    if (idx === -1) return;
+    this.leaderHand = [...this.leaderHand.slice(0, idx), ...this.leaderHand.slice(idx + 1)];
+  }
+
   private nextNucleoId(): NucleoInstanceId {
     const id = createId<'NucleoInstanceId'>('NucleoInstanceId', `nucleo-${this.nucleoIdCounter}`);
     this.nucleoIdCounter += 1;
     return id;
   }
 
-  private rollNewPool(): NucleoInstance[] {
-    return rollPool(this.poolSize, this.randomSource, () => this.nextNucleoId());
+  /** NUEVO H3.4. Añade un dado EXTRA de `color` a la mesa si no se excede el tope
+   *  (`tableMaxDice`) — si se excede, el intento se ignora silenciosamente (decisions.md:
+   *  "Intentos de añadir dados que exceden el tope se ignoran"), sin ser un error de
+   *  comando. */
+  private addExtraNucleoDie(color: NucleoColor, events: CombatEvent[]): void {
+    if (this.nucleoTable.length >= this.tableMaxDice) {
+      const skipped: CombatEvent = { type: 'NUCLEO_DIE_ADD_SKIPPED', color, reason: 'TABLE_AT_MAX' };
+      events.push(skipped);
+      this.eventBus.emit(skipped);
+      return;
+    }
+    const die = rollExtraDie(color, this.randomSource, () => this.nextNucleoId());
+    this.nucleoTable = [...this.nucleoTable, die];
+    const added: CombatEvent = {
+      type: 'NUCLEO_DIE_ADDED',
+      color,
+      dieId: die.id,
+      tableSizeAfter: this.nucleoTable.length,
+    };
+    events.push(added);
+    this.eventBus.emit(added);
+  }
+
+  /** NUEVO H3.4. Reroll colectivo si el último dado AVAILABLE de la mesa acaba de
+   *  gastarse — reemplaza el "relanzado de pool vacío" de H1.3. */
+  private maybeRerollNucleoTable(events: CombatEvent[]): void {
+    if (countAvailableDice(this.nucleoTable) !== 0) return;
+    this.nucleoTable = rerollAllDice(this.nucleoTable, this.randomSource);
+    const rerolled: CombatEvent = {
+      type: 'NUCLEO_TABLE_REROLLED',
+      dice: [...this.nucleoTable],
+      priorityTurnOwner: this.turnOwner,
+    };
+    events.push(rerolled);
+    this.eventBus.emit(rerolled);
   }
 
   /** NUEVO H1.18 — Fisher-Yates in-place con `RandomSource` (determinista con
@@ -891,9 +983,20 @@ export class CombatEngine {
   private evaluateAndApplyCombatEnd(events: CombatEvent[]): void {
     if (this.combatStatus !== 'IN_PROGRESS') return;
 
+    // NUEVO H1.8+H1.18 — las condiciones alternativas se evalúan ANTES que las
+    // condiciones por defecto (ver spec §4.4), en el orden en que aparecen (Enemigo
+    // primero, luego Escenario, ensamblados así en catalog-adapter.ts). Dentro de las
+    // alternativas, la primera que se cumple gana.
+    for (const condition of this.alternativeVictoryConditions) {
+      if (this.isAlternativeConditionMet(condition)) {
+        this.finalizeCombat(condition.outcome, events, condition.kind);
+        return;
+      }
+    }
+
+    // Lógica por defecto — SIN CAMBIOS respecto a H1.18 original.
     let outcome: CombatOutcome;
     let defeatReason: DefeatReason | undefined;
-
     if (this.leaderDamage >= this.leaderMaxHealth) {
       outcome = 'DEFEAT';
       defeatReason = 'LEADER_HEALTH';
@@ -905,14 +1008,38 @@ export class CombatEngine {
     } else {
       return; // sigue en curso, no emite nada
     }
+    this.finalizeCombat(outcome, events, undefined, defeatReason);
+  }
 
+  /** NUEVO H1.8+H1.18 — ver spec §4.4. */
+  private isAlternativeConditionMet(condition: AlternativeVictoryCondition): boolean {
+    switch (condition.kind) {
+      case 'SCENARIO_PLOT_AT_MOST':
+        return this.scenarioPlot <= condition.amount;
+      case 'TURN_COUNT_AT_LEAST':
+        return this.turnNumber >= condition.turn;
+      case 'ENEMY_DAMAGE_AT_LEAST':
+        return this.enemyDamage >= condition.amount;
+    }
+  }
+
+  /** NUEVO H1.8+H1.18 — extraído de la cola final de `evaluateAndApplyCombatEnd`,
+   *  centraliza la mutación de `combatStatus`/`defeatReason` y la emisión de
+   *  `COMBAT_ENDED`, parametrizado por si el desenlace vino de una condición
+   *  alternativa. */
+  private finalizeCombat(
+    outcome: CombatOutcome,
+    events: CombatEvent[],
+    alternativeConditionKind?: AlternativeVictoryCondition['kind'],
+    defeatReason?: DefeatReason
+  ): void {
     this.combatStatus = outcome;
-    this.defeatReason = defeatReason;
-
+    this.defeatReason = alternativeConditionKind !== undefined ? 'ALTERNATIVE' : defeatReason;
     const event: CombatEvent = {
       type: 'COMBAT_ENDED',
       outcome,
-      ...(defeatReason !== undefined ? { defeatReason } : {}),
+      ...(this.defeatReason !== undefined ? { defeatReason: this.defeatReason } : {}),
+      ...(alternativeConditionKind !== undefined ? { alternativeConditionKind } : {}),
     };
     events.push(event);
     this.eventBus.emit(event);
@@ -943,8 +1070,8 @@ export class CombatEngine {
   } {
     const events: CombatEvent[] = [];
 
-    const index = this.nucleoPool.findIndex((n) => n.id === nucleo.id);
-    this.nucleoPool = [...this.nucleoPool.slice(0, index), ...this.nucleoPool.slice(index + 1)];
+    // MODIFICADO H3.4 — gastar un dado cambia su status a SPENT, nunca lo elimina de la mesa.
+    this.nucleoTable = this.nucleoTable.map((d) => (d.id === nucleo.id ? { ...d, status: 'SPENT' as const } : d));
 
     const def = this.abilityCooldowns.get(abilityId) as AbilityCooldownDefinition;
     const cooldownBefore = this.remainingCooldowns.get(abilityId) ?? 0;
@@ -1027,7 +1154,110 @@ export class CombatEngine {
         return this.handleResolveMinionAction(command);
       case 'PLAY_CARD':
         return this.handlePlayCard(command);
+      case 'DRAW_OR_GENERATE':
+        return this.handleDrawOrGenerate(command);
+      case 'DRAW_CARD':
+        return this.handleDrawCard();
+      case 'GENERATE_ENERGY':
+        return this.handleGenerateEnergy();
     }
+  }
+
+  /** NUEVO H3.6 — ver spec §2.5. Roba 1 carta (tope de mano: `handSizeMax`). No-op sin
+   *  error si el mazo está vacío o la mano ya está al tope (decisions.md). */
+  private executeDrawCard(): CombatEvent {
+    if (this.leaderHand.length >= this.handSizeMax) {
+      return { type: 'LEADER_HAND_DRAW_SKIPPED', reason: 'HAND_FULL' };
+    }
+    if (this.leaderDeckDrawPile.length === 0) {
+      return { type: 'LEADER_HAND_DRAW_SKIPPED', reason: 'DECK_EMPTY' };
+    }
+    const cardId = this.leaderDeckDrawPile.pop() as CardId;
+    this.leaderHand = [...this.leaderHand, cardId];
+    return {
+      type: 'LEADER_HAND_CARD_DRAWN',
+      cardId,
+      handSizeAfter: this.leaderHand.length,
+      deckRemainingAfter: this.leaderDeckDrawPile.length,
+    };
+  }
+
+  /** NUEVO H3.6 — ver spec §2.5. Genera +1 Energía (tope 5). No-op sin error si ya al
+   *  tope. */
+  private executeGenerateEnergy(): CombatEvent {
+    if (this.leaderEnergy >= LEADER_ENERGY_MAX) {
+      return { type: 'ENERGY_GENERATE_SKIPPED', reason: 'ENERGY_AT_MAX' };
+    }
+    this.leaderEnergy += 1;
+    return { type: 'ENERGY_GENERATED', amount: 1, leaderEnergyAfter: this.leaderEnergy };
+  }
+
+  /** NUEVO H3.6 — ver spec §2.6. Paso previo GRATIS del turno del Líder, máximo 1 vez
+   *  por turno. */
+  private handleDrawOrGenerate(
+    command: Extract<CombatCommand, { type: 'DRAW_OR_GENERATE' }>
+  ): CombatCommandResult {
+    if (this.turnOwner !== 'LEADER') {
+      return err({ code: 'NOT_YOUR_TURN', expected: 'LEADER', actual: this.turnOwner });
+    }
+    if (this.leaderFreeStepTakenThisTurn) {
+      return err({ code: 'FREE_STEP_ALREADY_TAKEN' });
+    }
+
+    this.leaderFreeStepTakenThisTurn = true; // se consume SIEMPRE, incluso si el efecto es no-op
+    const effectEvent = command.action === 'draw' ? this.executeDrawCard() : this.executeGenerateEnergy();
+
+    const wrapperEvent: CombatEvent = {
+      type: 'FREE_STEP_RESOLVED',
+      action: command.action,
+      outcome: effectEvent.type.endsWith('SKIPPED') ? 'SKIPPED' : 'APPLIED',
+    };
+
+    const events = [effectEvent, wrapperEvent];
+    for (const e of events) this.eventBus.emit(e);
+    return ok(events);
+  }
+
+  /** NUEVO H3.6 — ver spec §2.6. Versión PAGADA de "Robar Carta" — 1 de las 2 acciones. */
+  private handleDrawCard(): CombatCommandResult {
+    if (this.turnOwner !== 'LEADER') {
+      return err({ code: 'NOT_YOUR_TURN', expected: 'LEADER', actual: this.turnOwner });
+    }
+    if (this.actionsTakenThisTurn >= this.actionsAllowedThisTurn) {
+      return err({
+        code: 'NO_ACTIONS_REMAINING',
+        side: this.turnOwner,
+        actionsTaken: this.actionsTakenThisTurn,
+        actionsAllowed: this.actionsAllowedThisTurn,
+      });
+    }
+
+    this.actionsTakenThisTurn += 1;
+    const effectEvent = this.executeDrawCard();
+    this.eventBus.emit(effectEvent);
+    return ok([effectEvent]);
+  }
+
+  /** NUEVO H3.6 — ver spec §2.6/decisions.md ("Robar carta y Generar Energía como acción
+   *  pagada: mismo efecto que la versión gratuita"). Versión PAGADA de "Generar
+   *  Energía" — 1 de las 2 acciones. */
+  private handleGenerateEnergy(): CombatCommandResult {
+    if (this.turnOwner !== 'LEADER') {
+      return err({ code: 'NOT_YOUR_TURN', expected: 'LEADER', actual: this.turnOwner });
+    }
+    if (this.actionsTakenThisTurn >= this.actionsAllowedThisTurn) {
+      return err({
+        code: 'NO_ACTIONS_REMAINING',
+        side: this.turnOwner,
+        actionsTaken: this.actionsTakenThisTurn,
+        actionsAllowed: this.actionsAllowedThisTurn,
+      });
+    }
+
+    this.actionsTakenThisTurn += 1;
+    const effectEvent = this.executeGenerateEnergy();
+    this.eventBus.emit(effectEvent);
+    return ok([effectEvent]);
   }
 
   private handleActivateAbility(
@@ -1063,12 +1293,17 @@ export class CombatEngine {
       return err({ code: 'ABILITY_ON_COOLDOWN', abilityId: command.abilityId, remaining });
     }
 
-    const index = this.nucleoPool.findIndex((n) => n.id === command.nucleoInstanceId);
-    if (index === -1) {
+    const die = this.nucleoTable.find((d) => d.id === command.nucleoInstanceId);
+    if (!die) {
       return err({ code: 'NUCLEO_NOT_FOUND', nucleoInstanceId: command.nucleoInstanceId });
     }
+    if (die.status === 'SPENT') {
+      return err({ code: 'NUCLEO_ALREADY_SPENT', nucleoInstanceId: command.nucleoInstanceId });
+    }
 
-    const nucleo = this.nucleoPool[index] as NucleoInstance;
+    // NUEVO H3.4 — `nucleoSpent` en los eventos sigue siendo `NucleoInstance` puro (sin
+    // `kind`/`status`), nunca el `NucleoDie` completo de mesa (ver spec §1.2).
+    const nucleo: NucleoInstance = { id: die.id, color: die.color, value: die.value };
     if (!satisfiesCoreCost(requirement, nucleo.color)) {
       return err({
         code: 'NUCLEO_COLOR_MISMATCH',
@@ -1123,16 +1358,7 @@ export class CombatEngine {
       this.eventBus.emit(comboEvent);
     }
 
-    if (this.nucleoPool.length === 0) {
-      this.nucleoPool = this.rollNewPool();
-      const refilled: CombatEvent = {
-        type: 'NUCLEO_POOL_ROLLED',
-        pool: [...this.nucleoPool],
-        priorityTurnOwner: this.turnOwner,
-      };
-      events.push(refilled);
-      this.eventBus.emit(refilled);
-    }
+    this.maybeRerollNucleoTable(events); // MODIFICADO H3.4
 
     // NUEVO H1.17 — ver spec §0.3, punto de evaluación 2.
     this.evaluateAndApplyPhaseChanges(events);
@@ -1193,6 +1419,22 @@ export class CombatEngine {
 
     // NUEVO H1.16 — reset simétrico al de arriba (ver spec §0.3).
     this.minionActionResolvedThisEnemyTurn = false;
+    // NUEVO §3.10.2 — reset simétrico: cada turno de Enemigo entrante arranca sin
+    // Secuaces "recién invocados este turno" excluidos.
+    this.minionInstanceIdsSummonedThisEnemyTurn = new Set();
+
+    // NUEVO H3.6 — el paso previo gratuito es EXCLUSIVO del turno del Líder, se resetea
+    // únicamente cuando el turno entrante es 'LEADER' (nunca para 'ENEMY').
+    if (this.turnOwner === 'LEADER') {
+      this.leaderFreeStepTakenThisTurn = false;
+    }
+
+    // NUEVO H1.16 (rediseño) — limpia la carta de Dramaturgia del turno de Enemigo
+    // anterior antes de que empiece uno nuevo, evita que RESOLVE_MINION_ACTION fuera de
+    // secuencia lea la carta de un turno pasado.
+    if (this.turnOwner === 'ENEMY') {
+      this.currentEnemyDramaturgiaCard = undefined;
+    }
 
     // NUEVO H1.16 — presencia pasiva de Secuaces (GDD §3.8), leída y aplicada cada vez
     // que el turno que EMPIEZA es de Enemigo (ver spec §0.7). Se aplica DESPUÉS de la
@@ -1304,6 +1546,11 @@ export class CombatEngine {
       return err({ code: 'CONTRATIEMPO_CARD_UNKNOWN', cardId: command.cardId });
     }
 
+    // NUEVO H3.6 — ver spec §2.7.
+    if (!this.leaderHand.includes(command.cardId)) {
+      return err({ code: 'CARD_NOT_IN_HAND', cardId: command.cardId });
+    }
+
     // Contratiempo es exclusivo del Líder (GDD §2.7) — ver comentario en types/commands.ts.
     if (this.turnOwner !== 'LEADER') {
       return err({ code: 'NOT_YOUR_TURN', expected: 'LEADER', actual: this.turnOwner });
@@ -1334,6 +1581,7 @@ export class CombatEngine {
     // Mutación.
     this.leaderEnergy -= def.energyCost;
     this.actionsTakenThisTurn += 1;
+    this.removeOneFromHand(command.cardId); // NUEVO H3.6
 
     // NUEVO H1.16 — FIX del bug #25 (QA H1.14, ver spec §0.4): antes de esta historia,
     // el bucle sobrescribía cada contador con el "antes" de la ÚLTIMA entrada de su tipo
@@ -1423,6 +1671,11 @@ export class CombatEngine {
       return err({ code: 'ALLY_CARD_UNKNOWN', cardId: command.cardId });
     }
 
+    // NUEVO H3.6 — ver spec §2.7.
+    if (!this.leaderHand.includes(command.cardId)) {
+      return err({ code: 'CARD_NOT_IN_HAND', cardId: command.cardId });
+    }
+
     if (this.turnOwner !== 'LEADER') {
       return err({ code: 'NOT_YOUR_TURN', expected: 'LEADER', actual: this.turnOwner });
     }
@@ -1448,6 +1701,7 @@ export class CombatEngine {
     // Mutación.
     this.leaderEnergy -= def.energyCost;
     this.actionsTakenThisTurn += 1;
+    this.removeOneFromHand(command.cardId); // NUEVO H3.6
 
     const instanceId = this.nextCardInstanceId();
     const ally: AllyInPlay = {
@@ -1522,6 +1776,20 @@ export class CombatEngine {
       return err({ code: 'NOT_YOUR_TURN', expected: 'ENEMY', actual: this.turnOwner });
     }
 
+    // NUEVO §3.10.3 — tope duro de Secuaces simultáneos en mesa. No-op silencioso, sin
+    // CombatCommandError: caso de juego válido, mismo patrón que ADD_EXTRA_NUCLEO_DIE/
+    // NUCLEO_DIE_ADD_SKIPPED.
+    if (this.minionsInPlay.length >= this.maxMinionsInPlay) {
+      const skipped: CombatEvent = {
+        type: 'MINION_SUMMON_SKIPPED',
+        minionDefinitionId: command.minionDefinitionId,
+        sourceId: command.sourceId,
+        reason: 'TABLE_AT_MAX',
+      };
+      this.eventBus.emit(skipped);
+      return ok([skipped]);
+    }
+
     // Mutación — sin coste de acción/Núcleo/Energía (ver spec §0.3).
     const instanceId = this.nextMinionInstanceId();
     const minion: MinionInPlay = {
@@ -1530,11 +1798,19 @@ export class CombatEngine {
       passiveEffect: def.passiveEffect,
       planoAttackAmount: def.planoAttackAmount,
       isDefensor: def.isDefensor,
+      maxLife: def.maxLife, // NUEVO §3.9.1
+      life: def.maxLife, // NUEVO §3.9.1 — sin Secuaces que entren a mesa ya heridos en el MVP
       // NUEVO H1.16 — `exactOptionalPropertyTypes`: solo se incluye la clave si la
       // definición declara una acción especial.
       ...(def.specialActionAbilityId !== undefined ? { specialActionAbilityId: def.specialActionAbilityId } : {}),
     };
     this.minionsInPlay = [...this.minionsInPlay, minion];
+    // NUEVO §3.10.2 — registra este Secuaz como "invocado en este turno de Enemigo" para
+    // que `handleResolveMinionAction` lo excluya de un `minionBehavior` que opere en el
+    // mismo dispatch (ver spec §3.10.2, un Secuaz recién invocado no actúa el turno en
+    // que aparece). Sin condicional: el guard `this.turnOwner !== 'ENEMY'` de arriba ya
+    // garantiza que solo llegamos aquí en turno de Enemigo.
+    this.minionInstanceIdsSummonedThisEnemyTurn.add(instanceId);
 
     const event: CombatEvent = {
       type: 'MINION_SUMMONED',
@@ -1548,8 +1824,10 @@ export class CombatEngine {
     return ok([event]);
   }
 
-  /** NUEVO H1.16 — ver spec H1.16 §0.3/§4.4. Decide Y ejecuta la acción del turno de
-   *  los Secuaces (selección aleatoria con filtro de validez incluida). */
+  /** MODIFICADO H1.16 (rediseño) — ver spec §3.6. QUÉ Secuaz(ces) actúan lo decide
+   *  `selectActingMinions` a partir del `minionBehavior` de la carta de Dramaturgia
+   *  robada este turno de Enemigo — el motor ya no elige al azar entre todos los
+   *  Secuaces válidos. */
   private handleResolveMinionAction(
     command: Extract<CombatCommand, { type: 'RESOLVE_MINION_ACTION' }>
   ): CombatCommandResult {
@@ -1563,27 +1841,68 @@ export class CombatEngine {
       return err({ code: 'MINION_ACTION_ALREADY_RESOLVED_THIS_TURN' });
     }
 
-    // 1. Candidatos de acción especial: CD listo y Núcleo válido (GDD §3.8, "aleatorio
-    //    con filtro de validez — entre los que pueden ejecutar su acción").
-    const specialCandidates = this.minionsInPlay.filter((m) => {
-      if (!m.specialActionAbilityId) return false;
-      const remaining = this.remainingCooldowns.get(m.specialActionAbilityId) ?? 0;
-      if (remaining !== 0) return false;
-      const requirement = this.abilityCoreCosts.get(m.specialActionAbilityId);
-      if (!requirement) return false;
-      return poolHasValidNucleo(requirement, this.nucleoPool);
-    });
+    this.minionActionResolvedThisEnemyTurn = true;
 
-    if (specialCandidates.length > 0) {
-      const chosen = this.randomSource.pick(specialCandidates);
-      const abilityId = chosen.specialActionAbilityId as AbilityId;
+    if (this.minionsInPlay.length === 0) {
+      const event: CombatEvent = { type: 'MINION_ACTION_SKIPPED', reason: 'NO_MINIONS_IN_PLAY' };
+      this.eventBus.emit(event);
+      return ok([event]);
+    }
+
+    const behavior = this.currentEnemyDramaturgiaCard?.minionBehavior;
+    // NUEVO §3.10.2 — excluye Secuaces invocados por `summonEffect` DURANTE este mismo
+    // turno de Enemigo (ver `minionInstanceIdsSummonedThisEnemyTurn`).
+    const eligibleMinions = this.minionsInPlay.filter(
+      (m) => !this.minionInstanceIdsSummonedThisEnemyTurn.has(m.instanceId)
+    );
+    const actors = selectActingMinions(behavior, eligibleMinions, this.randomSource);
+
+    if (actors.length === 0) {
+      // NUEVO H1.16 (rediseño) — la carta de Dramaturgia de este turno no menciona
+      // Secuaces (o su criterio no resolvió a ninguno).
+      const event: CombatEvent = { type: 'MINION_ACTION_SKIPPED', reason: 'NOT_SPECIFIED_BY_DRAMATURGIA' };
+      this.eventBus.emit(event);
+      return ok([event]);
+    }
+
+    const events: CombatEvent[] = [];
+    for (const minion of actors) {
+      // Un Secuaz puede haber muerto por una acción anterior en este mismo `for` (por
+      // ejemplo un efecto ATTACK que redirige daño de forma inesperada) — defensivo,
+      // se salta si ya no está en mesa.
+      if (!this.minionsInPlay.some((m) => m.instanceId === minion.instanceId)) continue;
+
+      events.push(...this.resolveOneMinionAction(minion));
+      if (this.combatStatus !== 'IN_PROGRESS') break; // NUEVO H1.18 — parada de cascada
+    }
+
+    return ok(events);
+  }
+
+  /**
+   * NUEVO H1.16 (rediseño) — extraído del cuerpo original de `handleResolveMinionAction`
+   * (H1.16 primera versión) para UN Secuaz ya elegido por `selectActingMinions`: acción
+   * especial si CD/Núcleo listos, si no plano attack. Sin cambio de comportamiento por
+   * Secuaz individual respecto a la versión original.
+   */
+  private resolveOneMinionAction(minion: MinionInPlay): CombatEvent[] {
+    const availableDice = this.nucleoTable.filter((d) => d.status === 'AVAILABLE'); // NUEVO H3.4
+
+    const canUseSpecial =
+      minion.specialActionAbilityId !== undefined &&
+      (this.remainingCooldowns.get(minion.specialActionAbilityId) ?? 0) === 0 &&
+      this.abilityCoreCosts.has(minion.specialActionAbilityId) &&
+      poolHasValidNucleo(this.abilityCoreCosts.get(minion.specialActionAbilityId) as CoreCostRequirement, availableDice);
+
+    if (canUseSpecial) {
+      const abilityId = minion.specialActionAbilityId as AbilityId;
       const requirement = this.abilityCoreCosts.get(abilityId) as CoreCostRequirement;
       const playerColors = derivePlayerColorsFromLeaderAbilities(this.abilityCoreCosts, this.abilityCooldowns);
-      const nucleoDecision = decideEnemyNucleoToSpend(requirement, this.nucleoPool, playerColors, this.randomSource);
+      const nucleoDecision = decideEnemyNucleoToSpend(requirement, availableDice, playerColors, this.randomSource);
 
       const { events: sharedEvents, effectLogEntry, cooldownBefore } = this.executeAbilityEffect(
         abilityId,
-        chosen.instanceId,
+        minion.instanceId,
         'ENEMY',
         nucleoDecision.nucleo
       );
@@ -1592,101 +1911,78 @@ export class CombatEngine {
       this.currentEnemyTurnLog.push({
         origin: 'ABILITY',
         abilityId,
-        sourceId: chosen.instanceId,
+        sourceId: minion.instanceId,
         cooldownBefore,
         ...(effectLogEntry ? { effect: effectLogEntry } : {}),
       });
 
-      if (this.nucleoPool.length === 0) {
-        this.nucleoPool = this.rollNewPool();
-        const refilled: CombatEvent = {
-          type: 'NUCLEO_POOL_ROLLED',
-          pool: [...this.nucleoPool],
-          priorityTurnOwner: this.turnOwner,
-        };
-        events.push(refilled);
-        this.eventBus.emit(refilled);
-      }
-
-      this.minionActionResolvedThisEnemyTurn = true;
+      this.maybeRerollNucleoTable(events); // MODIFICADO H3.4
 
       const resolvedEvent: CombatEvent = {
         type: 'MINION_ACTION_RESOLVED',
-        instanceId: chosen.instanceId,
+        instanceId: minion.instanceId,
         mechanism: 'SPECIAL_ACTION',
       };
       events.push(resolvedEvent);
       this.eventBus.emit(resolvedEvent);
 
-      // NUEVO H1.17 — ver spec §0.3, punto de evaluación 3 (rama SPECIAL_ACTION).
-      this.evaluateAndApplyPhaseChanges(events);
+      this.evaluateAndApplyPhaseChanges(events); // NUEVO H1.17
       this.evaluateAndApplyCombatEnd(events); // NUEVO H1.18
 
-      return ok(events);
+      return events;
     }
 
-    if (this.minionsInPlay.length > 0) {
-      const chosen = this.randomSource.pick(this.minionsInPlay);
-      const events: CombatEvent[] = [];
+    const events: CombatEvent[] = [];
 
-      const target = this.resolveDamageTarget(); // NUEVO H1.15
-      const effectDef = { arrollar: false };
-      const source: AbilityActionSource = { sourceId: chosen.instanceId, side: 'ENEMY' };
-      const leaderDamageBefore = this.leaderDamage;
-      const leaderShieldBefore = this.leaderShield;
-      const effectEvent = target
-        ? this.applyAttackEffectToAlly(source, effectDef, null, chosen.planoAttackAmount, target)
-        : this.applyAttackEffectToLeader(source, effectDef, null, chosen.planoAttackAmount);
-      events.push(effectEvent);
-      this.eventBus.emit(effectEvent);
+    const target = this.resolveDamageTarget(); // NUEVO H1.15
+    const effectDef = { arrollar: false };
+    const source: AbilityActionSource = { sourceId: minion.instanceId, side: 'ENEMY' };
+    const leaderDamageBefore = this.leaderDamage;
+    const leaderShieldBefore = this.leaderShield;
+    const effectEvent = target
+      ? this.applyAttackEffectToAlly(source, effectDef, null, minion.planoAttackAmount, target)
+      : this.applyAttackEffectToLeader(source, effectDef, null, minion.planoAttackAmount);
+    events.push(effectEvent);
+    this.eventBus.emit(effectEvent);
 
-      const effectLogEntry: UndoableEnemyActionLogEntry['effect'] =
-        effectEvent.type === 'ALLY_DAMAGED'
-          ? {
-              kind: 'ATTACK',
-              target: 'ALLY',
-              allyInstanceId: effectEvent.allyInstanceId,
-              allyLifeBefore: effectEvent.allyLifeBefore,
-              allyLifeAfter: effectEvent.allyLifeAfter,
-              leaderDamageBefore,
-              leaderDamageAfter: this.leaderDamage,
-            }
-          : {
-              kind: 'ATTACK',
-              target: 'LEADER',
-              leaderDamageBefore,
-              leaderDamageAfter: this.leaderDamage,
-              leaderShieldBefore,
-              leaderShieldAfter: this.leaderShield,
-            };
+    const effectLogEntry: UndoableEnemyActionLogEntry['effect'] =
+      effectEvent.type === 'ALLY_DAMAGED'
+        ? {
+            kind: 'ATTACK',
+            target: 'ALLY',
+            allyInstanceId: effectEvent.allyInstanceId,
+            allyLifeBefore: effectEvent.allyLifeBefore,
+            allyLifeAfter: effectEvent.allyLifeAfter,
+            leaderDamageBefore,
+            leaderDamageAfter: this.leaderDamage,
+          }
+        : {
+            kind: 'ATTACK',
+            target: 'LEADER',
+            leaderDamageBefore,
+            leaderDamageAfter: this.leaderDamage,
+            leaderShieldBefore,
+            leaderShieldAfter: this.leaderShield,
+          };
 
-      this.currentEnemyTurnLog.push({
-        origin: 'MINION_PLANO_ATTACK',
-        sourceId: chosen.instanceId,
-        effect: effectLogEntry,
-      });
+    this.currentEnemyTurnLog.push({
+      origin: 'MINION_PLANO_ATTACK',
+      sourceId: minion.instanceId,
+      effect: effectLogEntry,
+    });
 
-      this.minionActionResolvedThisEnemyTurn = true;
+    const resolvedEvent: CombatEvent = {
+      type: 'MINION_ACTION_RESOLVED',
+      instanceId: minion.instanceId,
+      mechanism: 'PLANO_ATTACK',
+    };
+    events.push(resolvedEvent);
+    this.eventBus.emit(resolvedEvent);
 
-      const resolvedEvent: CombatEvent = {
-        type: 'MINION_ACTION_RESOLVED',
-        instanceId: chosen.instanceId,
-        mechanism: 'PLANO_ATTACK',
-      };
-      events.push(resolvedEvent);
-      this.eventBus.emit(resolvedEvent);
+    this.evaluateAndApplyPhaseChanges(events); // NUEVO H1.17
+    this.evaluateAndApplyCombatEnd(events); // NUEVO H1.18
 
-      // NUEVO H1.17 — ver spec §0.3, punto de evaluación 3 (rama PLANO_ATTACK).
-      this.evaluateAndApplyPhaseChanges(events);
-      this.evaluateAndApplyCombatEnd(events); // NUEVO H1.18
-
-      return ok(events);
-    }
-
-    // minionsInPlay vacío — no es un error (ver spec §0.3 punto 4).
-    const skippedEvent: CombatEvent = { type: 'MINION_ACTION_SKIPPED', reason: 'NO_MINIONS_IN_PLAY' };
-    this.eventBus.emit(skippedEvent);
-    return ok([skippedEvent]);
+    return events;
   }
 
   /**
@@ -1700,6 +1996,11 @@ export class CombatEngine {
     const def = this.playableCards.get(command.cardId);
     if (!def) {
       return err({ code: 'PLAY_CARD_UNKNOWN', cardId: command.cardId });
+    }
+
+    // NUEVO H3.6 — ver spec §2.7.
+    if (!this.leaderHand.includes(command.cardId)) {
+      return err({ code: 'CARD_NOT_IN_HAND', cardId: command.cardId });
     }
 
     if (this.turnOwner !== 'LEADER') {
@@ -1724,21 +2025,54 @@ export class CombatEngine {
       });
     }
 
-    let nucleo: NucleoInstance | undefined;
+    let die: NucleoDie | undefined;
+    let resolvedTarget: AttackTarget | undefined;
     if (def.effect?.kind === 'ATTACK_ENEMY') {
       if (!command.nucleoInstanceId) {
         return err({ code: 'PLAY_CARD_NUCLEO_REQUIRED', cardId: command.cardId });
       }
-      const index = this.nucleoPool.findIndex((n) => n.id === command.nucleoInstanceId);
-      if (index === -1) {
+      const found = this.nucleoTable.find((d) => d.id === command.nucleoInstanceId);
+      if (!found) {
         return err({ code: 'NUCLEO_NOT_FOUND', nucleoInstanceId: command.nucleoInstanceId });
       }
-      nucleo = this.nucleoPool[index];
+      if (found.status === 'SPENT') {
+        return err({ code: 'NUCLEO_ALREADY_SPENT', nucleoInstanceId: command.nucleoInstanceId });
+      }
+      die = found;
+
+      // NUEVO §3.9.3 — targeting explícito Enemigo/Secuaz.
+      if (!command.target) {
+        return err({ code: 'PLAY_CARD_TARGET_REQUIRED', cardId: command.cardId });
+      }
+
+      const liveDefensores = this.minionsInPlay.filter((m) => m.isDefensor);
+      if (liveDefensores.length > 0) {
+        const targetsAllowedDefensor =
+          command.target.kind === 'MINION' &&
+          liveDefensores.some((m) => m.instanceId === (command.target as Extract<AttackTarget, { kind: 'MINION' }>).minionInstanceId);
+        if (!targetsAllowedDefensor) {
+          return err({
+            code: 'MUST_TARGET_DEFENSOR',
+            cardId: command.cardId,
+            defensorInstanceIds: liveDefensores.map((m) => m.instanceId),
+          });
+        }
+      }
+
+      if (command.target.kind === 'MINION') {
+        const minion = this.minionsInPlay.find((m) => m.instanceId === (command.target as Extract<AttackTarget, { kind: 'MINION' }>).minionInstanceId);
+        if (!minion) {
+          return err({ code: 'ATTACK_TARGET_NOT_FOUND', minionInstanceId: command.target.minionInstanceId });
+        }
+      }
+
+      resolvedTarget = command.target;
     }
 
     // Mutación — desde aquí ninguna validación previa debe tener efectos secundarios.
     this.leaderEnergy -= def.energyCost;
     this.actionsTakenThisTurn += 1;
+    this.removeOneFromHand(command.cardId); // NUEVO H3.6
 
     const events: CombatEvent[] = [];
     const playedEvent: CombatEvent = {
@@ -1750,24 +2084,17 @@ export class CombatEngine {
     events.push(playedEvent);
     this.eventBus.emit(playedEvent);
 
-    if (nucleo) {
-      // Consume el Núcleo del pool — mismo tratamiento que ACTIVATE_ABILITY.
-      const idx = this.nucleoPool.findIndex((n) => n.id === (nucleo as NucleoInstance).id);
-      this.nucleoPool = [...this.nucleoPool.slice(0, idx), ...this.nucleoPool.slice(idx + 1)];
+    if (die) {
+      // MODIFICADO H3.4 — gastar un dado cambia su status a SPENT, nunca lo elimina de la mesa.
+      const spentId = die.id;
+      this.nucleoTable = this.nucleoTable.map((d) => (d.id === spentId ? { ...d, status: 'SPENT' as const } : d));
     }
 
-    this.applyPlayableCardEffect(command, def.effect, nucleo, events);
+    // NUEVO H3.4 — ver comentario equivalente en handleActivateAbility.
+    const nucleo: NucleoInstance | undefined = die ? { id: die.id, color: die.color, value: die.value } : undefined;
+    this.applyPlayableCardEffect(command, def.effect, nucleo, resolvedTarget, events);
 
-    if (this.nucleoPool.length === 0) {
-      this.nucleoPool = this.rollNewPool();
-      const refilled: CombatEvent = {
-        type: 'NUCLEO_POOL_ROLLED',
-        pool: [...this.nucleoPool],
-        priorityTurnOwner: this.turnOwner,
-      };
-      events.push(refilled);
-      this.eventBus.emit(refilled);
-    }
+    this.maybeRerollNucleoTable(events); // MODIFICADO H3.4
 
     this.evaluateAndApplyPhaseChanges(events);
     this.evaluateAndApplyCombatEnd(events); // NUEVO H1.18
@@ -1781,25 +2108,82 @@ export class CombatEngine {
     command: Extract<CombatCommand, { type: 'PLAY_CARD' }>,
     effect: PlayableCardEffectDefinition | undefined,
     nucleo: NucleoInstance | undefined,
+    resolvedTarget: AttackTarget | undefined,
     events: CombatEvent[]
   ): void {
     if (!effect) return;
 
     if (effect.kind === 'ATTACK_ENEMY') {
       const resolution = resolveAbilityUmbral(effect.formula, (nucleo as NucleoInstance).value);
-      this.enemyDamage += resolution.baseResolvedValue;
+      const rawAmount = resolution.baseResolvedValue;
+
+      if (resolvedTarget?.kind === 'MINION') {
+        // NUEVO §3.9.3 — camino Secuaz.
+        const minion = this.minionsInPlay.find((m) => m.instanceId === resolvedTarget.minionInstanceId) as MinionInPlay;
+        const lifeBefore = minion.life;
+        const lifeAfter = Math.max(0, lifeBefore - rawAmount);
+        const excess = Math.max(0, rawAmount - lifeBefore);
+        const died = lifeAfter <= 0;
+        const appliedDamageToEnemy = died && effect.arrollar === true ? excess : 0;
+
+        if (died) {
+          // decisions.md punto 3: "sale de mesa de inmediato".
+          this.minionsInPlay = this.minionsInPlay.filter((m) => m.instanceId !== minion.instanceId);
+        } else {
+          this.minionsInPlay = this.minionsInPlay.map((m) =>
+            m.instanceId === minion.instanceId ? { ...m, life: lifeAfter } : m
+          );
+        }
+        this.enemyDamage += appliedDamageToEnemy;
+
+        const dmgEvent: CombatEvent = {
+          type: 'MINION_DAMAGED',
+          cardId: command.cardId,
+          sourceId: command.sourceId,
+          nucleoSpent: nucleo as NucleoInstance,
+          minionInstanceId: minion.instanceId,
+          rawAmount,
+          lifeBefore,
+          lifeAfter,
+          died,
+          excess,
+          appliedDamageToEnemy,
+          enemyDamageAfter: this.enemyDamage,
+        };
+        events.push(dmgEvent);
+        this.eventBus.emit(dmgEvent);
+
+        if (died) {
+          const defeatedEvent: CombatEvent = {
+            type: 'MINION_DEFEATED',
+            instanceId: minion.instanceId,
+            definitionId: minion.definitionId,
+            cause: 'PLAYER_ATTACK',
+          };
+          events.push(defeatedEvent);
+          this.eventBus.emit(defeatedEvent);
+        }
+        return;
+      }
+
+      // Camino EXISTENTE (target ENEMY), sin cambios de comportamiento.
+      this.enemyDamage += rawAmount;
       const dmgEvent: CombatEvent = {
         type: 'ENEMY_DAMAGED',
         cardId: command.cardId,
         sourceId: command.sourceId,
         nucleoSpent: nucleo as NucleoInstance,
-        rawAmount: resolution.baseResolvedValue,
+        rawAmount,
         bonusActivated: resolution.bonusActivated,
         ...(resolution.bonusResolvedValue !== undefined ? { bonusResolvedValue: resolution.bonusResolvedValue } : {}),
         enemyDamageAfter: this.enemyDamage,
       };
       events.push(dmgEvent);
       this.eventBus.emit(dmgEvent);
+    } else if (effect.kind === 'ADD_NUCLEO_DIE') {
+      // NUEVO H3.4 — `PLAY_CARD` sigue teniendo éxito completo aunque el efecto de
+      // añadir dado se ignore por tope (decisions.md).
+      this.addExtraNucleoDie(effect.color, events);
     } else if (effect.kind === 'PLOT') {
       // TRAMA_X siempre DECREASE (§0.1.1) — exclusivo del Líder, satura en 0.
       this.scenarioPlot = Math.max(0, this.scenarioPlot - effect.amount);
@@ -1844,11 +2228,12 @@ export class CombatEngine {
 
     const icon = this.drawDramaturgiaCard(events);
     const candidates = this.buildEnemyAbilityCandidates();
-    const decision = decideEnemyAbility(icon, candidates, this.nucleoPool, this.randomSource);
+    const availableDice = this.nucleoTable.filter((d) => d.status === 'AVAILABLE'); // MODIFICADO H3.4
+    const decision = decideEnemyAbility(icon, candidates, availableDice, this.randomSource);
 
     const requirement = this.abilityCoreCosts.get(decision.abilityId) as CoreCostRequirement;
     const playerColors = derivePlayerColorsFromLeaderAbilities(this.abilityCoreCosts, this.abilityCooldowns);
-    const nucleoDecision = decideEnemyNucleoToSpend(requirement, this.nucleoPool, playerColors, this.randomSource);
+    const nucleoDecision = decideEnemyNucleoToSpend(requirement, availableDice, playerColors, this.randomSource);
 
     const abilityResult = this.handleActivateAbility({
       type: 'ACTIVATE_ABILITY',
@@ -1864,6 +2249,27 @@ export class CombatEngine {
     if (abilityResult.ok) events.push(...abilityResult.value);
 
     if (this.combatStatus !== 'IN_PROGRESS') return; // NUEVO H1.18 — parada de cascada (§0.6)
+
+    // NUEVO §3.10.2 — paso (2.5): dispara SUMMON_MINION si la carta robada este turno lo
+    // declara. `this.currentEnemyDramaturgiaCard` ya está poblada por drawDramaturgiaCard
+    // de arriba (mismo campo que consume RESOLVE_MINION_ACTION más abajo). El Secuaz
+    // recién invocado aquí NO participa en el minionBehavior de esta misma carta, porque
+    // este paso ocurre ANTES de RESOLVE_MINION_ACTION (que lee minionsInPlay en ese
+    // instante).
+    const summonEffect = this.currentEnemyDramaturgiaCard?.summonEffect;
+    if (summonEffect) {
+      const summonResult = this.handleSummonMinion({
+        type: 'SUMMON_MINION',
+        minionDefinitionId: summonEffect.minionDefinitionId,
+        sourceId: 'dramaturgia:' + this.currentEnemyDramaturgiaCard!.id,
+      });
+      // handleSummonMinion puede devolver err() en 2 casos no invariantes de contenido:
+      // MINION_DEFINITION_UNKNOWN (bug de contenido real) y MINION_TABLE_AT_MAX de
+      // §3.10.3 (caso de juego válido, no-op silencioso, no llega aquí como err() — ver
+      // handleSummonMinion). NO se asume ok() incondicional, a diferencia del bloque de
+      // arriba.
+      if (summonResult.ok) events.push(...summonResult.value);
+    }
 
     if (this.minionsInPlay.length > 0) {
       const minionResult = this.handleResolveMinionAction({ type: 'RESOLVE_MINION_ACTION' });
@@ -1886,12 +2292,13 @@ export class CombatEngine {
       events.push(reshuffled);
       this.eventBus.emit(reshuffled);
     }
-    const icon = this.dramaturgiaDrawPile.pop() as DramaturgiaCardIcon;
-    this.dramaturgiaDiscardPile.push(icon);
-    const drawn: CombatEvent = { type: 'DRAMATURGIA_CARD_DRAWN', icon };
+    const card = this.dramaturgiaDrawPile.pop() as DramaturgiaCardDefinition;
+    this.dramaturgiaDiscardPile.push(card);
+    this.currentEnemyDramaturgiaCard = card; // NUEVO H1.16 (rediseño)
+    const drawn: CombatEvent = { type: 'DRAMATURGIA_CARD_DRAWN', icon: card.icon };
     events.push(drawn);
     this.eventBus.emit(drawn);
-    return icon;
+    return card.icon;
   }
 
   /** NUEVO H1.18 — ensambla la vista `EnemyAbilityCandidate[]` que pide `decideEnemyAbility`
@@ -1920,7 +2327,7 @@ export class CombatEngine {
   getSnapshot(): CombatStateSnapshot {
     return {
       turn: { turnOwner: this.turnOwner, turnNumber: this.turnNumber },
-      nucleoPool: [...this.nucleoPool],
+      nucleoTable: [...this.nucleoTable],
       cooldowns: this.buildCooldownSnapshot(),
       leaderDamage: this.leaderDamage, // NUEVO H1.6
       leaderShield: this.leaderShield, // NUEVO H1.6
@@ -1957,6 +2364,9 @@ export class CombatEngine {
       enemyDamage: this.enemyDamage, // NUEVO H1.17
       status: this.combatStatus, // NUEVO H1.18
       ...(this.defeatReason !== undefined ? { defeatReason: this.defeatReason } : {}), // NUEVO H1.18
+      leaderHand: [...this.leaderHand], // NUEVO H3.6
+      leaderDeckRemaining: this.leaderDeckDrawPile.length, // NUEVO H3.6
+      leaderFreeStep: { takenThisTurn: this.leaderFreeStepTakenThisTurn }, // NUEVO H3.6
     };
   }
 }

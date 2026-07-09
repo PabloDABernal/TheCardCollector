@@ -62,10 +62,10 @@ function parseActivateAbility(rest: readonly string[], snapshot: CombatStateSnap
     return { kind: 'PARSE_ERROR', message: 'sintaxis esperada: "activate ability <abilityId> <nucleoIndex>"' };
   }
   const abilityIdRaw = rest[1] as string;
-  const nucleoIndexResult = parseIndex(rest[2] as string, snapshot.nucleoPool.length, 'nucleoIndex');
+  const nucleoIndexResult = parseIndex(rest[2] as string, snapshot.nucleoTable.length, 'nucleoIndex');
   if (nucleoIndexResult.kind === 'PARSE_ERROR') return nucleoIndexResult;
 
-  const nucleo = snapshot.nucleoPool[nucleoIndexResult.index];
+  const nucleo = snapshot.nucleoTable[nucleoIndexResult.index];
   if (!nucleo) {
     return { kind: 'PARSE_ERROR', message: `nucleoIndex fuera de rango: ${rest[2]}` };
   }
@@ -113,9 +113,9 @@ function parsePlayCard(rest: readonly string[], snapshot: CombatStateSnapshot): 
   }
   if (rest.length === 2) {
     const cardId = rest[0] as string;
-    const nucleoIndexResult = parseIndex(rest[1] as string, snapshot.nucleoPool.length, 'nucleoIndex');
+    const nucleoIndexResult = parseIndex(rest[1] as string, snapshot.nucleoTable.length, 'nucleoIndex');
     if (nucleoIndexResult.kind === 'PARSE_ERROR') return nucleoIndexResult;
-    const nucleo = snapshot.nucleoPool[nucleoIndexResult.index];
+    const nucleo = snapshot.nucleoTable[nucleoIndexResult.index];
     if (!nucleo) {
       return { kind: 'PARSE_ERROR', message: `nucleoIndex fuera de rango: ${rest[1]}` };
     }

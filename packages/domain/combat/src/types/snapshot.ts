@@ -1,13 +1,14 @@
-import type { NucleoInstance } from './nucleo';
+import type { NucleoDie } from './nucleo';
 import type { TurnState } from './turn';
 import type { AbilityCooldownSnapshot } from './cooldown';
 import type { ActionsStateSnapshot } from './action';
 import type { UndoableEnemyActionLogEntry } from './contratiempo';
 import type { AllyInPlay } from './ally';
 import type { MinionInPlay } from './minion';
-import type { CardInstanceId } from '@collector/domain-shared';
+import type { CardInstanceId, CardId } from '@collector/domain-shared';
 import type { LeaderState } from './leader-state'; // NUEVO H1.17
 import type { CombatOutcome, DefeatReason } from './combat-status'; // NUEVO H1.18
+import type { LeaderFreeStepState } from './turn-phase'; // NUEVO H3.6
 
 /**
  * Slice de H1.3 de `CombatStateSnapshot` (architecture_stack.md §2.2). Historias
@@ -19,7 +20,10 @@ import type { CombatOutcome, DefeatReason } from './combat-status'; // NUEVO H1.
  */
 export interface CombatStateSnapshot {
   readonly turn: TurnState;
-  readonly nucleoPool: readonly NucleoInstance[];
+  /** RENOMBRADO H3.4 de `nucleoPool` — mesa persistente de 5 dados fijos + extras.
+   *  Orden estable: los 5 FIXED primero (orden de `ALL_NUCLEO_COLORS`), luego los EXTRA
+   *  por orden de creación. */
+  readonly nucleoTable: readonly NucleoDie[];
   /**
    * NUEVO en H1.4. Una entrada por cada habilidad conocida en
    * `CombatEngineConfig.abilityCooldowns`, en el mismo orden de inserción de ese mapa
@@ -101,4 +105,14 @@ export interface CombatStateSnapshot {
 
   /** NUEVO H1.18. Presente solo si `status === 'DEFEAT'`. */
   readonly defeatReason?: DefeatReason;
+
+  /** NUEVO H3.6. Orden estable = orden de robo. */
+  readonly leaderHand: readonly CardId[];
+
+  /** NUEVO H3.6. Solo el conteo — evita filtrar info de orden a la UI/Phaser
+   *  innecesariamente. */
+  readonly leaderDeckRemaining: number;
+
+  /** NUEVO H3.6. Estado del paso previo gratuito del turno actual del Líder. */
+  readonly leaderFreeStep: LeaderFreeStepState;
 }

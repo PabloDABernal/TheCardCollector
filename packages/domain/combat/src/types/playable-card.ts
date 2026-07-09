@@ -1,4 +1,4 @@
-import type { CardId } from '@collector/domain-shared';
+import type { CardId, NucleoColor } from '@collector/domain-shared';
 import type { UmbralFormula } from './umbral';
 
 /**
@@ -23,11 +23,18 @@ export interface PlayableCardDefinition {
  */
 export type PlayableCardEffectDefinition =
   | {
-      /** ATAQUE/ATAQUE_MAS_X/ATAQUE_POR_X — daña directamente a `enemyDamage` (§0.2:
-       *  nunca se redirige a un Secuaz). `formula` reutiliza `AbilityUmbralDefinition`
-       *  (H1.5) tal cual — sin `bonusFormula` en el contenido de esta historia (§0.1.1). */
+      /** ATAQUE/ATAQUE_MAS_X/ATAQUE_POR_X — daña a `enemyDamage` o a un Secuaz según el
+       *  `target` explícito del comando `PLAY_CARD` (§3.9.2/§3.9.3 — targeting del
+       *  jugador). `formula` reutiliza `AbilityUmbralDefinition` (H1.5) tal cual — sin
+       *  `bonusFormula` en el contenido de esta historia (§0.1.1). */
       readonly kind: 'ATTACK_ENEMY';
       readonly formula: { readonly baseFormula: UmbralFormula; readonly bonusFormula?: UmbralFormula };
+      /** NUEVO §3.9.3. Reutiliza la keyword Arrollar ya definida para Aliados/Enemigo.
+       *  Solo tiene efecto cuando el `target` resuelto en tiempo de comando es `MINION`
+       *  y el golpe mata al Secuaz con exceso de daño. Sin efecto cuando el target es
+       *  `ENEMY`. Default false/ausente. */
+      readonly arrollar?: boolean;
     }
   | { readonly kind: 'PLOT'; readonly amount: number } // TRAMA_X — siempre DECREASE (§0.1.1)
-  | { readonly kind: 'SHIELD'; readonly amount: number }; // DEFENSA_X — suma a leaderShield
+  | { readonly kind: 'SHIELD'; readonly amount: number } // DEFENSA_X — suma a leaderShield
+  | { readonly kind: 'ADD_NUCLEO_DIE'; readonly color: NucleoColor }; // NUEVO H3.4

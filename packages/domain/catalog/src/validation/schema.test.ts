@@ -505,6 +505,103 @@ describe('parseEnemyDefinition', () => {
     expect(result.dramaturgiaDeck).toHaveLength(4);
     expect(result.dramaturgiaDeck[0]?.effectDescription).toBe('Invoca un secuaz menor.');
   });
+
+  // ---------------------------------------------------------------------------
+  // NUEVO §3.10.1/§3.10.4 — summonEffect + minions[]
+  // ---------------------------------------------------------------------------
+
+  it('dramaturgiaDeck con summonEffect válido → ok, minionDefinitionId preservado', () => {
+    const raw = enemyRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-1', 'ATTACK', { summonEffect: { minionDefinitionId: 'minion-1' } }),
+        dramaturgiaCardRaw('dramacard-2', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-3', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-4', 'PLOT'),
+      ],
+    });
+    const result = parseEnemyDefinition(raw, 'enemies[0]');
+    expect(result.dramaturgiaDeck[0]?.summonEffect).toEqual({ minionDefinitionId: 'minion-1' });
+    expect(result.dramaturgiaDeck[1]?.summonEffect).toBeUndefined();
+  });
+
+  it('summonEffect sin minionDefinitionId (o vacío) → lanza', () => {
+    const raw = enemyRaw({
+      dramaturgiaDeck: [
+        dramaturgiaCardRaw('dramacard-1', 'ATTACK', { summonEffect: {} }),
+        dramaturgiaCardRaw('dramacard-2', 'ATTACK'),
+        dramaturgiaCardRaw('dramacard-3', 'PLOT'),
+        dramaturgiaCardRaw('dramacard-4', 'PLOT'),
+      ],
+    });
+    expect(() => parseEnemyDefinition(raw, 'enemies[0]')).toThrow();
+  });
+
+  it('minions ausente → EnemyDefinition.minions es undefined', () => {
+    const result = parseEnemyDefinition(enemyRaw(), 'enemies[0]');
+    expect(result.minions).toBeUndefined();
+  });
+
+  it('minions con un MinionDefinition válido → ok, campos preservados', () => {
+    const raw = enemyRaw({
+      minions: [
+        {
+          id: 'minion-1',
+          name: 'Secuaz de Prueba',
+          passiveEffect: { kind: 'ATTACK', amount: 1 },
+          planoAttackAmount: 2,
+          isDefensor: false,
+          maxLife: 4,
+        },
+      ],
+    });
+    const result = parseEnemyDefinition(raw, 'enemies[0]');
+    expect(result.minions).toHaveLength(1);
+    expect(result.minions?.[0]).toEqual({
+      id: 'minion-1',
+      name: 'Secuaz de Prueba',
+      passiveEffect: { kind: 'ATTACK', amount: 1 },
+      planoAttackAmount: 2,
+      isDefensor: false,
+      maxLife: 4,
+    });
+  });
+
+  it.each([
+    ['id vacío', { id: '' }],
+    ['name vacío', { name: '' }],
+    ['maxLife 0', { maxLife: 0 }],
+    ['maxLife negativo', { maxLife: -1 }],
+    ['planoAttackAmount negativo', { planoAttackAmount: -1 }],
+    ['isDefensor no booleano', { isDefensor: 'no' }],
+  ])('minions con %s → lanza', (_label, overrides) => {
+    const raw = enemyRaw({
+      minions: [
+        {
+          id: 'minion-1',
+          name: 'Secuaz de Prueba',
+          passiveEffect: { kind: 'ATTACK', amount: 1 },
+          planoAttackAmount: 2,
+          isDefensor: false,
+          maxLife: 4,
+          ...overrides,
+        },
+      ],
+    });
+    expect(() => parseEnemyDefinition(raw, 'enemies[0]')).toThrow();
+  });
+
+  it('minions con ids duplicados dentro del mismo array → lanza', () => {
+    const minion = {
+      id: 'minion-1',
+      name: 'Secuaz de Prueba',
+      passiveEffect: { kind: 'ATTACK', amount: 1 },
+      planoAttackAmount: 2,
+      isDefensor: false,
+      maxLife: 4,
+    };
+    const raw = enemyRaw({ minions: [minion, minion] });
+    expect(() => parseEnemyDefinition(raw, 'enemies[0]')).toThrow();
+  });
 });
 
 // -----------------------------------------------------------------------------
@@ -643,6 +740,26 @@ describe('parseScenarioDefinition', () => {
     const result = parseScenarioDefinition(raw, 'scenarios[0]');
     expect(result.dramaturgiaDeck).toHaveLength(4);
     expect(result.dramaturgiaDeck[0]?.effectDescription).toBe('Avanza la Trama un paso extra.');
+  });
+
+  it('minions ausente → ScenarioDefinition.minions es undefined; minions con un MinionDefinition válido → ok', () => {
+    expect(parseScenarioDefinition(scenarioRaw(), 'scenarios[0]').minions).toBeUndefined();
+
+    const raw = scenarioRaw({
+      minions: [
+        {
+          id: 'minion-scenario-1',
+          name: 'Secuaz de Escenario',
+          passiveEffect: { kind: 'PLOT', amount: 1 },
+          planoAttackAmount: 0,
+          isDefensor: true,
+          maxLife: 6,
+        },
+      ],
+    });
+    const result = parseScenarioDefinition(raw, 'scenarios[0]');
+    expect(result.minions).toHaveLength(1);
+    expect(result.minions?.[0]?.id).toBe('minion-scenario-1');
   });
 });
 

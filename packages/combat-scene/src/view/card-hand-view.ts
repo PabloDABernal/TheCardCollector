@@ -15,8 +15,12 @@ export function cardTileName(cardId: CardId): string {
 }
 
 export interface CardHandView {
-  /** Ajusta SOLO el alpha (afford/no-afford por Energía, spec §0.2 punto 6) contra el snapshot
-   *  actual. Nunca destruye/recrea tiles — mismo criterio de estabilidad de identidad que RoleView. */
+  /** RENOMBRADO/AMPLIADO H3.6 (spec §2.7, `leaderHand`): ya no pinta el pool COMPLETO del Líder —
+   *  solo las cartas que están realmente en `snapshot.leaderHand` ahora mismo (el motor rechaza
+   *  `PLAY_CARD` con `CARD_NOT_IN_HAND` para cualquier otra). Crea un tile cuando una carta entra en
+   *  mano (`LEADER_HAND_CARD_DRAWN`), lo destruye cuando sale (jugada con éxito), y reposiciona el
+   *  resto en una fila densa centrada (mismo criterio de "abanico de mano" que el resto del tablero).
+   *  Ajusta alpha (afford/no-afford por Energía, spec §0.2 punto 6). */
   update(snapshot: CombatStateSnapshot): void;
 }
 
@@ -26,17 +30,22 @@ interface HandTile {
   readonly text: Phaser.GameObjects.Text;
 }
 
-/** Crea (una única vez) un tile por carta de `ctx.leaderCardPool`, en fila centrada sobre
- *  `HAND_ROW_POSITION` (§3.1), separación `TILE_SEPARATION_PX`. Cada tile: Rectangle (120×180,
- *  proporción de carta) + Text (nombre + coste) + `setName(cardTileName(cardId))` +
- *  `setInteractive().setData('targetId', cardTileName(cardId))` (§1.4). */
-export function createCardHandView(scene: Phaser.Scene, ctx: BoardViewContext): CardHandView {
-  const pool = ctx.leaderCardPool;
-  const startX = HAND_ROW_POSITION.x - ((pool.length - 1) * TILE_SEPARATION_PX) / 2;
+function tileX(index: number, handSize: number): number {
+  const startX = HAND_ROW_POSITION.x - ((handSize - 1) * TILE_SEPARATION_PX) / 2;
+  return startX + index * TILE_SEPARATION_PX;
+}
 
-  const tiles: HandTile[] = pool.map((cardData, index) => {
-    const x = startX + index * TILE_SEPARATION_PX;
-    const y = HAND_ROW_POSITION.y;
+/** Crea/destruye tiles dinámicamente contra `snapshot.leaderHand` (H3.6) — a diferencia de H2.8
+ *  (que pintaba TODO `ctx.leaderCardPool` de una vez, sin concepto de mano todavía). */
+export function createCardHandView(scene: Phaser.Scene, ctx: BoardViewContext): CardHandView {
+  const cardDataById = new Map<CardId, HandCardViewData>();
+  for (const card of ctx.leaderCardPool) {
+    cardDataById.set(card.cardId, card);
+  }
+
+  const tiles = new Map<CardId, HandTile>();
+
+  function createTile(cardData: HandCardViewData, x: number, y: number): HandTile {
     const name = cardTileName(cardData.cardId);
 
     const rect = scene.add.rectangle(x, y, CARD_WIDTH, CARD_HEIGHT, CARD_COLOR);
@@ -51,16 +60,43 @@ export function createCardHandView(scene: Phaser.Scene, ctx: BoardViewContext): 
     text.setOrigin(0.5, 0.5);
 
     return { cardData, rect, text };
-  });
+  }
 
   return {
     update(snapshot: CombatStateSnapshot): void {
-      for (const tile of tiles) {
-        const affordable = snapshot.leaderEnergy >= tile.cardData.energyCost;
+      const hand = snapshot.leaderHand;
+      const handIds = new Set(hand);
+
+      // Destruye tiles de cartas que salieron de la mano (jugadas con éxito).
+      for (const [cardId, tile] of Array.from(tiles.entries())) {
+        if (!handIds.has(cardId)) {
+          tile.rect.destroy();
+          tile.text.destroy();
+          tiles.delete(cardId);
+        }
+      }
+
+      // Crea/reposiciona en el orden estable de `leaderHand` (orden de robo, spec §2.3).
+      hand.forEach((cardId, index) => {
+        const cardData = cardDataById.get(cardId);
+        if (!cardData) return; // defensivo — no debería ocurrir (leaderHand solo contiene ids del pool)
+
+        const x = tileX(index, hand.length);
+        const y = HAND_ROW_POSITION.y;
+        const affordable = snapshot.leaderEnergy >= cardData.energyCost;
         const alpha = affordable ? ALPHA_AFFORDABLE : ALPHA_UNAFFORDABLE;
+
+        let tile = tiles.get(cardId);
+        if (!tile) {
+          tile = createTile(cardData, x, y);
+          tiles.set(cardId, tile);
+        } else {
+          tile.rect.setPosition(x, y);
+          tile.text.setPosition(x, y);
+        }
         tile.rect.setAlpha(alpha);
         tile.text.setAlpha(alpha);
-      }
+      });
     },
   };
 }

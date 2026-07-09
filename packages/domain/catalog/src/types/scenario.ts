@@ -1,6 +1,8 @@
 import type { ScenarioId } from '@collector/domain-shared';
 import type { PhaseDefinition } from './phase';
 import type { DramaturgiaCardDefinition } from './dramaturgia-card';
+import type { AlternativeVictoryCondition } from './victory-condition'; // NUEVO H1.8+H1.18
+import type { MinionDefinition } from './minion'; // NUEVO §3.10.4
 
 /**
  * GDD §3.6: "Efectos variables por umbrales escalados (peores cuanto más alto)".
@@ -43,5 +45,9 @@ export interface ScenarioDefinition {
    * la deuda de diseño explícita sobre la fuente única de las cartas comunes.
    */
   readonly dramaturgiaDeck: readonly DramaturgiaCardDefinition[];
+  /** NUEVO H1.8+H1.18. Ver `EnemyDefinition.alternativeVictoryConditions`. */
+  readonly alternativeVictoryConditions?: readonly AlternativeVictoryCondition[];
+  /** NUEVO §3.10.4. Ver `EnemyDefinition.minions`. Ausente/vacío = default `[]`. */
+  readonly minions?: readonly MinionDefinition[];
   readonly universeSkin?: string;
 }

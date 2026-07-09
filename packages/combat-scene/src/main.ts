@@ -87,11 +87,13 @@ async function buildHarnessCombatSetup(): Promise<DefaultCombatSetup> {
     abilityId: ability.id,
     name: ability.name,
     baseCooldown: ability.baseCooldown,
+    coreCost: ability.coreCost, // NUEVO H3 (spec §5.4)
   }));
   const enemyAbilities: AbilityViewData[] = enemy.abilities.map((ability) => ({
     abilityId: ability.id,
     name: ability.name,
     baseCooldown: ability.baseCooldown,
+    coreCost: ability.coreCost, // NUEVO H3 (spec §5.4)
   }));
 
   const boardContext: BoardViewContext = {

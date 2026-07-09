@@ -23,6 +23,14 @@ const CARD_ALLY_PLAIN: CardId = createId<'CardId'>('CardId', 'card-ally-plain');
 const MINION_PLANO: MinionDefinitionId = 'minion-plano';
 const MINION_PLOT_SPECIAL: MinionDefinitionId = 'minion-plot-special';
 const MINION_PASSIVE_ATTACK: MinionDefinitionId = 'minion-passive-attack';
+// NUEVO H1.16 (rediseño) — RESOLVE_MINION_ACTION ahora exige una carta de Dramaturgia
+// con minionBehavior para producir una entrada MINION_PLANO_ATTACK (ver spec §3.6); los
+// tests de este archivo que necesitan una 2ª/3ª entrada ENEMY no-ABILITY en la misma
+// ventana usan en su lugar el pasivo del Secuaz (origin MINION_PASSIVE, aplicado
+// automáticamente cada turno de Enemigo vía END_TURN, sin depender de Dramaturgia) —
+// mismo guard `entry.origin === 'ABILITY'` bajo prueba, sin necesitar orquestar el
+// ciclo completo de IA automática solo para este archivo centrado en Contratiempo.
+const MINION_PASSIVE_PLOT: MinionDefinitionId = 'minion-passive-plot';
 // NUEVO QA H1.16 (regresión N=3, ver bug #25): Secuaz con pasivo ATTACK Y ataque plano
 // no nulo, para poder aportar tanto la 1ª entrada (MINION_PASSIVE) como la 3ª
 // (MINION_PLANO_ATTACK) del mismo turno con un único Secuaz en mesa — evita cualquier
@@ -63,6 +71,12 @@ function minionDefinitions(
  *  habilidad ATTACK con Arrollar y una carta ALIADO (ver spec H1.15 §5.4). */
 function buildEngine(overrides: Partial<CombatEngineConfig> = {}) {
   return new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    // NUEVO H3.6 — 2 copias de cada carta relevante (algún test juega la misma carta 2
+    // veces en el mismo engine) + `initialHandSize` alto para que TODAS entren a mano de
+    // una vez, sin que el tope de mano (5) interfiera con la mecánica de Contratiempo
+    // bajo prueba en este archivo.
+    leaderDeckCardIds: [CARD_DAMAGE_ONLY, CARD_DAMAGE_ONLY, CARD_FULL_TURN, CARD_FULL_TURN, CARD_ALLY_PLAIN, CARD_ALLY_PLAIN],
+    initialHandSize: 10,
     randomSource: new SeededRandomSource(1),
     abilityCoreCosts: costs([ENEMY_ATTACK, ENEMY_ATTACK_ARROLLAR, ENEMY_PLOT, ENEMY_MINION_PLOT]),
     abilityCooldowns: cooldowns([
@@ -85,7 +99,7 @@ function buildEngine(overrides: Partial<CombatEngineConfig> = {}) {
     // NUEVO H1.16 — ver spec H1.16 §6.4: fixture para probar la 2ª fuente de mutación
     // ATTACK/PLOT de side ENEMY por turno (fix del bug #25).
     minionDefinitions: minionDefinitions([
-      [MINION_PLANO, { passiveEffect: { kind: 'PLOT', amount: 0 }, planoAttackAmount: 2, isDefensor: false }],
+      [MINION_PLANO, { passiveEffect: { kind: 'PLOT', amount: 0 }, planoAttackAmount: 2, isDefensor: false, maxLife: 5 }],
       [
         MINION_PLOT_SPECIAL,
         {
@@ -93,15 +107,16 @@ function buildEngine(overrides: Partial<CombatEngineConfig> = {}) {
           specialActionAbilityId: ENEMY_MINION_PLOT,
           planoAttackAmount: 0,
           isDefensor: false,
+          maxLife: 5,
         },
       ],
-      [MINION_PASSIVE_ATTACK, { passiveEffect: { kind: 'ATTACK', amount: 2 }, planoAttackAmount: 0, isDefensor: false }],
+      [MINION_PASSIVE_ATTACK, { passiveEffect: { kind: 'ATTACK', amount: 2 }, planoAttackAmount: 0, isDefensor: false, maxLife: 5 }],
+      [MINION_PASSIVE_PLOT, { passiveEffect: { kind: 'PLOT', amount: 2 }, planoAttackAmount: 0, isDefensor: false, maxLife: 5 }],
       // NUEVO QA H1.16 (regresión N=3)
-      [MINION_PASSIVE_AND_PLANO, { passiveEffect: { kind: 'ATTACK', amount: 2 }, planoAttackAmount: 3, isDefensor: false }],
+      [MINION_PASSIVE_AND_PLANO, { passiveEffect: { kind: 'ATTACK', amount: 2 }, planoAttackAmount: 3, isDefensor: false, maxLife: 5 }],
     ]),
     initialLeaderEnergy: 5,
     initialTurnOwner: 'LEADER',
-    poolSize: 6,
     ...overrides,
   });
 }
@@ -120,7 +135,7 @@ describe('CombatEngine — H1.14: Contratiempo (GDD §2.7)', () => {
     const engine = buildEngine();
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id });
     const damageAfterAttack = engine.getSnapshot().leaderDamage;
     expect(damageAfterAttack).toBeGreaterThan(0);
@@ -148,7 +163,7 @@ describe('CombatEngine — H1.14: Contratiempo (GDD §2.7)', () => {
     const engine = buildEngine();
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ENEMY_PLOT, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id });
     expect(engine.getSnapshot().scenarioPlot).toBe(3);
     const remainingAfterActivation = engine.getSnapshot().cooldowns.find((c) => c.abilityId === ENEMY_PLOT)!.remaining;
@@ -171,7 +186,7 @@ describe('CombatEngine — H1.14: Contratiempo (GDD §2.7)', () => {
     const engine = buildEngine();
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ENEMY_PLOT, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id });
     expect(engine.getSnapshot().scenarioPlot).toBe(3);
 
@@ -184,39 +199,40 @@ describe('CombatEngine — H1.14: Contratiempo (GDD §2.7)', () => {
     expect(engine.getSnapshot().scenarioPlot).toBe(3);
   });
 
-  it('no restaura el pool de Núcleos: el nucleoPool tras jugar Contratiempo es exactamente igual al de justo antes', () => {
+  it('no restaura el pool de Núcleos: el nucleoTable tras jugar Contratiempo es exactamente igual al de justo antes', () => {
     const engine = buildEngine();
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id });
-    // El Núcleo gastado por el Enemigo ya no está en el pool.
-    expect(engine.getSnapshot().nucleoPool.find((n) => n.id === nucleo.id)).toBeUndefined();
+    // MODIFICADO H3.4 — el dado gastado por el Enemigo sigue en la mesa, marcado SPENT
+    // (nunca se elimina).
+    expect(engine.getSnapshot().nucleoTable.find((n) => n.id === nucleo.id)?.status).toBe('SPENT');
 
     engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
 
-    const poolBeforeContratiempo = engine.getSnapshot().nucleoPool;
+    const poolBeforeContratiempo = engine.getSnapshot().nucleoTable;
     const result = engine.dispatch({ type: 'PLAY_CONTRATIEMPO', cardId: CARD_DAMAGE_ONLY, sourceId: 'leader' });
     expect(isOk(result)).toBe(true);
 
-    const poolAfterContratiempo = engine.getSnapshot().nucleoPool;
+    const poolAfterContratiempo = engine.getSnapshot().nucleoTable;
     expect(poolAfterContratiempo).toEqual(poolBeforeContratiempo);
-    // El Núcleo gastado por el Enemigo en su ataque sigue sin estar en el pool.
-    expect(poolAfterContratiempo.find((n) => n.id === nucleo.id)).toBeUndefined();
+    // El dado gastado por el Enemigo en su ataque sigue en mesa, marcado SPENT.
+    expect(poolAfterContratiempo.find((n) => n.id === nucleo.id)?.status).toBe('SPENT');
   });
 
   it('ventana de "1 turno atrás": solo puede revertir el turno de Enemigo MÁS RECIENTE, nunca uno anterior', () => {
     const engine = buildEngine();
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY (turno de Enemigo 1)
-    const nucleo1 = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo1 = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo1.id });
     const damageAfterFirstAttack = engine.getSnapshot().leaderDamage;
     expect(damageAfterFirstAttack).toBeGreaterThan(0);
 
     engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER (sin jugar Contratiempo)
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY (turno de Enemigo 2)
-    const nucleo2 = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo2 = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo2.id });
     const damageAfterSecondAttack = engine.getSnapshot().leaderDamage;
     expect(damageAfterSecondAttack).toBeGreaterThan(damageAfterFirstAttack);
@@ -235,7 +251,7 @@ describe('CombatEngine — H1.14: Contratiempo (GDD §2.7)', () => {
     const engine = buildEngine();
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id });
     engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
 
@@ -253,7 +269,7 @@ describe('CombatEngine — H1.14: Contratiempo (GDD §2.7)', () => {
     const engine = buildEngine({ initialLeaderEnergy: 0 });
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id });
     engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
 
@@ -281,7 +297,7 @@ describe('CombatEngine — H1.14: Contratiempo (GDD §2.7)', () => {
   it('consume una acción: jugarlo cuando actionsTakenThisTurn === actionsAllowedThisTurn es rechazado con NO_ACTIONS_REMAINING', () => {
     const LEADER_FILLER_1: AbilityId = createId<'AbilityId'>('AbilityId', 'leader-filler-1');
     const LEADER_FILLER_2: AbilityId = createId<'AbilityId'>('AbilityId', 'leader-filler-2');
-    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    const engine = new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [CARD_DAMAGE_ONLY],
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([ENEMY_ATTACK, LEADER_FILLER_1, LEADER_FILLER_2]),
       abilityCooldowns: cooldowns([
@@ -292,18 +308,17 @@ describe('CombatEngine — H1.14: Contratiempo (GDD §2.7)', () => {
       abilityEffects: effects([[ENEMY_ATTACK, { kind: 'ATTACK', formula: { baseFormula: { kind: 'VALUE' } } }]]),
       contratiempoCards: contratiempoCards([[CARD_DAMAGE_ONLY, { energyCost: 1, undoScope: 'DAMAGE_ONLY' }]]),
       initialLeaderEnergy: 5,
-      poolSize: 6,
     });
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id });
     engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
 
     // Agota las 2 acciones del turno de Líder con habilidades de relleno.
-    const n1 = engine.getSnapshot().nucleoPool[0]!;
+    const n1 = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: LEADER_FILLER_1, sourceId: 'leader', side: 'LEADER', nucleoInstanceId: n1.id });
-    const n2 = engine.getSnapshot().nucleoPool[0]!;
+    const n2 = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: LEADER_FILLER_2, sourceId: 'leader', side: 'LEADER', nucleoInstanceId: n2.id });
 
     const result = engine.dispatch({ type: 'PLAY_CONTRATIEMPO', cardId: CARD_DAMAGE_ONLY, sourceId: 'leader' });
@@ -314,7 +329,7 @@ describe('CombatEngine — H1.14: Contratiempo (GDD §2.7)', () => {
   });
 
   it('constructor: lanza si contratiempoCards tiene energyCost negativo', () => {
-    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -323,7 +338,7 @@ describe('CombatEngine — H1.14: Contratiempo (GDD §2.7)', () => {
   });
 
   it('constructor: lanza si contratiempoCards tiene energyCost no entero', () => {
-    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -332,13 +347,13 @@ describe('CombatEngine — H1.14: Contratiempo (GDD §2.7)', () => {
   });
 
   it('constructor: lanza si initialLeaderEnergy está fuera de [0, 5]', () => {
-    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
       initialLeaderEnergy: 6,
     })).toThrow();
-    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999,
+    expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([]),
       abilityCooldowns: cooldowns([]),
@@ -373,7 +388,7 @@ describe('CombatEngine — H1.15: Contratiempo revierte un Ataque que golpeó a 
     engine.dispatch({ type: 'SET_DAMAGE_REDIRECT', targetAllyInstanceId: allyId });
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id });
     const lifeAfterAttack = engine.getSnapshot().alliesInPlay.find((a) => a.instanceId === allyId)!.life;
     expect(lifeAfterAttack).toBeLessThan(5); // formula VALUE (1-4) siempre < life 5 — no letal
@@ -400,7 +415,7 @@ describe('CombatEngine — H1.15: Contratiempo revierte un Ataque que golpeó a 
     engine.dispatch({ type: 'SET_DAMAGE_REDIRECT', targetAllyInstanceId: allyId });
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK_ARROLLAR, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id });
 
     const afterAttack = engine.getSnapshot();
@@ -429,7 +444,7 @@ describe('CombatEngine — H1.15: Contratiempo revierte un Ataque que golpeó a 
     engine.dispatch({ type: 'SET_DAMAGE_REDIRECT', targetAllyInstanceId: allyId });
 
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({ type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id });
     const remainingAfterActivation = engine.getSnapshot().cooldowns.find((c) => c.abilityId === ENEMY_ATTACK)!.remaining;
     expect(remainingAfterActivation).toBe(1); // baseCooldown, recién activada
@@ -475,26 +490,29 @@ describe('CombatEngine — H1.15: Contratiempo revierte un Ataque que golpeó a 
 // H1.14). Ver spec H1.16 §6.4.
 // -----------------------------------------------------------------------------
 describe('CombatEngine — H1.16: fix del bug #25 (Contratiempo revierte TODAS las entradas del turno, no solo la última)', () => {
-  it('regresión de bug #25 (QA H1.14, alcanzable por primera vez en H1.16): 2 entradas ATTACK de side ENEMY en el mismo turno (Enemigo + Secuaz vía RESOLVE_MINION_ACTION) — Contratiempo revierte AMBAS, leaderDamage vuelve a 0', () => {
+  // NUEVO H1.16 (rediseño) — ver nota junto a MINION_PASSIVE_PLOT arriba: la 2ª/3ª
+  // fuente de mutación ENEMY no-ABILITY que ejercita el guard `entry.origin ===
+  // 'ABILITY'` viene del pasivo del Secuaz (origin MINION_PASSIVE, vía END_TURN), no de
+  // RESOLVE_MINION_ACTION (que ahora depende de una carta de Dramaturgia con
+  // minionBehavior — fuera del alcance de este archivo centrado en Contratiempo).
+  it('regresión de bug #25 (QA H1.14): 2 entradas ATTACK de side ENEMY en el mismo turno (pasivo de Secuaz + habilidad de Enemigo) — Contratiempo revierte AMBAS, leaderDamage vuelve a 0', () => {
     const engine = buildEngine({ initialTurnOwner: 'ENEMY' });
+    engine.dispatch({ type: 'SUMMON_MINION', minionDefinitionId: MINION_PASSIVE_ATTACK, sourceId: 'enemy' });
+    engine.dispatch({ type: 'END_TURN' }); // ENEMY (turno 1) -> LEADER, ventana vacía cerrada
 
-    engine.dispatch({ type: 'SUMMON_MINION', minionDefinitionId: MINION_PLANO, sourceId: 'enemy' });
+    engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY (turno 2): pasivo se aplica (1ª entrada)
+    const damageAfterPassive = engine.getSnapshot().leaderDamage;
+    expect(damageAfterPassive).toBeGreaterThan(0);
 
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     const attack = engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
     });
     expect(isOk(attack)).toBe(true);
-    const damageAfterEnemyAttack = engine.getSnapshot().leaderDamage;
-    expect(damageAfterEnemyAttack).toBeGreaterThan(0);
+    const damageAfterAbility = engine.getSnapshot().leaderDamage;
+    expect(damageAfterAbility).toBeGreaterThan(damageAfterPassive);
 
-    const minionAction = engine.dispatch({ type: 'RESOLVE_MINION_ACTION' });
-    expect(isOk(minionAction)).toBe(true);
-    const damageAfterMinionAttack = engine.getSnapshot().leaderDamage;
-    // planoAttackAmount 2, sin escudo activo → se suma completo.
-    expect(damageAfterMinionAttack).toBe(damageAfterEnemyAttack + 2);
-
-    engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
+    engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER, cierra la ventana de turno 2 (2 entradas)
 
     const result = engine.dispatch({ type: 'PLAY_CONTRATIEMPO', cardId: CARD_DAMAGE_ONLY, sourceId: 'leader' });
     expect(isOk(result)).toBe(true);
@@ -503,21 +521,21 @@ describe('CombatEngine — H1.16: fix del bug #25 (Contratiempo revierte TODAS l
       expect(played.revertedEntries).toHaveLength(2);
     }
 
-    // Pre-fix (bug #25), el bucle habría dejado leaderDamage en damageAfterEnemyAttack
+    // Pre-fix (bug #25), el bucle habría dejado leaderDamage en damageAfterPassive
     // (el "antes" de la ÚLTIMA entrada) en vez de revertir la ventana completa a 0.
     expect(engine.getSnapshot().leaderDamage).toBe(0);
   });
 
   it('mismo caso con leaderShield: ambas entradas target LEADER con Escudo parcialmente consumido — tras Contratiempo, leaderShield vuelve al valor de ANTES de la primera, no de la segunda', () => {
     const engine = buildEngine({ initialTurnOwner: 'ENEMY', initialLeaderShield: 5 });
+    engine.dispatch({ type: 'SUMMON_MINION', minionDefinitionId: MINION_PASSIVE_ATTACK, sourceId: 'enemy' });
+    engine.dispatch({ type: 'END_TURN' }); // turno 1 -> LEADER
 
-    engine.dispatch({ type: 'SUMMON_MINION', minionDefinitionId: MINION_PLANO, sourceId: 'enemy' });
-
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY (turno 2): pasivo consume Escudo
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
     });
-    engine.dispatch({ type: 'RESOLVE_MINION_ACTION' });
 
     engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
 
@@ -529,27 +547,26 @@ describe('CombatEngine — H1.16: fix del bug #25 (Contratiempo revierte TODAS l
     expect(engine.getSnapshot().leaderShield).toBe(5);
   });
 
-  it('2 entradas PLOT en el mismo turno (Enemigo + Secuaz de rama Trama): mismo fix aplicado a scenarioPlot, alcance FULL_TURN', () => {
+  it('2 entradas PLOT en el mismo turno (pasivo de Secuaz + habilidad de Enemigo): mismo fix aplicado a scenarioPlot, alcance FULL_TURN', () => {
     const engine = buildEngine({ initialTurnOwner: 'ENEMY' });
+    engine.dispatch({ type: 'SUMMON_MINION', minionDefinitionId: MINION_PASSIVE_PLOT, sourceId: 'enemy' });
+    engine.dispatch({ type: 'END_TURN' }); // turno 1 -> LEADER
 
-    engine.dispatch({ type: 'SUMMON_MINION', minionDefinitionId: MINION_PLOT_SPECIAL, sourceId: 'enemy' });
+    engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY (turno 2): pasivo PLOT +2
+    expect(engine.getSnapshot().scenarioPlot).toBe(2);
 
-    const nucleo1 = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo1 = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_PLOT, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo1.id,
     });
-    expect(engine.getSnapshot().scenarioPlot).toBe(3);
-
-    const minionAction = engine.dispatch({ type: 'RESOLVE_MINION_ACTION' });
-    expect(isOk(minionAction)).toBe(true);
-    expect(engine.getSnapshot().scenarioPlot).toBe(5); // ENEMY_MINION_PLOT amount 2, misma dirección INCREASE
+    expect(engine.getSnapshot().scenarioPlot).toBe(5); // +2 pasivo, +3 habilidad
 
     engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
 
     const result = engine.dispatch({ type: 'PLAY_CONTRATIEMPO', cardId: CARD_FULL_TURN, sourceId: 'leader' });
     expect(isOk(result)).toBe(true);
 
-    // Pre-fix, el bucle habría dejado scenarioPlot en 3 (el "antes" de la ÚLTIMA
+    // Pre-fix, el bucle habría dejado scenarioPlot en 2 (el "antes" de la ÚLTIMA
     // entrada) en vez de revertir la ventana completa a 0.
     expect(engine.getSnapshot().scenarioPlot).toBe(0);
   });
@@ -568,22 +585,22 @@ describe('CombatEngine — H1.16: fix del bug #25 (Contratiempo revierte TODAS l
     const ally2Id = (play2.value[0] as Extract<CombatEvent, { type: 'ALLY_ENTERED_PLAY' }>).allyInstanceId;
 
     engine.dispatch({ type: 'SET_DAMAGE_REDIRECT', targetAllyInstanceId: ally1Id });
-    engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
+    engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY (turno 1)
+    engine.dispatch({ type: 'SUMMON_MINION', minionDefinitionId: MINION_PASSIVE_ATTACK, sourceId: 'enemy' });
+    engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
+    engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY (turno 2): pasivo golpea a ally1 (redirect ya activo)
 
-    engine.dispatch({ type: 'SUMMON_MINION', minionDefinitionId: MINION_PLANO, sourceId: 'enemy' });
-
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
-    engine.dispatch({
-      type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
-    });
     const ally1LifeAfterFirstHit = engine.getSnapshot().alliesInPlay.find((a) => a.instanceId === ally1Id)!.life;
     expect(ally1LifeAfterFirstHit).toBeLessThan(5);
 
-    // Redirige al 2º Aliado ANTES de que actúe el Secuaz.
+    // Redirige al 2º Aliado ANTES de la habilidad manual.
     engine.dispatch({ type: 'SET_DAMAGE_REDIRECT', targetAllyInstanceId: ally2Id });
-    engine.dispatch({ type: 'RESOLVE_MINION_ACTION' }); // MINION_PLANO (amount 2) golpea a ally2
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
+    engine.dispatch({
+      type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
+    });
     const ally2LifeAfterSecondHit = engine.getSnapshot().alliesInPlay.find((a) => a.instanceId === ally2Id)!.life;
-    expect(ally2LifeAfterSecondHit).toBe(3); // 5 - 2
+    expect(ally2LifeAfterSecondHit).toBeLessThan(5);
 
     engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
 
@@ -604,19 +621,19 @@ describe('CombatEngine — H1.16: fix del bug #25 (Contratiempo revierte TODAS l
     const allyId = (play.value[0] as Extract<CombatEvent, { type: 'ALLY_ENTERED_PLAY' }>).allyInstanceId;
 
     engine.dispatch({ type: 'SET_DAMAGE_REDIRECT', targetAllyInstanceId: allyId });
-    engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
+    engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY (turno 1)
+    engine.dispatch({ type: 'SUMMON_MINION', minionDefinitionId: MINION_PASSIVE_ATTACK, sourceId: 'enemy' });
+    engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
+    engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY (turno 2): pasivo golpea al Aliado (1er golpe)
 
-    engine.dispatch({ type: 'SUMMON_MINION', minionDefinitionId: MINION_PLANO, sourceId: 'enemy' });
-
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
-    engine.dispatch({
-      type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
-    });
     const lifeAfterFirstHit = engine.getSnapshot().alliesInPlay.find((a) => a.instanceId === allyId)!.life;
     expect(lifeAfterFirstHit).toBeLessThan(5);
 
-    // El mismo Aliado sigue siendo el objetivo de redirección para el Secuaz.
-    engine.dispatch({ type: 'RESOLVE_MINION_ACTION' }); // MINION_PLANO (amount 2) golpea al MISMO Aliado
+    // El mismo Aliado sigue siendo el objetivo de redirección para la habilidad manual.
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
+    engine.dispatch({
+      type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
+    });
     const lifeAfterSecondHit = engine.getSnapshot().alliesInPlay.find((a) => a.instanceId === allyId)!.life;
     expect(lifeAfterSecondHit).toBeLessThan(lifeAfterFirstHit);
 
@@ -652,7 +669,7 @@ describe('CombatEngine — H1.16: fix del bug #25 (Contratiempo revierte TODAS l
     const remainingBeforeActivation = engine.getSnapshot().cooldowns.find((c) => c.abilityId === ENEMY_ATTACK)!.remaining;
     expect(remainingBeforeActivation).toBe(0);
 
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
     });
@@ -675,27 +692,36 @@ describe('CombatEngine — H1.16: fix del bug #25 (Contratiempo revierte TODAS l
     expect(snapshot.cooldowns.find((c) => c.abilityId === ENEMY_ATTACK)!.remaining).toBe(0);
   });
 
-  it('QA H1.16: se generaliza a N=3 mutaciones en el mismo turno de Enemigo (MINION_PASSIVE + ABILITY + MINION_PLANO_ATTACK) — Contratiempo revierte las 3 y leaderDamage vuelve al valor de ANTES de la primera, no de la 2ª ni la 3ª', () => {
+  it('QA H1.16: se generaliza a N=3 mutaciones en el mismo turno de Enemigo (2x MINION_PASSIVE + 1x ABILITY) — Contratiempo revierte las 3 y leaderDamage vuelve al valor de ANTES de la primera, no de la 2ª ni la 3ª', () => {
+    // NUEVO H1.16 (rediseño): el Enemigo solo tiene 1 acción por turno (ENEMY_BASE_ACTIONS_PER_TURN),
+    // así que ya no se puede generalizar a N=3 con 2 ACTIVATE_ABILITY manuales en el
+    // mismo turno. Se usan 2 Secuaces con pasivos de tipo distinto (ATTACK y PLOT) —
+    // ambos se aplican en el mismo `MINION_PASSIVE_EFFECTS_APPLIED`, pero generan 2
+    // entradas de log INDEPENDIENTES (una por tipo de efecto) — más 1 ACTIVATE_ABILITY
+    // real (origin ABILITY), para un total de 3 mutaciones ENEMY en la misma ventana.
     const engine = buildEngine();
 
-    // Turno 1 de Enemigo: solo se invoca el Secuaz (sin activar nada), para que su
-    // pasivo NO se aplique retroactivamente este mismo turno (spec §0.7) y leaderDamage
-    // siga en 0 al cerrar la ventana.
+    // Turno 1 de Enemigo: solo se invocan los Secuaces (sin activar nada), para que sus
+    // pasivos NO se apliquen retroactivamente este mismo turno (spec §0.7) y
+    // leaderDamage/scenarioPlot sigan en 0 al cerrar la ventana.
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY (turno 1)
-    engine.dispatch({ type: 'SUMMON_MINION', minionDefinitionId: MINION_PASSIVE_AND_PLANO, sourceId: 'enemy' });
+    engine.dispatch({ type: 'SUMMON_MINION', minionDefinitionId: MINION_PASSIVE_ATTACK, sourceId: 'enemy' });
+    engine.dispatch({ type: 'SUMMON_MINION', minionDefinitionId: MINION_PASSIVE_PLOT, sourceId: 'enemy' });
     expect(engine.getSnapshot().leaderDamage).toBe(0);
 
     engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER (cierra la ventana, vacía, del turno 1)
 
-    // Turno 2 de Enemigo: al empezar, se aplica el pasivo del Secuaz ya en mesa
-    // (MINION_PASSIVE, 1ª mutación de esta ventana).
+    // Turno 2 de Enemigo: al empezar, se aplican los 2 pasivos ya en mesa (1ª y 2ª
+    // mutación de esta ventana: MINION_PASSIVE-ATTACK y MINION_PASSIVE-PLOT).
     engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY (turno 2)
     const damageBeforeAll = 0; // valor de leaderDamage justo ANTES de la 1ª entrada.
     const damageAfterPassive = engine.getSnapshot().leaderDamage;
-    expect(damageAfterPassive).toBeGreaterThan(damageBeforeAll); // MINION_PASSIVE ya aplicado (amount 2)
+    expect(damageAfterPassive).toBeGreaterThan(damageBeforeAll); // MINION_PASSIVE ATTACK ya aplicado
+    expect(engine.getSnapshot().scenarioPlot).toBeGreaterThan(0); // MINION_PASSIVE PLOT ya aplicado
 
-    // 2ª mutación: ACTIVATE_ABILITY real del Enemigo con efecto ATTACK (origin ABILITY).
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    // 3ª mutación: ACTIVATE_ABILITY real del Enemigo con efecto ATTACK (origin ABILITY) —
+    // única acción disponible este turno para el Enemigo.
+    const nucleo = engine.getSnapshot().nucleoTable.find((d) => d.status === 'AVAILABLE')!;
     const attack = engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
     });
@@ -703,17 +729,9 @@ describe('CombatEngine — H1.16: fix del bug #25 (Contratiempo revierte TODAS l
     const damageAfterAbility = engine.getSnapshot().leaderDamage;
     expect(damageAfterAbility).toBeGreaterThan(damageAfterPassive);
 
-    // 3ª mutación: RESOLVE_MINION_ACTION con ataque plano del mismo Secuaz (origin
-    // MINION_PLANO_ATTACK) — único Secuaz en mesa, selección aleatoria sin ambigüedad.
-    const minionAction = engine.dispatch({ type: 'RESOLVE_MINION_ACTION' });
-    expect(isOk(minionAction)).toBe(true);
-    const damageAfterMinionAttack = engine.getSnapshot().leaderDamage;
-    // planoAttackAmount 3, sin escudo activo → se suma completo.
-    expect(damageAfterMinionAttack).toBe(damageAfterAbility + 3);
-
     engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER (congela las 3 entradas del turno 2)
 
-    const result = engine.dispatch({ type: 'PLAY_CONTRATIEMPO', cardId: CARD_DAMAGE_ONLY, sourceId: 'leader' });
+    const result = engine.dispatch({ type: 'PLAY_CONTRATIEMPO', cardId: CARD_FULL_TURN, sourceId: 'leader' });
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       const played = result.value[0] as Extract<CombatEvent, { type: 'CONTRATIEMPO_PLAYED' }>;
@@ -721,10 +739,11 @@ describe('CombatEngine — H1.16: fix del bug #25 (Contratiempo revierte TODAS l
     }
 
     // Pre-fix (bug #25 "última entrada gana"), el bucle habría dejado leaderDamage en el
-    // valor de ANTES de la 3ª entrada (damageAfterAbility) en vez de revertir la ventana
+    // valor de ANTES de la 3ª entrada (damageAfterPassive) en vez de revertir la ventana
     // completa hasta ANTES de la 1ª (damageBeforeAll).
     expect(engine.getSnapshot().leaderDamage).toBe(damageBeforeAll);
     expect(engine.getSnapshot().leaderDamage).not.toBe(damageAfterAbility);
     expect(engine.getSnapshot().leaderDamage).not.toBe(damageAfterPassive);
+    expect(engine.getSnapshot().scenarioPlot).toBe(0); // FULL_TURN también revierte Trama
   });
 });

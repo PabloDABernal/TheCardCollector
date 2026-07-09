@@ -38,7 +38,7 @@ describe('cardFlip', () => {
     expect(legs[1]).toMatchObject({ scaleX: 1, duration: 150, ease: 'Sine.easeOut' });
   });
 
-  it('invoca el callback de cambio de aspecto entre ambos tramos (orden verificado a mano)', () => {
+  it('invoca el callback de cambio de aspecto en el punto medio, y restaura el color original al terminar el flip completo (FIX QA — el tile no debe quedar en blanco permanente)', () => {
     const fake = createFakeJuiceScene({ autoComplete: false });
     const target = allyEnteredPlayTarget();
 
@@ -46,12 +46,28 @@ describe('cardFlip', () => {
 
     const placeholder = fake.scene.children.getByName(ALLY_INSTANCE_ID) as unknown as {
       fillColor: number;
+      setFillStyle(color?: number, alpha?: number): unknown;
     };
-    const colorBeforeMidpoint = placeholder.fillColor;
+    const originalColor = placeholder.fillColor;
+
+    // Espía `setFillStyle` para observar CADA cambio de color por separado — `fake.completeTween`
+    // dispara los dos tramos del chain Y el `onComplete` final en la misma llamada síncrona (no
+    // simula el retraso real de 150ms entre tramos de Phaser), así que inspeccionar solo el
+    // `fillColor` final no distinguiría el toggle de punto medio de la restauración de cierre.
+    const colorsSet: number[] = [];
+    const realSetFillStyle = placeholder.setFillStyle.bind(placeholder);
+    placeholder.setFillStyle = (color?: number, alpha?: number) => {
+      if (color !== undefined) colorsSet.push(color);
+      return realSetFillStyle(color, alpha);
+    };
 
     fake.completeTween(0);
 
-    expect(placeholder.fillColor).not.toBe(colorBeforeMidpoint);
+    // 1ª llamada = punto medio del flip ("cambia de aspecto", distinto del original).
+    expect(colorsSet[0]).not.toBe(originalColor);
+    // 2ª llamada = cierre del flip completo: restaura el color de partida — el tile no debe
+    // quedarse fijado en el color de "punto medio" (blanco) para siempre.
+    expect(placeholder.fillColor).toBe(originalColor);
   });
 
   it('reuso: llamar play() dos veces con el mismo focusId no crea dos placeholders distintos', async () => {

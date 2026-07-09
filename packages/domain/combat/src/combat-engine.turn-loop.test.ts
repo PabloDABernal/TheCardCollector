@@ -8,6 +8,7 @@ import type { EnemyAbilityAiProfile } from './types/enemy-ai';
 import type { PlayableCardDefinition } from './types/playable-card';
 import { UMBRAL_BONUS_THRESHOLD } from './types/umbral';
 import { LEADER_SHIELD_MAX } from './types/ability-effect';
+import type { DramaturgiaCardDefinition } from '@collector/domain-catalog';
 
 // -----------------------------------------------------------------------------
 // Fixtures — mismo estilo que el resto de combat-engine.*.test.ts.
@@ -21,6 +22,11 @@ const CARD_ATTACK: CardId = createId<'CardId'>('CardId', 'card-attack');
 const CARD_ATTACK_UMBRAL: CardId = createId<'CardId'>('CardId', 'card-attack-umbral');
 const CARD_SHIELD: CardId = createId<'CardId'>('CardId', 'card-shield');
 const CARD_PLOT: CardId = createId<'CardId'>('CardId', 'card-plot');
+
+// NUEVO H3.6 — mano/mazo del Líder. La mayoría de tests de este archivo necesitan que
+// sus cartas jugables ya estén en mano — se listan aquí las 4 (mano inicial 5 las cubre
+// todas de una vez, sin agotar el mazo).
+const DEFAULT_LEADER_DECK: CardId[] = [CARD_ATTACK, CARD_ATTACK_UMBRAL, CARD_SHIELD, CARD_PLOT];
 
 function costs(extra: [AbilityId, CoreCostRequirement][] = []): Map<AbilityId, CoreCostRequirement> {
   return new Map<AbilityId, CoreCostRequirement>([[ABILITY_ANY, { kind: 'ANY' }], ...extra]);
@@ -39,6 +45,17 @@ function playableCards(entries: [CardId, PlayableCardDefinition][]): Map<CardId,
   return new Map(entries);
 }
 
+/** NUEVO H1.16 (rediseño) — convierte iconos sueltos (estilo H1.18 original) en cartas
+ *  de Dramaturgia completas mínimas, sin `minionBehavior` (comportamiento por defecto:
+ *  ningún Secuaz actúa salvo que un test lo añada explícitamente). */
+function dramaturgiaCards(icons: readonly ('ATTACK' | 'PLOT')[]): DramaturgiaCardDefinition[] {
+  return icons.map((icon, i) => ({
+    id: createId<'DramaturgiaCardId'>('DramaturgiaCardId', `dramacard-${i}-${icon}`),
+    name: `Carta ${i}`,
+    icon,
+  }));
+}
+
 /** Motor mínimo — sin IA de Enemigo configurada (opt-in, ver spec §0.5). */
 function buildEngine(overrides: Partial<CombatEngineConfig> = {}): CombatEngine {
   return new CombatEngine({
@@ -48,6 +65,7 @@ function buildEngine(overrides: Partial<CombatEngineConfig> = {}): CombatEngine 
     leaderMaxHealth: 100,
     enemyMaxHealth: 100,
     scenarioPlotDefeatThreshold: 999,
+    leaderDeckCardIds: DEFAULT_LEADER_DECK,
     ...overrides,
   });
 }
@@ -73,7 +91,7 @@ function buildEngineWithAi(overrides: Partial<CombatEngineConfig> = {}): CombatE
       [ENEMY_PLOT_BASICA, { kind: 'PLOT' as const, amount: 1 }],
     ]),
     enemyAbilityAiProfiles,
-    dramaturgiaDeck: ['ATTACK'],
+    dramaturgiaDeck: dramaturgiaCards(['ATTACK']),
     ...overrides,
   });
 }
@@ -91,10 +109,10 @@ describe('CombatEngine — H1.18: PLAY_CARD con efecto ATTACK_ENEMY', () => {
       initialLeaderEnergy: 1,
     });
     const before = engine.getSnapshot();
-    const nucleo = before.nucleoPool[0]!;
+    const nucleo = before.nucleoTable[0]!;
 
     const result = engine.dispatch({
-      type: 'PLAY_CARD', cardId: CARD_ATTACK, sourceId: 'leader', nucleoInstanceId: nucleo.id,
+      type: 'PLAY_CARD', cardId: CARD_ATTACK, sourceId: 'leader', nucleoInstanceId: nucleo.id, target: { kind: 'ENEMY' },
     });
 
     expect(isOk(result)).toBe(true);
@@ -110,7 +128,7 @@ describe('CombatEngine — H1.18: PLAY_CARD con efecto ATTACK_ENEMY', () => {
     expect(after.enemyDamage).toBe(nucleo.value);
     expect(after.leaderEnergy).toBe(0);
     expect(after.actions.actionsTaken).toBe(1);
-    expect(after.nucleoPool.some((n) => n.id === nucleo.id)).toBe(false);
+    expect(after.nucleoTable.find((n) => n.id === nucleo.id)?.status).toBe('SPENT');
   });
 
   it('formula ADD con Núcleo valor >=3: bonusActivated true, sin bonusResolvedValue (sin bonusFormula en el contenido, §0.1.1)', () => {
@@ -119,13 +137,12 @@ describe('CombatEngine — H1.18: PLAY_CARD con efecto ATTACK_ENEMY', () => {
         [CARD_ATTACK_UMBRAL, { energyCost: 1, effect: { kind: 'ATTACK_ENEMY', formula: { baseFormula: { kind: 'ADD', amount: 2 } } } }],
       ]),
       initialLeaderEnergy: 1,
-      poolSize: 12,
     });
-    const nucleo = engine.getSnapshot().nucleoPool.find((n) => n.value >= UMBRAL_BONUS_THRESHOLD)!;
+    const nucleo = engine.getSnapshot().nucleoTable.find((n) => n.value >= UMBRAL_BONUS_THRESHOLD)!;
     expect(nucleo).toBeDefined();
 
     const result = engine.dispatch({
-      type: 'PLAY_CARD', cardId: CARD_ATTACK_UMBRAL, sourceId: 'leader', nucleoInstanceId: nucleo.id,
+      type: 'PLAY_CARD', cardId: CARD_ATTACK_UMBRAL, sourceId: 'leader', nucleoInstanceId: nucleo.id, target: { kind: 'ENEMY' },
     });
 
     expect(isOk(result)).toBe(true);
@@ -150,6 +167,23 @@ describe('CombatEngine — H1.18: PLAY_CARD con efecto ATTACK_ENEMY', () => {
 
     expect(isErr(result)).toBe(true);
     if (isErr(result)) expect(result.error).toEqual({ code: 'PLAY_CARD_NUCLEO_REQUIRED', cardId: CARD_ATTACK });
+    expect(engine.getSnapshot()).toEqual(before);
+  });
+
+  it('con nucleoInstanceId pero sin target → PLAY_CARD_TARGET_REQUIRED, sin mutación', () => {
+    const engine = buildEngine({
+      playableCards: playableCards([
+        [CARD_ATTACK, { energyCost: 1, effect: { kind: 'ATTACK_ENEMY', formula: { baseFormula: { kind: 'VALUE' } } } }],
+      ]),
+      initialLeaderEnergy: 1,
+    });
+    const nucleo = engine.getSnapshot().nucleoTable[0]!;
+    const before = engine.getSnapshot();
+
+    const result = engine.dispatch({ type: 'PLAY_CARD', cardId: CARD_ATTACK, sourceId: 'leader', nucleoInstanceId: nucleo.id });
+
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) expect(result.error).toEqual({ code: 'PLAY_CARD_TARGET_REQUIRED', cardId: CARD_ATTACK });
     expect(engine.getSnapshot()).toEqual(before);
   });
 });
@@ -203,6 +237,21 @@ describe('CombatEngine — H1.18: PLAY_CARD, errores sin mutación', () => {
     expect(engine.getSnapshot()).toEqual(before);
   });
 
+  it('carta conocida pero fuera de mano → CARD_NOT_IN_HAND', () => {
+    const engine = buildEngine({
+      leaderDeckCardIds: [CARD_SHIELD], // solo esta carta llega a mano — CARD_PLOT nunca
+      playableCards: playableCards([
+        [CARD_SHIELD, { energyCost: 0, effect: { kind: 'SHIELD', amount: 1 } }],
+        [CARD_PLOT, { energyCost: 0, effect: { kind: 'PLOT', amount: 1 } }],
+      ]),
+    });
+    const before = engine.getSnapshot();
+    const result = engine.dispatch({ type: 'PLAY_CARD', cardId: CARD_PLOT, sourceId: 'leader' });
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) expect(result.error).toEqual({ code: 'CARD_NOT_IN_HAND', cardId: CARD_PLOT });
+    expect(engine.getSnapshot()).toEqual(before);
+  });
+
   it('Energía insuficiente → PLAY_CARD_INSUFFICIENT_ENERGY', () => {
     const engine = buildEngine({
       playableCards: playableCards([[CARD_SHIELD, { energyCost: 5, effect: { kind: 'SHIELD', amount: 1 } }]]),
@@ -231,6 +280,7 @@ describe('CombatEngine — H1.18: PLAY_CARD, errores sin mutación', () => {
 
   it('sin acciones restantes → NO_ACTIONS_REMAINING', () => {
     const engine = buildEngine({
+      leaderDeckCardIds: [CARD_SHIELD, CARD_SHIELD, CARD_SHIELD], // 3 copias — el 3er intento debe llegar a NO_ACTIONS_REMAINING, no CARD_NOT_IN_HAND
       playableCards: playableCards([[CARD_SHIELD, { energyCost: 0, effect: { kind: 'SHIELD', amount: 1 } }]]),
     });
     // Consume las 2 acciones del Líder (GDD §2.1) jugando la carta 2 veces.
@@ -257,10 +307,10 @@ describe('CombatEngine — H1.18: condición de victoria', () => {
         [CARD_ATTACK, { energyCost: 0, effect: { kind: 'ATTACK_ENEMY', formula: { baseFormula: { kind: 'ADD', amount: 10 } } } }],
       ]),
     });
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable[0]!;
 
     const result = engine.dispatch({
-      type: 'PLAY_CARD', cardId: CARD_ATTACK, sourceId: 'leader', nucleoInstanceId: nucleo.id,
+      type: 'PLAY_CARD', cardId: CARD_ATTACK, sourceId: 'leader', nucleoInstanceId: nucleo.id, target: { kind: 'ENEMY' },
     });
 
     expect(isOk(result)).toBe(true);
@@ -285,7 +335,7 @@ describe('CombatEngine — H1.18: condiciones de derrota', () => {
       ]),
       initialTurnOwner: 'ENEMY',
     });
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable[0]!;
 
     const result = engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK_BASICA, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
@@ -310,7 +360,7 @@ describe('CombatEngine — H1.18: condiciones de derrota', () => {
       abilityEffects: new Map([[ENEMY_PLOT_BASICA, { kind: 'PLOT' as const, amount: 4 }]]),
       initialTurnOwner: 'ENEMY',
     });
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable[0]!;
 
     const result = engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_PLOT_BASICA, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
@@ -336,8 +386,8 @@ describe('CombatEngine — H1.18: dispatch() rechaza comandos tras estado termin
         [CARD_ATTACK, { energyCost: 0, effect: { kind: 'ATTACK_ENEMY', formula: { baseFormula: { kind: 'ADD', amount: 10 } } } }],
       ]),
     });
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
-    engine.dispatch({ type: 'PLAY_CARD', cardId: CARD_ATTACK, sourceId: 'leader', nucleoInstanceId: nucleo.id });
+    const nucleo = engine.getSnapshot().nucleoTable[0]!;
+    engine.dispatch({ type: 'PLAY_CARD', cardId: CARD_ATTACK, sourceId: 'leader', nucleoInstanceId: nucleo.id, target: { kind: 'ENEMY' } });
     expect(engine.getSnapshot().status).toBe('VICTORY');
 
     const before = engine.getSnapshot();
@@ -382,13 +432,21 @@ describe('CombatEngine — H1.18: turno de IA automático (opt-in, §0.5)', () =
     expect(engine.getSnapshot().turn.turnOwner).toBe('LEADER');
   });
 
-  it('con un Secuaz en mesa: la secuencia incluye MINION_ACTION_RESOLVED antes del TURN_ENDED de cierre', () => {
+  it('con un Secuaz en mesa y minionBehavior ALL en la carta de Dramaturgia: la secuencia incluye MINION_ACTION_RESOLVED antes del TURN_ENDED de cierre', () => {
     const MINION_PLANO = 'minion-plano-noop';
     const engine = buildEngineWithAi({
       initialTurnOwner: 'ENEMY', // para poder invocar el Secuaz antes del primer END_TURN
       minionDefinitions: new Map([
-        [MINION_PLANO, { passiveEffect: { kind: 'PLOT', amount: 0 }, planoAttackAmount: 1, isDefensor: false }],
+        [MINION_PLANO, { passiveEffect: { kind: 'PLOT', amount: 0 }, planoAttackAmount: 1, isDefensor: false, maxLife: 5 }],
       ]),
+      dramaturgiaDeck: [
+        {
+          id: createId<'DramaturgiaCardId'>('DramaturgiaCardId', 'dramacard-all'),
+          name: 'Carta ALL',
+          icon: 'ATTACK',
+          minionBehavior: { criterion: { kind: 'ALL' } },
+        },
+      ],
     });
     const summonResult = engine.dispatch({ type: 'SUMMON_MINION', minionDefinitionId: MINION_PLANO, sourceId: 'enemy' });
     expect(isOk(summonResult)).toBe(true);
@@ -445,7 +503,7 @@ describe('CombatEngine — H1.18: compatibilidad hacia atrás — sin IA configu
     }
     expect(engine.getSnapshot().turn.turnOwner).toBe('ENEMY'); // NO se devuelve solo — sin IA
 
-    const nucleo = engine.getSnapshot().nucleoPool[0]!;
+    const nucleo = engine.getSnapshot().nucleoTable[0]!;
     const abilityResult = engine.dispatch({
       type: 'ACTIVATE_ABILITY', abilityId: ENEMY_ATTACK_BASICA, sourceId: 'enemy', side: 'ENEMY', nucleoInstanceId: nucleo.id,
     });
@@ -456,7 +514,7 @@ describe('CombatEngine — H1.18: compatibilidad hacia atrás — sin IA configu
 
 describe('CombatEngine — H1.18: reciclado del mazo de Dramaturgia (§0.5.3)', () => {
   it('con un mazo de 2 cartas, el 3er robo (3er ciclo de turno de Enemigo) dispara DRAMATURGIA_DECK_RESHUFFLED antes de DRAMATURGIA_CARD_DRAWN', () => {
-    const engine = buildEngineWithAi({ dramaturgiaDeck: ['ATTACK', 'PLOT'] });
+    const engine = buildEngineWithAi({ dramaturgiaDeck: dramaturgiaCards(['ATTACK', 'PLOT']) });
 
     const drawnIcons: string[] = [];
     let reshuffledCount = 0;
@@ -487,7 +545,7 @@ describe('CombatEngine — H1.18: validación de constructor', () => {
   });
 
   it('dramaturgiaDeck poblado sin enemyAbilityAiProfiles → lanza', () => {
-    expect(() => buildEngine({ dramaturgiaDeck: ['ATTACK'] })).toThrow();
+    expect(() => buildEngine({ dramaturgiaDeck: dramaturgiaCards(['ATTACK']) })).toThrow();
   });
 
   it('leaderMaxHealth fuera de rango (0) → lanza', () => {

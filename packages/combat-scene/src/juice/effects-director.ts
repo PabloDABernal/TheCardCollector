@@ -31,9 +31,13 @@ function resolveJuiceTarget(event: CombatEvent): JuiceTarget {
       return { event, focusId: event.allyInstanceId };
     case 'MINION_SUMMONED':
       return { event, focusId: event.instanceId };
+    case 'MINION_DAMAGED':
+      return { event, focusId: event.minionInstanceId };
+    case 'MINION_DEFEATED':
+      return { event, focusId: event.instanceId };
     case 'PHASE_CHANGED':
       return { event, focusId: event.source === 'ENEMY' ? FOCUS_ID_ENEMY : FOCUS_ID_SCENARIO };
-    case 'NUCLEO_POOL_ROLLED':
+    case 'NUCLEO_TABLE_REROLLED':
     case 'DRAMATURGIA_CARD_DRAWN':
       return { event };
     default:
