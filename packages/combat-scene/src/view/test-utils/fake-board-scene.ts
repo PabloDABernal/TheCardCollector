@@ -26,6 +26,7 @@ export interface FakeRectangle {
   setOrigin(x: number, y?: number): FakeRectangle;
   setScale(x: number, y?: number): FakeRectangle;
   setFillStyle(color?: number, alpha?: number): FakeRectangle;
+  setStrokeStyle(width?: number, color?: number): FakeRectangle;
   destroy(): void;
 }
 
@@ -79,6 +80,7 @@ function createFakeRectangle(
   height: number,
   fillColor: number,
   registerByName: (name: string, rect: FakeRectangle) => void,
+  initialAlpha = 1,
 ): FakeRectangle {
   const rect: FakeRectangle = {
     x,
@@ -86,7 +88,7 @@ function createFakeRectangle(
     width,
     height,
     fillColor,
-    alpha: 1,
+    alpha: initialAlpha,
     scaleX: 1,
     scaleY: 1,
     name: '',
@@ -128,6 +130,9 @@ function createFakeRectangle(
       if (color !== undefined) {
         rect.fillColor = color;
       }
+      return rect;
+    },
+    setStrokeStyle() {
       return rect;
     },
     destroy() {
@@ -222,8 +227,16 @@ export function createFakeBoardScene(options: CreateFakeBoardSceneOptions = {}):
 
   const fakeScene = {
     add: {
-      rectangle(x?: number, y?: number, width?: number, height?: number, fillColor?: number): FakeRectangle {
-        const rect = createFakeRectangle(x ?? 0, y ?? 0, width ?? 0, height ?? 0, fillColor ?? 0x000000, registerByName);
+      rectangle(x?: number, y?: number, width?: number, height?: number, fillColor?: number, alpha?: number): FakeRectangle {
+        const rect = createFakeRectangle(
+          x ?? 0,
+          y ?? 0,
+          width ?? 0,
+          height ?? 0,
+          fillColor ?? 0x000000,
+          registerByName,
+          alpha ?? 1,
+        );
         rectangles.push(rect);
         return rect;
       },

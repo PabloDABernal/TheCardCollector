@@ -2,6 +2,15 @@ import type { CombatBridge } from '@collector/combat-bridge';
 import type { CombatStateSnapshot } from '@collector/domain-combat';
 import type { AbilityViewData } from '@collector/combat-scene';
 import { isAnyLeaderAbilityActivatable } from '@collector/combat-scene';
+import {
+  COLOR_MODAL_BORDER,
+  COLOR_MODAL_PANEL,
+  COLOR_TEXT_DISABLED,
+  COLOR_TEXT_PRIMARY,
+  FONT_FAMILY,
+  PANEL_BORDER_WIDTH_PX,
+  SPACING,
+} from '../ui/design-tokens';
 
 export interface CombatHudProps {
   readonly snapshot: CombatStateSnapshot;
@@ -17,6 +26,45 @@ export interface CombatHudProps {
 
 const LEADER_ENERGY_MAX = 5; // GDD §2.2 / decisions.md — tope de Energía, mismo valor que el motor
 const LEADER_HAND_SIZE_MAX = 7; // decisions.md "Tope de mano: 7"
+
+type ControlId = 'PLAY_CARD' | 'ACTIVATE_ABILITY' | 'GENERATE_ENERGY' | 'DRAW_CARD';
+
+/** H4 spec §4.3 — helper puro, testeable, reutilizado por los 4 controles (Jugar Carta / Activar
+ *  Habilidad / Generar Energía / Robar Carta): centraliza qué texto de motivo mostrar por control
+ *  cuando está deshabilitado. `null` = disponible, sin tooltip. */
+export function disabledReasonFor(
+  control: ControlId,
+  snapshot: CombatStateSnapshot,
+  leaderAbilities: readonly AbilityViewData[],
+): string | null {
+  const isLeaderTurn = snapshot.turn.turnOwner === 'LEADER' && snapshot.status === 'IN_PROGRESS';
+  if (!isLeaderTurn) {
+    return 'No es tu turno';
+  }
+
+  const hasActionsRemaining = snapshot.actions.actionsTaken < snapshot.actions.actionsAllowed;
+  if (!hasActionsRemaining) {
+    return 'Sin acciones restantes este turno';
+  }
+
+  switch (control) {
+    case 'PLAY_CARD':
+      return snapshot.leaderHand.length === 0 ? 'Sin cartas en mano' : null;
+    case 'ACTIVATE_ABILITY':
+      return isAnyLeaderAbilityActivatable(snapshot, leaderAbilities)
+        ? null
+        : 'Sin Núcleos disponibles o habilidades en cooldown';
+    case 'GENERATE_ENERGY':
+      return snapshot.leaderEnergy >= LEADER_ENERGY_MAX ? `Energía al máximo (${LEADER_ENERGY_MAX}/${LEADER_ENERGY_MAX})` : null;
+    case 'DRAW_CARD':
+      if (snapshot.leaderHand.length >= LEADER_HAND_SIZE_MAX) {
+        return `Mano al máximo (${LEADER_HAND_SIZE_MAX}/${LEADER_HAND_SIZE_MAX})`;
+      }
+      return snapshot.leaderDeckRemaining === 0 ? 'Mazo vacío' : null;
+    default:
+      return null;
+  }
+}
 
 /**
  * "Chrome" no-juice sobre el canvas (`architecture_stack.md` §2.3) — vida/Trama/turno YA se
@@ -36,6 +84,11 @@ const LEADER_HAND_SIZE_MAX = 7; // decisions.md "Tope de mano: 7"
  * segundo mecanismo de selección de carta/objetivo/Núcleo fuera del tablero. "Generar Energía" y
  * "Robar Carta" (pagadas) SÍ son botones accionables aquí porque no requieren ninguna selección
  * adicional (sin objetivo, sin Núcleo) — igual que el paso previo gratuito.
+ *
+ * H4.4 — reutiliza `ui/design-tokens.ts` (mismo lenguaje visual que `RunStartModal`, E4.1): panel
+ * propio con fondo/borde (antes: `<div>` sin estilo), contador de acciones siempre visible, tooltips
+ * vía `title` nativo, contraste de color real (no solo opacidad) en estado disabled, y layout
+ * responsivo (`flex-wrap`).
  */
 export function CombatHud({ snapshot, bridge, onEndTurn, leaderName, leaderAbilities }: CombatHudProps): JSX.Element {
   const isLeaderTurn = snapshot.turn.turnOwner === 'LEADER' && snapshot.status === 'IN_PROGRESS';
@@ -61,22 +114,50 @@ export function CombatHud({ snapshot, bridge, onEndTurn, leaderName, leaderAbili
   const canFreeDraw = freeStepAvailable && !handFull && !deckEmpty;
   const canFreeGenerate = freeStepAvailable && !energyAtMax;
 
+  const enabledStyle = { color: COLOR_TEXT_PRIMARY };
+  const disabledStyle = { color: COLOR_TEXT_DISABLED };
+
   return (
-    <div style={{ position: 'absolute', top: 0, left: 0, right: 0 }} className="combat-hud">
-      <p>Líder: {leaderName}</p>
+    <div
+      className="combat-hud"
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        background: COLOR_MODAL_PANEL,
+        borderBottom: `${PANEL_BORDER_WIDTH_PX}px solid ${COLOR_MODAL_BORDER}`,
+        padding: SPACING.md,
+        fontFamily: FONT_FAMILY,
+        color: COLOR_TEXT_PRIMARY,
+      }}
+    >
+      <p style={{ margin: 0 }}>
+        Líder: {leaderName}
+        <span className="combat-hud-action-counter" style={{ marginLeft: SPACING.md }}>
+          Acciones: {snapshot.actions.actionsTaken}/{snapshot.actions.actionsAllowed}
+        </span>
+      </p>
 
       {/* Paso previo gratuito — visualmente distinto de las 2 acciones pagadas (spec §6): no
           comparte el estado "gastado" de `actionsTakenThisTurn`, solo `leaderFreeStep`. */}
-      <div className="combat-hud-free-step" style={{ border: '1px dashed #ffffff', padding: '4px', margin: '4px 0' }}>
+      <div
+        className="combat-hud-free-step"
+        style={{ display: 'flex', flexWrap: 'wrap', gap: SPACING.sm, border: '1px dashed #ffffff', padding: SPACING.xs, margin: `${SPACING.xs}px 0` }}
+      >
         <span>Paso previo (gratis)</span>
         <button
           disabled={!canFreeDraw}
+          title={!canFreeDraw ? (handFull ? 'Mano al máximo' : deckEmpty ? 'Mazo vacío' : 'No es tu turno') : undefined}
+          style={canFreeDraw ? enabledStyle : disabledStyle}
           onClick={() => bridge.dispatch({ type: 'DRAW_OR_GENERATE', action: 'draw' })}
         >
           Robar carta (gratis)
         </button>
         <button
           disabled={!canFreeGenerate}
+          title={!canFreeGenerate ? (energyAtMax ? `Energía al máximo (${LEADER_ENERGY_MAX}/${LEADER_ENERGY_MAX})` : 'No es tu turno') : undefined}
+          style={canFreeGenerate ? enabledStyle : disabledStyle}
           onClick={() => bridge.dispatch({ type: 'DRAW_OR_GENERATE', action: 'generate' })}
         >
           Generar energía (gratis)
@@ -84,22 +165,40 @@ export function CombatHud({ snapshot, bridge, onEndTurn, leaderName, leaderAbili
       </div>
 
       {/* 2 acciones pagadas — 4 opciones, decisions.md "Estructura del turno del jugador". */}
-      <div className="combat-hud-actions">
-        <span aria-disabled={!canPlayCard} style={{ opacity: canPlayCard ? 1 : 0.4 }}>
+      <div className="combat-hud-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: SPACING.sm }}>
+        <span
+          aria-disabled={!canPlayCard}
+          title={disabledReasonFor('PLAY_CARD', snapshot, leaderAbilities) ?? undefined}
+          style={canPlayCard ? enabledStyle : disabledStyle}
+        >
           Jugar Carta
         </span>
-        <span aria-disabled={!canActivateAbility} style={{ opacity: canActivateAbility ? 1 : 0.4 }}>
+        <span
+          aria-disabled={!canActivateAbility}
+          title={disabledReasonFor('ACTIVATE_ABILITY', snapshot, leaderAbilities) ?? undefined}
+          style={canActivateAbility ? enabledStyle : disabledStyle}
+        >
           Activar Habilidad
         </span>
-        <button disabled={!canGenerateEnergyPaid} onClick={() => bridge.dispatch({ type: 'GENERATE_ENERGY' })}>
+        <button
+          disabled={!canGenerateEnergyPaid}
+          title={disabledReasonFor('GENERATE_ENERGY', snapshot, leaderAbilities) ?? undefined}
+          style={canGenerateEnergyPaid ? enabledStyle : disabledStyle}
+          onClick={() => bridge.dispatch({ type: 'GENERATE_ENERGY' })}
+        >
           Generar Energía
         </button>
-        <button disabled={!canDrawCardPaid} onClick={() => bridge.dispatch({ type: 'DRAW_CARD' })}>
+        <button
+          disabled={!canDrawCardPaid}
+          title={disabledReasonFor('DRAW_CARD', snapshot, leaderAbilities) ?? undefined}
+          style={canDrawCardPaid ? enabledStyle : disabledStyle}
+          onClick={() => bridge.dispatch({ type: 'DRAW_CARD' })}
+        >
           Robar Carta
         </button>
       </div>
 
-      <button onClick={onEndTurn} disabled={snapshot.status !== 'IN_PROGRESS'}>
+      <button onClick={onEndTurn} disabled={snapshot.status !== 'IN_PROGRESS'} style={{ marginTop: SPACING.sm }}>
         Fin de turno
       </button>
     </div>

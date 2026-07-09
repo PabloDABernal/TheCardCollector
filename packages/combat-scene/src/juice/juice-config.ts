@@ -24,7 +24,9 @@ export const JUICE_CONFIG: JuiceConfig = {
   ABILITY_ACTIVATED: [], // sin cambio — la animación de "Núcleo gastado" tampoco pasa por juice
                          // (mismo razonamiento, §1.1); `nucleo-table-view.ts` la resuelve internamente
                          // leyendo el diff de snapshot, no el evento.
-  TURN_ENDED: [],
+  // NUEVO H4 (spec §3.2) — banner de canvas "Tu turno"/"Turno del Enemigo", enganchado al evento
+  // real de dominio TURN_ENDED (nextTurnOwner). Antes: [].
+  TURN_ENDED: [{ recipeId: 'turnBanner', mode: 'sequential' }],
   COOLDOWNS_TICKED: [{ recipeId: 'cooldownReady', mode: 'parallel' }], // NUEVO H2.10 (antes: [])
   LEADER_DAMAGED: [
     { recipeId: 'floatingNumber', mode: 'parallel' }, // NUEVO H2.11 — antes de hitImpact, spec §1.8

@@ -15,9 +15,9 @@ test('elegir "Mago Base" en RunStartScreen navega a /combat y el HUD muestra el 
 
   await page.goto('/run-start');
 
-  await expect(page.getByLabel('Mago Base')).toBeVisible();
+  await expect(page.getByText('Mago Base')).toBeVisible();
 
-  await page.getByLabel('Mago Base').check();
+  await page.getByText('Mago Base').click();
   await page.getByText('Iniciar combate').click();
 
   await expect(page).toHaveURL(/\/combat/);
@@ -35,7 +35,7 @@ test('regresión — no tocar el selector en RunStartScreen navega a /combat con
 
   await page.goto('/run-start');
 
-  await expect(page.getByLabel('Soldado Base')).toBeChecked();
+  await expect(page.getByText('Soldado Base')).toBeVisible();
 
   await page.getByText('Iniciar combate').click();
 

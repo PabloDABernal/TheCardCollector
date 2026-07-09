@@ -49,3 +49,34 @@ export const MINIONS_ROW_Y = 620;
 // catálogo), la fila completa (3 × 200 = 600px, centrada en x=540) cae dentro del viewport de
 // 1080px con margen sobrado.
 export const ABILITY_ICON_SEPARATION_PX = 200;
+
+// H4 spec §2.2/§2.3 — paleta y tabla de paneles delimitados por zona (E4.2). `board-layout.ts`
+// sigue siendo la única fuente de verdad de coordenadas; `panel-view.ts` consume `PANEL_ZONES` sin
+// recalcular nada.
+export const PANEL_FILL_COLOR = 0x1e1e24; // ~mitad de camino entre #222 y #333 (decisions.md/backlog H4)
+export const PANEL_FILL_ALPHA = 0.55; // translúcido — se lee como "panel" sin tapar contenido detrás
+export const PANEL_BORDER_COLOR = 0x3a3a42;
+export const PANEL_BORDER_WIDTH_PX = 2;
+export const ZONE_LABEL_COLOR_HEX = '#9a9aa4'; // SUSTITUYE '#666666' de board.ts (bajo contraste)
+
+export interface PanelZone {
+  readonly id: string; // nombre estable, usado como scene name (debug/QA)
+  readonly x: number; // centro X
+  readonly y: number; // centro Y
+  readonly width: number;
+  readonly height: number;
+  readonly label: string; // reutiliza el mismo texto que board.ts ya usaba en `zoneLabels`
+}
+
+// Bounds calculados centrando cada panel sobre el contenido conocido de esa fila + un margen
+// (spec §2.3). Punto de partida derivado de constantes reales del código, verificado contra
+// capturas reales — ver nota de implementación de la spec sobre posible solape panel-hand/panel-nucleos.
+export const PANEL_ZONES: readonly PanelZone[] = [
+  { id: 'panel-enemy', x: 540, y: 390, width: 1000, height: 300, label: 'Enemigo' },
+  { id: 'panel-minions', x: 540, y: 620, width: 1000, height: 220, label: 'Secuaces' },
+  { id: 'panel-scenario', x: 540, y: 960, width: 1000, height: 280, label: 'Escenario' },
+  { id: 'panel-allies', x: 540, y: 1300, width: 1000, height: 220, label: 'Aliados' },
+  { id: 'panel-nucleos', x: 540, y: 1480, width: 1000, height: 300, label: 'Núcleos' },
+  { id: 'panel-hand', x: 540, y: 1600, width: 1040, height: 200, label: 'Mano' },
+  { id: 'panel-leader', x: 540, y: 1790, width: 1000, height: 300, label: 'Líder' },
+];

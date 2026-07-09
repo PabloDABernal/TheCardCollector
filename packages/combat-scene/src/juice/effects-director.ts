@@ -40,6 +40,10 @@ function resolveJuiceTarget(event: CombatEvent): JuiceTarget {
     case 'NUCLEO_TABLE_REROLLED':
     case 'DRAMATURGIA_CARD_DRAWN':
       return { event };
+    case 'TURN_ENDED':
+      // NUEVO H4 spec §3.3 — sin focusId, el banner no ataca a un game object concreto, cubre
+      // pantalla (hecho explícito por claridad de mantenimiento, mismo criterio que el resto del switch).
+      return { event };
     default:
       // Resto de tipos (§4): sin receta mapeada en JUICE_CONFIG — resolveJuiceTarget solo se
       // invoca cuando steps.length > 0, así que este caso no debería alcanzarse en la práctica.

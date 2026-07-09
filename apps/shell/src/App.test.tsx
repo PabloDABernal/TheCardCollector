@@ -124,7 +124,7 @@ describe('App routing', () => {
     await user.click(screen.getByText('Iniciar run'));
     expect(screen.getByText('Inicio de Run')).toBeInTheDocument();
 
-    await user.click(screen.getByLabelText('Mago Base'));
+    await user.click(screen.getByText('Mago Base'));
     await user.click(screen.getByText('Iniciar combate'));
 
     expect(document.getElementById('phaser-mount')).not.toBeNull();

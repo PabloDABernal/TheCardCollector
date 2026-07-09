@@ -40,10 +40,14 @@ export interface FakeJuiceRectangle {
   scale: number;
   scaleX: number;
   scaleY: number;
+  alpha: number;
+  depth: number;
   readonly name: string;
   destroyed: boolean;
   setName(name: string): FakeJuiceRectangle;
   setFillStyle(color?: number, alpha?: number): FakeJuiceRectangle;
+  setAlpha(alpha: number): FakeJuiceRectangle;
+  setDepth(depth: number): FakeJuiceRectangle;
   destroy(): void;
 }
 
@@ -59,8 +63,14 @@ export interface FakeJuiceText {
   y: number;
   alpha: number;
   text: string;
+  color: string;
+  depth: number;
   destroyed: boolean;
   setOrigin(x: number, y?: number): FakeJuiceText;
+  setAlpha(alpha: number): FakeJuiceText;
+  setText(value: string): FakeJuiceText;
+  setColor(color: string): FakeJuiceText;
+  setDepth(depth: number): FakeJuiceText;
   destroy(): void;
 }
 
@@ -130,6 +140,8 @@ function createFakeRectangle(
     scale: 1,
     scaleX: 1,
     scaleY: 1,
+    alpha: 1,
+    depth: 0,
     name: '',
     destroyed: false,
     setName(name: string) {
@@ -141,6 +153,14 @@ function createFakeRectangle(
       if (color !== undefined) {
         rect.fillColor = color;
       }
+      return rect;
+    },
+    setAlpha(alpha: number) {
+      rect.alpha = alpha;
+      return rect;
+    },
+    setDepth(depth: number) {
+      rect.depth = depth;
       return rect;
     },
     destroy() {
@@ -156,8 +176,26 @@ function createFakeText(x: number, y: number, initialText: string): FakeJuiceTex
     y,
     alpha: 1,
     text: initialText,
+    color: '',
+    depth: 0,
     destroyed: false,
     setOrigin() {
+      return text;
+    },
+    setAlpha(alpha: number) {
+      text.alpha = alpha;
+      return text;
+    },
+    setText(value: string) {
+      text.text = value;
+      return text;
+    },
+    setColor(color: string) {
+      text.color = color;
+      return text;
+    },
+    setDepth(depth: number) {
+      text.depth = depth;
       return text;
     },
     destroy() {

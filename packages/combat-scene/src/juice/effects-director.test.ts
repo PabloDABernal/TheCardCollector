@@ -36,6 +36,7 @@ interface TestRegistry {
   screenShake: JuiceRecipe;
   floatingNumber: JuiceRecipe;
   soundOnly: JuiceRecipe;
+  turnBanner: JuiceRecipe;
 }
 
 function createTestRegistry(): { registry: TestRegistry; callOrder: string[] } {
@@ -58,6 +59,7 @@ function createTestRegistry(): { registry: TestRegistry; callOrder: string[] } {
       screenShake: fnRecipe('screenShake'),
       floatingNumber: fnRecipe('floatingNumber'),
       soundOnly: fnRecipe('soundOnly'),
+      turnBanner: fnRecipe('turnBanner'),
     },
     callOrder,
   };
@@ -167,6 +169,7 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
         }),
       },
       soundOnly: { id: 'soundOnly', play: vi.fn(async () => {}) },
+      turnBanner: { id: 'turnBanner', play: vi.fn(async () => {}) },
     };
     const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry, soundManager);
     director.attach(bridge, {} as Phaser.Scene);
@@ -194,7 +197,7 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
     expect(registry.screenShake.play).not.toHaveBeenCalled();
   });
 
-  it('TURN_ENDED: ninguna receta del registro es invocada, ni soundManager.play', async () => {
+  it('TURN_ENDED: dispara únicamente turnBanner (H4 spec §3.2), sin soundManager.play (sin soundId estático)', async () => {
     const { bridge, emit } = createMockSceneBridge();
     const { registry } = createTestRegistry();
     const soundManager = createFakeSoundManager();
@@ -216,6 +219,10 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
     expect(registry.cardFlip.play).not.toHaveBeenCalled();
     expect(registry.hitImpact.play).not.toHaveBeenCalled();
     expect(registry.screenShake.play).not.toHaveBeenCalled();
+    expect(registry.turnBanner.play).toHaveBeenCalledTimes(1);
+    const [, target] = (registry.turnBanner.play as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(target.event).toEqual(event);
+    expect(target.focusId).toBeUndefined();
     expect(soundManager.play).not.toHaveBeenCalled();
   });
 
