@@ -36,6 +36,13 @@ vi.mock('@collector/combat-scene', () => ({
   // real vía `@collector/combat-scene`; el mock del paquete debe exponerla, aunque devuelva `false`
   // siempre (mismo espíritu que el resto de este mock: superficie mínima, no lógica real).
   isAnyLeaderAbilityActivatable: vi.fn(() => false),
+  // H4 spec §2 — `CombatBoardOverlay` (renderizado dentro de `CombatScreen`) lee estas constantes de
+  // posición/paneles vía `@collector/combat-scene`; el mock debe exponerlas con valores mínimos
+  // arbitrarios (el test no verifica coordenadas, solo el flujo de navegación end-to-end).
+  LEADER_POSITION: { x: 540, y: 1708 },
+  ENEMY_POSITION: { x: 540, y: 300 },
+  SCENARIO_POSITION: { x: 540, y: 960 },
+  PANEL_ZONES: [],
 }));
 
 const fakeSnapshot: CombatStateSnapshot = {
@@ -109,7 +116,10 @@ describe('App routing', () => {
     await user.click(screen.getByText('Iniciar combate'));
     expect(document.getElementById('phaser-mount')).not.toBeNull();
     expect(await screen.findByText('Fin de turno')).toBeInTheDocument();
-    expect(screen.getByText('Líder: Soldado Base')).toBeInTheDocument();
+    // H4 spec §6 — `CombatHud` ya no prefija "Líder: " (mockup §6, solo el nombre en `TYPE.displaySm`
+    // junto al contador de acciones); el mismo nombre también aparece en `CombatBoardOverlay`
+    // (línea de rol), así que se verifica dentro del contenedor `.combat-hud` específicamente.
+    expect(document.querySelector('.combat-hud')?.textContent).toContain('Soldado Base');
     expect(buildCombatSetupMock).toHaveBeenCalledWith({
       leaderId: 'leader-soldado-base',
       enemyId: 'enemy-bestia-base',
@@ -129,8 +139,8 @@ describe('App routing', () => {
 
     expect(document.getElementById('phaser-mount')).not.toBeNull();
     expect(await screen.findByText('Fin de turno')).toBeInTheDocument();
-    expect(screen.getByText('Líder: Mago Base')).toBeInTheDocument();
-    expect(screen.queryByText('Líder: Soldado Base')).not.toBeInTheDocument();
+    expect(document.querySelector('.combat-hud')?.textContent).toContain('Mago Base');
+    expect(document.querySelector('.combat-hud')?.textContent).not.toContain('Soldado Base');
     expect(buildCombatSetupMock).toHaveBeenCalledWith({
       leaderId: 'leader-mago-base',
       enemyId: 'enemy-bestia-base',
@@ -149,7 +159,10 @@ describe('App routing', () => {
 
     expect(document.getElementById('phaser-mount')).not.toBeNull();
     expect(await screen.findByText('Fin de turno')).toBeInTheDocument();
-    expect(screen.getByText('Líder: Soldado Base')).toBeInTheDocument();
+    // H4 spec §6 — `CombatHud` ya no prefija "Líder: " (mockup §6, solo el nombre en `TYPE.displaySm`
+    // junto al contador de acciones); el mismo nombre también aparece en `CombatBoardOverlay`
+    // (línea de rol), así que se verifica dentro del contenedor `.combat-hud` específicamente.
+    expect(document.querySelector('.combat-hud')?.textContent).toContain('Soldado Base');
     expect(buildCombatSetupMock).toHaveBeenCalledWith({
       leaderId: 'leader-soldado-base',
       enemyId: 'enemy-bestia-base',

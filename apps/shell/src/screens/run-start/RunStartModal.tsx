@@ -3,23 +3,24 @@ import type { RunStartNavigationState } from '../../combat/run-start-navigation-
 import { SelectionSection } from './SelectionSection';
 import type { SelectionCardOption } from './SelectionCard';
 import {
-  ACCENT_COLORS,
-  COLOR_MODAL_BORDER,
-  COLOR_MODAL_PANEL,
+  COLOR_BINDER,
+  COLOR_FOIL,
+  COLOR_INK,
   COLOR_OVERLAY,
+  COLOR_RULE,
   COLOR_TEXT_PRIMARY,
-  FONT_FAMILY,
-  FONT_SIZE_TITLE,
   MIN_TAP_TARGET_PX,
-  RADIUS_MODAL,
+  RADIUS_CHIP,
+  RADIUS_PANEL,
+  SHADOW_MODAL,
   SPACING,
+  TYPE,
 } from '../../ui/design-tokens';
 
-// Verde de acento (mismo hex que NUCLEO_COLOR_HEX.DEFENSA) — botón principal de confirmación.
-const CONFIRM_BUTTON_COLOR = ACCENT_COLORS[2];
-
-// H4 spec §1.3/§1.4 — popup de selección de Líder/Enemigo/Escenario, único overlay+panel con 3
-// secciones apiladas (sustituye los 3 `<fieldset>` planos de `RunStartScreen.tsx`).
+// H4 spec §3 — popup de selección de Líder/Enemigo/Escenario, único overlay+panel con 3 secciones
+// apiladas (estructura ya validada de la spec anterior, sustituye los 3 `<fieldset>` planos
+// originales de `RunStartScreen.tsx`). Esta pasada adopta el sistema de diseño real (§1) en vez de
+// grises genéricos: paleta con nombre, tipografía Staatliches/Manrope, `--foil` como único acento.
 export interface RunStartModalProps {
   readonly leaderOptions: readonly SelectionCardOption[];
   readonly enemyOptions: readonly SelectionCardOption[];
@@ -30,8 +31,8 @@ export interface RunStartModalProps {
   readonly onConfirm: (selection: RunStartNavigationState) => void;
 }
 
-/** Overlay (`COLOR_OVERLAY`, cubre viewport completo) + panel centrado (`COLOR_MODAL_PANEL`,
- *  `RADIUS_MODAL`, `box-shadow`) con las 3 `SelectionSection` + footer con botón "Iniciar combate"
+/** Overlay (`COLOR_OVERLAY`, cubre viewport completo) + panel centrado (`COLOR_BINDER`,
+ *  `RADIUS_PANEL`, `SHADOW_MODAL`) con las 3 `SelectionSection` + footer con botón "Iniciar combate"
  *  (siempre habilitado: el estado interno siempre arranca con un id válido de cada categoría, nunca
  *  vacío). Gestiona el estado de selección internamente y solo emite hacia arriba en `onConfirm`. */
 export function RunStartModal({
@@ -60,7 +61,6 @@ export function RunStartModal({
         alignItems: 'center',
         justifyContent: 'center',
         background: COLOR_OVERLAY,
-        fontFamily: FONT_FAMILY,
         padding: SPACING.md,
       }}
     >
@@ -73,15 +73,15 @@ export function RunStartModal({
           maxWidth: 640,
           maxHeight: '90vh',
           overflowY: 'auto',
-          background: COLOR_MODAL_PANEL,
-          border: `1px solid ${COLOR_MODAL_BORDER}`,
-          borderRadius: RADIUS_MODAL,
-          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.6)',
+          background: COLOR_BINDER,
+          border: `1px solid ${COLOR_RULE}`,
+          borderRadius: RADIUS_PANEL,
+          boxShadow: SHADOW_MODAL,
           padding: SPACING.xl,
           color: COLOR_TEXT_PRIMARY,
         }}
       >
-        <h2 style={{ margin: 0, fontSize: FONT_SIZE_TITLE }}>Inicio de Run</h2>
+        <h2 style={{ ...TYPE.displayLg, color: COLOR_TEXT_PRIMARY, margin: 0 }}>Inicio de Run</h2>
 
         <SelectionSection
           title="Elige tu Líder"
@@ -107,14 +107,16 @@ export function RunStartModal({
             type="button"
             onClick={handleConfirm}
             style={{
+              ...TYPE.bodyMd,
+              fontWeight: 700,
               minHeight: MIN_TAP_TARGET_PX,
               padding: `${SPACING.sm}px ${SPACING.lg}px`,
-              borderRadius: RADIUS_CARD_BUTTON,
+              borderRadius: RADIUS_CHIP,
               border: 'none',
-              background: CONFIRM_BUTTON_COLOR,
-              color: '#0a0a0c',
-              fontSize: FONT_SIZE_TITLE_BUTTON,
-              fontWeight: 700,
+              // Único lugar de la pantalla en `--foil` — coherente con "el sistema grita en un solo
+              // sitio" del sistema de diseño; texto oscuro (`--ink`) sobre foil para máximo contraste.
+              background: COLOR_FOIL,
+              color: COLOR_INK,
               cursor: 'pointer',
             }}
           >
@@ -125,6 +127,3 @@ export function RunStartModal({
     </div>
   );
 }
-
-const RADIUS_CARD_BUTTON = 12;
-const FONT_SIZE_TITLE_BUTTON = '16px';

@@ -9,11 +9,11 @@ const LEADER_COLOR = 0x2980b9; // azul
 const ENEMY_COLOR = 0xc0392b; // rojo
 const SCENARIO_COLOR = 0x8e44ad; // violeta
 const SCENARIO_ALERT_COLOR = 0xc0392b; // NUEVO H2.11 — mismo rojo de alerta que ENEMY_COLOR
-const HUD_TEXT_OFFSET_Y = 120;
 
 export interface RoleView {
-  /** Actualiza el texto HUD en el sitio (sin tween, spec §0.3) contra el snapshot actual. Nunca
-   *  destruye/recrea el Rectangle de rol — ver spec §3.4 para el porqué. */
+  /** Actualiza el estado visual del tile contra el snapshot actual (sin tween). H4 spec §2.4 — ya
+   *  NO actualiza ningún `Text` (retirado, ver abajo); solo lógica que afecta al `Rectangle` en sí
+   *  (ej. `SCENARIO_ALERT_COLOR`) sigue viviendo aquí. Nunca destruye/recrea el Rectangle de rol. */
   update(snapshot: CombatStateSnapshot, ctx: BoardViewContext): void;
 }
 
@@ -22,68 +22,51 @@ function createRoleTile(
   position: { x: number; y: number },
   color: number,
   name: string,
-): { rect: Phaser.GameObjects.Rectangle; text: Phaser.GameObjects.Text } {
+): Phaser.GameObjects.Rectangle {
   const rect = scene.add.rectangle(position.x, position.y, ROLE_SIZE.width, ROLE_SIZE.height, color);
   rect.setName(name);
   rect.setInteractive().setData('targetId', name);
-
-  const text = scene.add.text(position.x, position.y + HUD_TEXT_OFFSET_Y, '', {
-    fontSize: '20px',
-    color: '#ffffff',
-    align: 'center',
-    stroke: '#000000',
-    strokeThickness: 3,
-  });
-  text.setOrigin(0.5, 0);
-
-  return { rect, text };
+  return rect;
 }
 
-/** Crea (una única vez) el Rectangle + Text de rol del Líder, nombrado `FOCUS_ID_LEADER` (`setName`)
- *  y con `data.targetId = FOCUS_ID_LEADER` (spec §1.1). */
+/** Crea (una única vez) el Rectangle de rol del Líder, nombrado `FOCUS_ID_LEADER` (`setName`) y con
+ *  `data.targetId = FOCUS_ID_LEADER` (spec §1.1). H4 spec §2.4 — el `Text` de estado (Daño/Escudo/
+ *  Energía/Nivel) se retira de Phaser: migrado a `CombatBoardOverlay.tsx` (apps/shell, capa HTML
+ *  sincronizada), texto de lectura de estado que nunca participaba en tweens. */
 export function createLeaderRoleView(scene: Phaser.Scene): RoleView {
-  const { text } = createRoleTile(scene, LEADER_POSITION, LEADER_COLOR, FOCUS_ID_LEADER);
+  createRoleTile(scene, LEADER_POSITION, LEADER_COLOR, FOCUS_ID_LEADER);
 
   return {
-    update(snapshot: CombatStateSnapshot, ctx: BoardViewContext): void {
-      // Línea "CD: ..." retirada (H2.10) — ahora la muestran los iconos de ability-cooldown-view.
-      text.setText(
-        `Líder — Daño ${snapshot.leaderDamage}/${ctx.leaderMaxHealth} | Escudo ${snapshot.leaderShield} | ` +
-          `Energía ${snapshot.leaderEnergy} | Nivel ${snapshot.leaderState.level}`,
-      );
+    update(): void {
+      // Sin-op deliberado — el tile del Líder no cambia de color por estado (a diferencia del
+      // Escenario, ver `createScenarioRoleView`). Se mantiene el método `update()` por simetría de
+      // contrato `RoleView` y porque `board-view.ts` llama a los 3 roles uniformemente.
     },
   };
 }
 
-/** Crea (una única vez) el Rectangle + Text de rol del Enemigo, nombrado `FOCUS_ID_ENEMY`. */
+/** Crea (una única vez) el Rectangle de rol del Enemigo, nombrado `FOCUS_ID_ENEMY`. */
 export function createEnemyRoleView(scene: Phaser.Scene): RoleView {
-  const { text } = createRoleTile(scene, ENEMY_POSITION, ENEMY_COLOR, FOCUS_ID_ENEMY);
+  createRoleTile(scene, ENEMY_POSITION, ENEMY_COLOR, FOCUS_ID_ENEMY);
 
   return {
-    update(snapshot: CombatStateSnapshot, ctx: BoardViewContext): void {
-      // Línea "CD: ..." retirada (H2.10) — ahora la muestran los iconos de ability-cooldown-view.
-      text.setText(
-        `Enemigo — Daño ${snapshot.enemyDamage}/${ctx.enemyMaxHealth} | Fase ${snapshot.enemyPhase.phaseNumber}/${snapshot.enemyPhase.totalPhases}`,
-      );
+    update(): void {
+      // Sin-op deliberado — ver `createLeaderRoleView`.
     },
   };
 }
 
-/** Crea (una única vez) el Rectangle + Text de rol del Escenario, nombrado `FOCUS_ID_SCENARIO`.
- *  NUEVO H2.11: resaltado persistente de umbral de Trama — cambia `fillColor` del tile a
- *  `SCENARIO_ALERT_COLOR` mientras `scenarioPlot >= scenarioPlotDefeatThreshold`, evaluado en cada
- *  `update()` de forma idempotente (spec §1.9). */
+/** Crea (una única vez) el Rectangle de rol del Escenario, nombrado `FOCUS_ID_SCENARIO`. Resaltado
+ *  persistente de umbral de Trama (H2.11): cambia `fillColor` del tile a `SCENARIO_ALERT_COLOR`
+ *  mientras `scenarioPlot >= scenarioPlotDefeatThreshold`, evaluado en cada `update()` de forma
+ *  idempotente (spec §1.9). Esta lógica SÍ se queda en Phaser (afecta al Rectangle, no es texto). */
 export function createScenarioRoleView(scene: Phaser.Scene): RoleView {
-  const { rect, text } = createRoleTile(scene, SCENARIO_POSITION, SCENARIO_COLOR, FOCUS_ID_SCENARIO);
+  const rect = createRoleTile(scene, SCENARIO_POSITION, SCENARIO_COLOR, FOCUS_ID_SCENARIO);
 
   return {
     update(snapshot: CombatStateSnapshot, ctx: BoardViewContext): void {
       const atThreshold = snapshot.scenarioPlot >= ctx.scenarioPlotDefeatThreshold;
       rect.setFillStyle(atThreshold ? SCENARIO_ALERT_COLOR : SCENARIO_COLOR); // NUEVO H2.11
-      text.setText(
-        `Escenario — Trama ${snapshot.scenarioPlot}/${ctx.scenarioPlotDefeatThreshold} | ` +
-          `Fase ${snapshot.scenarioPhase.phaseNumber}/${snapshot.scenarioPhase.totalPhases}`,
-      );
     },
   };
 }

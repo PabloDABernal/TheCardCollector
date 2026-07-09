@@ -1,6 +1,13 @@
 /* FIX_combat_viewport_and_layout.md §1.2 punto 2 — el contenedor de Phaser (`#phaser-mount`)
  * necesita un ancestro con tamaño real (no colapsado a `height: 0`) para que `Phaser.Scale.FIT`
- * tenga un `clientWidth`/`clientHeight` válido que medir en el momento de `new Phaser.Game(...)`. */
+ * tenga un `clientWidth`/`clientHeight` válido que medir en el momento de `new Phaser.Game(...)`.
+ *
+ * H4 spec §0.3 — el marco exterior al canvas deja de ser un color plano de letterbox (`#000`) y pasa
+ * a ser el fondo de producto: gradiente radial ink→binder con una viñeta sutil, misma paleta que el
+ * resto de la app (`RunStartScreen` usa el mismo `COLOR_PAGE_BACKGROUND`) para que la transición
+ * entre pantallas se sienta parte del mismo objeto, no de dos apps distintas. En desktop (donde
+ * `Phaser.Scale.FIT` con el viewport virtual 9:16 deja franjas laterales), este degradado es lo que
+ * se ve en esas franjas — deliberado, ver `docs/specs/H4_diseno_real_ui.md` §0.2. */
 .combat-screen-root {
   position: relative;
   width: 100vw;
@@ -9,9 +16,18 @@
                      deja hueco en esos casos; dvh es soportado por los navegadores objetivo del
                      proyecto (Chrome/Safari/Firefox recientes, PWA instalada) */
   overflow: hidden;
+  background: radial-gradient(ellipse at 50% 20%, var(--binder) 0%, var(--ink) 65%, #0c0c11 100%);
 }
 
 #phaser-mount {
   width: 100%;
   height: 100%;
+}
+
+/* H4 spec §0.3 — el propio canvas gana una sombra real (profundidad, sistema de diseño §1.4) para
+ * leerse como una pieza colocada SOBRE el fondo, no recortada de él — refuerza que el letterbox en
+ * desktop es intencional, no un bug de layout. */
+#phaser-mount canvas {
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--rule);
+  border-radius: 4px; /* casi imperceptible, evita el canto 100% recto contra el fondo */
 }

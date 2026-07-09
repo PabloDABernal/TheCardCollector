@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import Phaser from 'phaser';
 import { CombatScene, COMBAT_SCENE_VIEWPORT } from '@collector/combat-scene';
-import type { AbilityViewData } from '@collector/combat-scene';
+import type { AbilityViewData, BoardViewContext } from '@collector/combat-scene';
 import type { CombatBridge } from '@collector/combat-bridge';
 import './CombatScreen.css';
 import { buildCombatSetup } from '../combat/build-combat-setup';
 import { useCombatSnapshot } from '../combat/use-combat-snapshot';
+import { usePhaserViewportTransform } from '../combat/use-phaser-viewport-transform';
+import { CombatBoardOverlay } from '../combat/CombatBoardOverlay';
 import { CombatHud } from '../combat/CombatHud';
 import { CombatResultModal } from '../combat/CombatResultModal';
 import { LEADER_OPTIONS, DEFAULT_LEADER_OPTION } from '../combat/leader-options';
@@ -57,6 +59,12 @@ export function CombatScreen(): JSX.Element {
   // `boardContext` (mismo dato ya resuelto por `buildCombatSetup`) para calcular disponibilidad de
   // "Activar Habilidad" por color real (`isAnyLeaderAbilityActivatable`).
   const [leaderAbilities, setLeaderAbilities] = useState<readonly AbilityViewData[]>([]);
+  // H4 spec §2 — `boardContext` completo, necesario por `CombatBoardOverlay` para las líneas de rol
+  // (leaderMaxHealth/enemyMaxHealth/scenarioPlotDefeatThreshold).
+  const [boardContext, setBoardContext] = useState<BoardViewContext | null>(null);
+  // H4 spec §2.3 — sincroniza la capa HTML del overlay con el escalado real que
+  // `Phaser.Scale.FIT` aplica al canvas.
+  const transform = usePhaserViewportTransform(mountRef);
 
   useEffect(() => {
     let game: Phaser.Game | null = null;
@@ -87,6 +95,7 @@ export function CombatScreen(): JSX.Element {
         void scene; // solo para dejar constancia del mismo patrón que main.ts (H2.7)
       });
       setLeaderAbilities(boardContext.leaderAbilities);
+      setBoardContext(boardContext);
       setBridge(newBridge); // dispara el montaje del HUD React tan pronto el bridge existe, sin
                             // esperar a que Phaser termine su propio arranque asíncrono
     });
@@ -101,8 +110,16 @@ export function CombatScreen(): JSX.Element {
     <div className="combat-screen-root">
       <div ref={mountRef} id="phaser-mount" />
       {!bridge && <p>Cargando combate…</p>}
-      {bridge && (
-        <CombatHudOverlay bridge={bridge} leaderName={leaderName} leaderAbilities={leaderAbilities} />
+      {bridge && boardContext && (
+        <CombatHudOverlay
+          bridge={bridge}
+          leaderName={leaderName}
+          enemyName={enemyOption.label}
+          scenarioName={scenarioOption.label}
+          leaderAbilities={leaderAbilities}
+          boardContext={boardContext}
+          transform={transform}
+        />
       )}
     </div>
   );
@@ -113,15 +130,27 @@ export function CombatScreen(): JSX.Element {
  * (`architecture_stack.md` §2.3), nunca dentro de él. Separado en su propio componente para
  * poder usar el hook `useCombatSnapshot` solo una vez `bridge` existe (evita el caso
  * `bridge === null` dentro del hook).
+ *
+ * H4 spec §2 — además de `CombatHud` (franja fija superior), monta `CombatBoardOverlay`: la capa
+ * HTML sincronizada con las coordenadas virtuales del tablero (líneas de rol + etiquetas de zona),
+ * generalización de este mismo patrón `position: absolute` sobre el canvas.
  */
 function CombatHudOverlay({
   bridge,
   leaderName,
+  enemyName,
+  scenarioName,
   leaderAbilities,
+  boardContext,
+  transform,
 }: {
   readonly bridge: CombatBridge;
   readonly leaderName: string;
+  readonly enemyName: string;
+  readonly scenarioName: string;
   readonly leaderAbilities: readonly AbilityViewData[];
+  readonly boardContext: BoardViewContext;
+  readonly transform: ReturnType<typeof usePhaserViewportTransform>;
 }): JSX.Element {
   const snapshot = useCombatSnapshot(bridge);
   return (
@@ -132,6 +161,14 @@ function CombatHudOverlay({
         onEndTurn={() => bridge.dispatch({ type: 'END_TURN' })}
         leaderName={leaderName}
         leaderAbilities={leaderAbilities}
+      />
+      <CombatBoardOverlay
+        snapshot={snapshot}
+        ctx={boardContext}
+        transform={transform}
+        leaderName={leaderName}
+        enemyName={enemyName}
+        scenarioName={scenarioName}
       />
       {snapshot.status !== 'IN_PROGRESS' && <CombatResultModal snapshot={snapshot} />}
     </>

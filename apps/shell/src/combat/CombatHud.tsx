@@ -1,18 +1,18 @@
+import type { CSSProperties } from 'react';
 import type { CombatBridge } from '@collector/combat-bridge';
 import type { CombatStateSnapshot } from '@collector/domain-combat';
 import type { AbilityViewData } from '@collector/combat-scene';
 import { isAnyLeaderAbilityActivatable } from '@collector/combat-scene';
 import {
-  COLOR_CARD_BG,
-  COLOR_CARD_BORDER,
-  COLOR_MODAL_BORDER,
-  COLOR_MODAL_PANEL,
+  COLOR_BINDER,
+  COLOR_FOIL,
+  COLOR_RULE,
   COLOR_TEXT_DISABLED,
   COLOR_TEXT_PRIMARY,
-  FONT_FAMILY,
-  PANEL_BORDER_WIDTH_PX,
-  RADIUS_CARD,
+  COLOR_TEXT_SECONDARY,
+  RADIUS_CHIP,
   SPACING,
+  TYPE,
 } from '../ui/design-tokens';
 
 export interface CombatHudProps {
@@ -32,7 +32,7 @@ const LEADER_HAND_SIZE_MAX = 7; // decisions.md "Tope de mano: 7"
 
 type ControlId = 'PLAY_CARD' | 'ACTIVATE_ABILITY' | 'GENERATE_ENERGY' | 'DRAW_CARD';
 
-/** H4 spec §4.3 — helper puro, testeable, reutilizado por los 4 controles (Jugar Carta / Activar
+/** H4 spec §6 — helper puro, testeable, reutilizado por los 4 controles (Jugar Carta / Activar
  *  Habilidad / Generar Energía / Robar Carta): centraliza qué texto de motivo mostrar por control
  *  cuando está deshabilitado. `null` = disponible, sin tooltip. */
 export function disabledReasonFor(
@@ -69,15 +69,30 @@ export function disabledReasonFor(
   }
 }
 
+/** H4 spec §6 — helper visual único reutilizado por los 6 controles (2 gratis + 4 pagados + fin de
+ *  turno), sustituye el `buttonBaseStyle`/`enabledStyle`/`disabledStyle` inline anterior por una
+ *  función pura testeable, mismo criterio que `disabledReasonFor`. */
+export function chipStyle(enabled: boolean): CSSProperties {
+  return {
+    ...TYPE.bodyMd,
+    borderRadius: RADIUS_CHIP,
+    padding: `${SPACING.xs}px ${SPACING.sm}px`,
+    background: COLOR_BINDER,
+    border: `1px solid ${enabled ? COLOR_RULE : 'rgba(58, 55, 68, 0.4)'}`,
+    color: enabled ? COLOR_TEXT_PRIMARY : COLOR_TEXT_DISABLED,
+    cursor: enabled ? 'pointer' : 'default',
+  };
+}
+
 /**
  * "Chrome" no-juice sobre el canvas (`architecture_stack.md` §2.3) — vida/Trama/turno YA se
- * muestran dentro del canvas vía `role-view.ts` (H2.8); este HUD React NO duplica ese texto.
+ * muestran vía `CombatBoardOverlay` (H4 §2, capa HTML sincronizada); este HUD React NO duplica ese
+ * texto.
  *
- * NUEVO H3.5 (spec §6, "5 controles + paso previo") — decisions.md fija la estructura del turno del
- * Líder como "paso previo gratis + 2 acciones", y esta historia amplía H3.5 de 3 a 5 controles
- * visibles: Jugar Carta, Activar Habilidad, Generar Energía (pagada), Robar Carta (pagada), más el
- * paso previo gratuito (Robar/Energía gratis), visualmente distinto porque NO consume ninguna de
- * las 2 acciones del turno.
+ * decisions.md fija la estructura del turno del Líder como "paso previo gratis + 2 acciones": 5
+ * controles visibles: Jugar Carta, Activar Habilidad, Generar Energía (pagada), Robar Carta
+ * (pagada), más el paso previo gratuito (Robar/Energía gratis), visualmente distinto porque NO
+ * consume ninguna de las 2 acciones del turno.
  *
  * Decisión de implementación (no trivial, documentada): "Jugar Carta" y "Activar Habilidad" no son
  * botones accionables desde este HUD — su gesto real ya vive en el canvas de Phaser (tap en una
@@ -88,10 +103,8 @@ export function disabledReasonFor(
  * "Robar Carta" (pagadas) SÍ son botones accionables aquí porque no requieren ninguna selección
  * adicional (sin objetivo, sin Núcleo) — igual que el paso previo gratuito.
  *
- * H4.4 — reutiliza `ui/design-tokens.ts` (mismo lenguaje visual que `RunStartModal`, E4.1): panel
- * propio con fondo/borde (antes: `<div>` sin estilo), contador de acciones siempre visible, tooltips
- * vía `title` nativo, contraste de color real (no solo opacidad) en estado disabled, y layout
- * responsivo (`flex-wrap`).
+ * H4 spec §6 — rediseño de cromo sobre el sistema de diseño real: tipografía Staatliches/Manrope/
+ * JetBrains Mono, paleta con nombre, contador de acciones destacado en `--foil`.
  */
 export function CombatHud({ snapshot, bridge, onEndTurn, leaderName, leaderAbilities }: CombatHudProps): JSX.Element {
   const isLeaderTurn = snapshot.turn.turnOwner === 'LEADER' && snapshot.status === 'IN_PROGRESS';
@@ -117,30 +130,8 @@ export function CombatHud({ snapshot, bridge, onEndTurn, leaderName, leaderAbili
   const canFreeDraw = freeStepAvailable && !handFull && !deckEmpty;
   const canFreeGenerate = freeStepAvailable && !energyAtMax;
 
-  // FIX Reviewer post-E4.4 (commit `f912c92`) — antes solo fijaba `color`, dejando los 5 `<button>`
-  // con el chrome por defecto del navegador (queja original: "no es usable"). Reutiliza el mismo
-  // patrón de `SelectionCard.tsx` (`background`/`border`/`borderRadius`/`padding` de
-  // `design-tokens.ts`) para que los botones del HUD compartan lenguaje visual con el resto de
-  // paneles, en vez de limitarse al ejemplo literal de la spec §4.3 (que tampoco lo mostraba).
-  const buttonBaseStyle = {
-    borderRadius: RADIUS_CARD,
-    padding: `${SPACING.xs}px ${SPACING.sm}px`,
-    fontFamily: FONT_FAMILY,
-    cursor: 'pointer',
-  } as const;
-  const enabledStyle = {
-    ...buttonBaseStyle,
-    color: COLOR_TEXT_PRIMARY,
-    background: COLOR_CARD_BG,
-    border: `1px solid ${COLOR_CARD_BORDER}`,
-  };
-  const disabledStyle = {
-    ...buttonBaseStyle,
-    color: COLOR_TEXT_DISABLED,
-    background: COLOR_CARD_BG,
-    border: `1px solid ${COLOR_MODAL_BORDER}`,
-    cursor: 'default',
-  };
+  const enabledStyle = chipStyle(true);
+  const disabledStyle = chipStyle(false);
 
   return (
     <div
@@ -150,27 +141,41 @@ export function CombatHud({ snapshot, bridge, onEndTurn, leaderName, leaderAbili
         top: 0,
         left: 0,
         right: 0,
-        background: COLOR_MODAL_PANEL,
-        borderBottom: `${PANEL_BORDER_WIDTH_PX}px solid ${COLOR_MODAL_BORDER}`,
+        background: COLOR_BINDER,
+        borderBottom: `2px solid ${COLOR_RULE}`,
         padding: SPACING.md,
-        fontFamily: FONT_FAMILY,
-        color: COLOR_TEXT_PRIMARY,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: SPACING.sm,
       }}
     >
-      <p style={{ margin: 0 }}>
-        Líder: {leaderName}
-        <span className="combat-hud-action-counter" style={{ marginLeft: SPACING.md }}>
-          Acciones: {snapshot.actions.actionsTaken}/{snapshot.actions.actionsAllowed}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span style={{ ...TYPE.displaySm, color: COLOR_TEXT_PRIMARY }}>{leaderName}</span>
+        <span style={{ ...TYPE.dataLg, color: COLOR_FOIL }}>
+          {snapshot.actions.actionsTaken}/{snapshot.actions.actionsAllowed}
+          <span style={{ ...TYPE.labelUpper, color: COLOR_TEXT_SECONDARY, marginLeft: SPACING.xs }}>
+            Acciones
+          </span>
         </span>
-      </p>
+      </div>
 
       {/* Paso previo gratuito — visualmente distinto de las 2 acciones pagadas (spec §6): no
-          comparte el estado "gastado" de `actionsTakenThisTurn`, solo `leaderFreeStep`. */}
+          comparte el estado "gastado" de `actionsTakenThisTurn`, solo `leaderFreeStep`. Borde
+          punteado `--rule` en vez del borde blanco sólido anterior (demasiado genérico/alto
+          contraste sin relación con el sistema). */}
       <div
         className="combat-hud-free-step"
-        style={{ display: 'flex', flexWrap: 'wrap', gap: SPACING.sm, border: '1px dashed #ffffff', padding: SPACING.xs, margin: `${SPACING.xs}px 0` }}
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: SPACING.sm,
+          alignItems: 'center',
+          border: `1px dashed ${COLOR_RULE}`,
+          borderRadius: RADIUS_CHIP,
+          padding: SPACING.xs,
+        }}
       >
-        <span>Paso previo (gratis)</span>
+        <span style={{ ...TYPE.labelUpper, color: COLOR_TEXT_SECONDARY }}>Paso previo (gratis)</span>
         <button
           disabled={!canFreeDraw}
           title={!canFreeDraw ? (handFull ? 'Mano al máximo' : deckEmpty ? 'Mazo vacío' : 'No es tu turno') : undefined}

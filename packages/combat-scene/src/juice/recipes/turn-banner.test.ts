@@ -1,14 +1,18 @@
 // @vitest-environment node
 //
-// H4 spec §3.4 — `turn-banner.test.ts`: verifica selección de mensaje/color por `nextTurnOwner`,
+// H4 spec §5 — `turn-banner.test.ts`: verifica selección de mensaje/color por `nextTurnOwner`,
 // reuso del mismo game object entre invocaciones (sin acumular game objects huérfanos) y ausencia
-// de `setInteractive()` (banner no bloqueante).
+// de `setInteractive()` (banner no bloqueante). Los colores pasan de los hex de Núcleo
+// (`NUCLEO_COLOR_HEX.DEFENSA`/`AGRESION`) a los semánticos `--success`/`--danger` (H4 spec §5) — el
+// banner de turno es un indicador de sistema, no de color de dado.
 import { describe, it, expect } from 'vitest';
 import { createFakeJuiceScene } from './test-utils/fake-juice-scene';
 import { createTurnBannerRecipe } from './turn-banner';
-import { NUCLEO_COLOR_HEX } from '../../view/nucleo-colors';
 import type { JuiceTarget } from '../juice-recipe';
 import type { CombatEvent } from '@collector/domain-combat';
+
+const SUCCESS_COLOR_HEX = '#4caf6f'; // = --success
+const DANGER_COLOR_HEX = '#d1495b'; // = --danger
 
 function turnEndedTarget(nextTurnOwner: 'LEADER' | 'ENEMY'): JuiceTarget {
   const event: CombatEvent = {
@@ -21,7 +25,7 @@ function turnEndedTarget(nextTurnOwner: 'LEADER' | 'ENEMY'): JuiceTarget {
 }
 
 describe('turnBanner', () => {
-  it('nextTurnOwner: LEADER — texto "Tu turno", color NUCLEO_COLOR_HEX.DEFENSA (verde)', async () => {
+  it('nextTurnOwner: LEADER — texto "Tu turno", color --success (verde)', async () => {
     const fake = createFakeJuiceScene();
     const recipe = createTurnBannerRecipe();
 
@@ -29,10 +33,10 @@ describe('turnBanner', () => {
 
     const bannerText = fake.recordedTexts[0]!;
     expect(bannerText.text).toBe('Tu turno');
-    expect(bannerText.color).toBe(`#${NUCLEO_COLOR_HEX.DEFENSA.toString(16).padStart(6, '0')}`);
+    expect(bannerText.color).toBe(SUCCESS_COLOR_HEX);
   });
 
-  it('nextTurnOwner: ENEMY — texto "Turno del Enemigo", color NUCLEO_COLOR_HEX.AGRESION (rojo)', async () => {
+  it('nextTurnOwner: ENEMY — texto "Turno del Enemigo", color --danger (rojo)', async () => {
     const fake = createFakeJuiceScene();
     const recipe = createTurnBannerRecipe();
 
@@ -40,7 +44,7 @@ describe('turnBanner', () => {
 
     const bannerText = fake.recordedTexts[0]!;
     expect(bannerText.text).toBe('Turno del Enemigo');
-    expect(bannerText.color).toBe(`#${NUCLEO_COLOR_HEX.AGRESION.toString(16).padStart(6, '0')}`);
+    expect(bannerText.color).toBe(DANGER_COLOR_HEX);
   });
 
   it('reutiliza el mismo Rectangle/Text entre invocaciones — no crea game objects nuevos en la 2ª llamada', async () => {

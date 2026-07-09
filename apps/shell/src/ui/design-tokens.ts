@@ -1,44 +1,64 @@
 /**
- * H4 spec §1.2 — sistema de diseño compartido de `apps/shell` (E4.1 + E4.4). Único punto de verdad
- * de color/tipografía para `RunStartModal` (§1) y `CombatHud` (§4), evitando dos paletas divergentes
- * entre pantallas React. Los valores de acento (`ACCENT_COLORS`) reutilizan los MISMOS hex que
- * `NUCLEO_COLOR_HEX` de `packages/combat-scene/src/view/nucleo-colors.ts` (en notación CSS) para que
- * el jugador asocie visualmente "colores de dado" entre Run Start y Combate.
+ * H4 spec §1.2/§1.3 — sistema de diseño real de "The Collector" (sustituye por completo la versión
+ * anterior de "grises genéricos" rechazada por el Director Creativo). Fuente de verdad = `tokens.css`
+ * (mismo `:root`); este archivo repite los mismos valores literales como constantes TS para los
+ * consumidores React/Phaser que necesitan el valor en JS (inline styles, `Phaser.GameObjects.Text`).
+ * Sin generación de build adicional — duplicado documentado 1:1, mismo criterio que `board-layout.ts`
+ * ya usa para constantes cruzadas entre módulos.
+ *
+ * Ruptura deliberada respecto a la versión anterior: se retiran `COLOR_MODAL_PANEL`, `COLOR_CARD_BG`,
+ * `COLOR_CARD_BG_SELECTED`, `COLOR_CARD_BORDER`, `COLOR_MODAL_BORDER`, `ACCENT_COLORS`, `FONT_FAMILY`,
+ * `FONT_SIZE_*`, `RADIUS_MODAL`, `RADIUS_CARD`, `PANEL_BORDER_WIDTH_PX` (duplicado con
+ * `board-layout.ts`, se deja solo ahí). Ver tabla de migración en `docs/specs/H4_diseno_real_ui.md` §1.2.
  */
 
-// Fondo de página — degradado radial, nunca negro plano sin variación (causa raíz de la queja).
+export const COLOR_INK = '#14141a';
+export const COLOR_BINDER = '#1f1e26';
+export const COLOR_RULE = '#3a3744';
+export const COLOR_PARCHMENT = '#ece7de';
+export const COLOR_FOIL = '#d4a24c';
+export const COLOR_SUCCESS = '#4caf6f';
+export const COLOR_DANGER = '#d1495b';
+
+export const COLOR_TEXT_PRIMARY = COLOR_PARCHMENT;
+export const COLOR_TEXT_SECONDARY = 'rgba(236, 231, 222, 0.64)';
+export const COLOR_TEXT_DISABLED = 'rgba(236, 231, 222, 0.32)';
+
+// Fondo de página/marco de canvas — MISMO gradiente que CombatScreen.css §0.3, reutilizado aquí para
+// que RunStartScreen y el marco de combate compartan literalmente el mismo valor.
 export const COLOR_PAGE_BACKGROUND =
-  'radial-gradient(circle at 50% 15%, #1c1c28 0%, #0a0a0c 70%)';
+  'radial-gradient(ellipse at 50% 20%, #1f1e26 0%, #14141a 65%, #0c0c11 100%)';
+export const COLOR_OVERLAY = 'rgba(10, 10, 12, 0.78)';
 
-export const COLOR_OVERLAY = 'rgba(0, 0, 0, 0.72)'; // backdrop detrás del panel modal
-export const COLOR_MODAL_PANEL = '#1e1e24'; // panel del popup
-export const COLOR_MODAL_BORDER = '#3a3a42';
-export const COLOR_CARD_BG = '#2a2a32';
-export const COLOR_CARD_BG_SELECTED = '#34343f';
-export const COLOR_CARD_BORDER = '#44444e';
+// Acentos temáticos de Núcleo — MISMOS hex que NUCLEO_COLOR_HEX (packages/combat-scene), NUNCA se
+// reutiliza --foil aquí: el foil es el acento de acción de la UI, los colores de Núcleo son
+// semántica de juego, familias separadas a propósito (grounding, H4 spec §1.1).
+export const NUCLEO_ACCENT_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f1c40f', '#9b59b6'] as const;
 
-export const COLOR_TEXT_PRIMARY = '#f5f5f5';
-export const COLOR_TEXT_SECONDARY = '#a0a0a8';
-export const COLOR_TEXT_DISABLED = '#5c5c66';
+export const FONT_DISPLAY = "'Staatliches', 'Impact', sans-serif";
+export const FONT_UI = "'Manrope', system-ui, -apple-system, sans-serif";
+export const FONT_MONO = "'JetBrains Mono', 'IBM Plex Mono', monospace";
 
-// Acentos temáticos — MISMOS valores hex que `NUCLEO_COLOR_HEX` de
-// `packages/combat-scene/src/view/nucleo-colors.ts` en notación CSS, para que el jugador asocie
-// visualmente "colores de dado" entre Run Start y Combate sin duplicar una paleta nueva sin
-// relación. Reutilizados aquí como acentos decorativos de tarjeta (round-robin), no como dato de
-// dominio.
-export const ACCENT_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f1c40f', '#9b59b6'] as const;
+// Escala tipográfica — reemplaza los 3 FONT_SIZE_* sueltos anteriores (H4 spec §1.3).
+export const TYPE = {
+  displayLg: { fontFamily: FONT_DISPLAY, fontSize: '32px', letterSpacing: '0.02em' },
+  displaySm: { fontFamily: FONT_DISPLAY, fontSize: '20px', letterSpacing: '0.02em' },
+  bodyMd: { fontFamily: FONT_UI, fontSize: '15px', fontWeight: 400 },
+  bodySm: { fontFamily: FONT_UI, fontSize: '13px', fontWeight: 400 },
+  labelUpper: {
+    fontFamily: FONT_UI,
+    fontSize: '12px',
+    fontWeight: 700,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+  },
+  dataMd: { fontFamily: FONT_MONO, fontSize: '15px', fontVariantNumeric: 'tabular-nums' },
+  dataLg: { fontFamily: FONT_MONO, fontSize: '22px', fontVariantNumeric: 'tabular-nums' },
+} as const;
 
-export const FONT_FAMILY = "'Segoe UI', system-ui, -apple-system, sans-serif"; // sin fuente nueva a cargar
-export const FONT_SIZE_TITLE = '24px';
-export const FONT_SIZE_SECTION_TITLE = '16px';
-export const FONT_SIZE_CARD_LABEL = '16px';
-
-export const SPACING = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 } as const;
-export const RADIUS_MODAL = 20;
-export const RADIUS_CARD = 12;
+export const SPACING = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 } as const; // base-4, alias legible
+export const RADIUS_PANEL = 12;
+export const RADIUS_CHIP = 10;
+export const SHADOW_PANEL = '0 2px 8px rgba(0, 0, 0, 0.4)';
+export const SHADOW_MODAL = '0 20px 60px rgba(0, 0, 0, 0.6)';
 export const MIN_TAP_TARGET_PX = 44; // criterio de aceptación H4.1, botones/tarjetas táctiles
-
-// Valor CSS del mismo hex que `PANEL_BORDER_COLOR`/`PANEL_BORDER_WIDTH_PX` de
-// `packages/combat-scene/src/view/board-layout.ts` (E4.2) — reutilizado por `CombatHud` (E4.4) para
-// que el borde del HUD sea coherente con los paneles de combate.
-export const PANEL_BORDER_WIDTH_PX = 2;

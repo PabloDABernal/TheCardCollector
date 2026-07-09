@@ -1,7 +1,7 @@
 import { SelectionCard, type SelectionCardOption } from './SelectionCard';
-import { COLOR_TEXT_SECONDARY, FONT_SIZE_SECTION_TITLE, SPACING } from '../../ui/design-tokens';
+import { COLOR_TEXT_SECONDARY, SPACING, TYPE } from '../../ui/design-tokens';
 
-// H4 spec §1.4 — fila horizontal de `SelectionCard` con título de sección.
+// H4 spec §3 — fila horizontal de `SelectionCard` con título de sección.
 export interface SelectionSectionProps {
   readonly title: string;
   readonly options: readonly SelectionCardOption[];
@@ -20,17 +20,7 @@ export function SelectionSection({
 }: SelectionSectionProps): JSX.Element {
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: SPACING.sm }}>
-      <h3
-        style={{
-          margin: 0,
-          fontSize: FONT_SIZE_SECTION_TITLE,
-          color: COLOR_TEXT_SECONDARY,
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em',
-        }}
-      >
-        {title}
-      </h3>
+      <h3 style={{ ...TYPE.labelUpper, margin: 0, color: COLOR_TEXT_SECONDARY }}>{title}</h3>
       <div style={{ display: 'flex', gap: SPACING.sm, overflowX: 'auto', paddingBottom: SPACING.xs }}>
         {options.map((option) => (
           <SelectionCard

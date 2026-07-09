@@ -1,16 +1,24 @@
+/* H4 spec §1.2 — importa el sistema de variables CSS (color/espaciado/radio/sombra) una única vez,
+ * antes de cualquier otra regla que las consuma. */
+@import './ui/tokens.css';
+
 /* FIX_combat_viewport_and_layout.md §1.2 punto 1 — CSS global mínimo: el `<canvas>` de Phaser
  * necesita un contenedor con tamaño real que `Phaser.Scale.FIT` pueda medir en el momento de
  * construir el `Game`. `overflow: hidden` en `html`/`body` (no solo en el contenedor del juego)
  * es la garantía a nivel de documento de que ningún elemento (HUD overlay, modal de resultado,
- * mensaje "Cargando combate…") puede introducir scroll de página por accidente. */
+ * mensaje "Cargando combate…") puede introducir scroll de página por accidente.
+ *
+ * H4 spec §0.3 — el fondo deja de ser negro plano (`#000`, causa raíz de la queja "se ve roto" en
+ * desktop): pasa a `--ink`, el mismo tono base que el resto del sistema de diseño. El marco
+ * deliberado con degradado real vive en `CombatScreen.css` (`.combat-screen-root`), que es el
+ * elemento que efectivamente rodea al canvas; este fondo de documento es solo la base debajo. */
 html, body {
   margin: 0;
   padding: 0;
   width: 100%;
   height: 100%;
   overflow: hidden; /* ningún scroll de página — el juego vive enteramente dentro del viewport */
-  background: #000; /* color de "letterbox": lo que se ve fuera del canvas cuando FIT no puede
-                        llenar el contenedor completo sin distorsionar el aspect ratio 9:16 */
+  background: var(--ink);
 }
 
 #root {

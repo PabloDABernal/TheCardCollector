@@ -22,7 +22,9 @@ test('elegir "Mago Base" en RunStartScreen navega a /combat y el HUD muestra el 
 
   await expect(page).toHaveURL(/\/combat/);
   await expect(page.locator('#phaser-mount canvas')).toBeVisible();
-  await expect(page.getByText('Líder: Mago Base')).toBeVisible();
+  // H4 spec §6 — `CombatHud` ya no prefija "Líder: ", solo el nombre; se acota al contenedor
+  // `.combat-hud` porque el mismo nombre también aparece en `CombatBoardOverlay` (línea de rol).
+  await expect(page.locator('.combat-hud')).toContainText('Mago Base');
 
   expect(pageErrors).toEqual([]);
 });
@@ -41,7 +43,7 @@ test('regresión — no tocar el selector en RunStartScreen navega a /combat con
 
   await expect(page).toHaveURL(/\/combat/);
   await expect(page.locator('#phaser-mount canvas')).toBeVisible();
-  await expect(page.getByText('Líder: Soldado Base')).toBeVisible();
+  await expect(page.locator('.combat-hud')).toContainText('Soldado Base');
 
   expect(pageErrors).toEqual([]);
 });

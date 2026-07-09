@@ -14,6 +14,7 @@ export { createNucleoTable } from './nucleo-table-view';
 export type { AbilityCooldownView } from './ability-cooldown-view';
 export { createAbilityCooldownView, abilityIconGroupName } from './ability-cooldown-view';
 export { createBoard } from './board';
+export type { PanelZone } from './board-layout';
 export {
   LEADER_POSITION,
   ENEMY_POSITION,
@@ -26,5 +27,8 @@ export {
   LEADER_ABILITIES_ROW_Y,
   ENEMY_ABILITIES_ROW_Y,
   ABILITY_ICON_SEPARATION_PX,
+  // H4 spec §2.3 — `apps/shell` (`CombatBoardOverlay.tsx`) reutiliza estas MISMAS coordenadas para
+  // las etiquetas de zona y las líneas de rol, sin duplicar ningún número de posición.
+  PANEL_ZONES,
 } from './board-layout';
 export { NUCLEO_COLOR_HEX } from './nucleo-colors';

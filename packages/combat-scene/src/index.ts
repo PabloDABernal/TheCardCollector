@@ -13,6 +13,12 @@ export { CombatScene, COMBAT_SCENE_VIEWPORT } from './scenes/CombatScene';
 export type { CombatSceneInitData } from './scenes/CombatScene';
 export type { BoardViewContext, HandCardViewData, AbilityViewData } from './view';
 export type { DefaultCombatSetup } from './default-combat-setup';
+// H4 spec §2.3 — `PANEL_ZONES`/`PanelZone` SÍ se reexportan (excepción puntual, mismo espíritu que
+// `isAnyLeaderAbilityActivatable` abajo): `apps/shell` (`CombatBoardOverlay.tsx`) necesita las MISMAS
+// coordenadas de zona que `board-layout.ts` ya calcula, para las etiquetas de zona y las líneas de
+// rol de la capa HTML sincronizada — nunca duplica un número de posición.
+export type { PanelZone } from './view';
+export { LEADER_POSITION, ENEMY_POSITION, SCENARIO_POSITION, PANEL_ZONES } from './view';
 // FIX Reviewer post-H3 (commit `cce72a3`) — `isAnyLeaderAbilityActivatable` SÍ se reexporta
 // (excepción puntual a "sin detalles internos" de arriba): `apps/shell` (`CombatHud.tsx`) lo
 // necesita para calcular la disponibilidad agregada de "Activar Habilidad" con el mismo criterio

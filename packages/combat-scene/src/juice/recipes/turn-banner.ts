@@ -1,6 +1,5 @@
 import type Phaser from 'phaser';
 import type { JuiceRecipe } from '../juice-recipe';
-import { NUCLEO_COLOR_HEX } from '../../view/nucleo-colors';
 import { SCENARIO_POSITION, PANEL_ZONES } from '../../view/board-layout';
 
 // H4 spec §3.4 — indicador visual de cambio de turno, enganchado a `TURN_ENDED` (E4.3).
@@ -26,9 +25,14 @@ const BANNER_HEIGHT = 120;
 const BANNER_DEPTH = 1000; // por encima de paneles/tiles (E4.2), spec §3.4
 const LEADER_TEXT = 'Tu turno';
 const ENEMY_TEXT = 'Turno del Enemigo';
-// Mismos hex que NUCLEO_COLOR_HEX.DEFENSA/AGRESION (spec §3.4).
-const LEADER_COLOR = NUCLEO_COLOR_HEX.DEFENSA;
-const ENEMY_COLOR = NUCLEO_COLOR_HEX.AGRESION;
+// H4 spec §5 — colores semánticos (`--success`/`--danger`), NO colores de Núcleo: el banner de
+// turno es un indicador de sistema, no de color de dado, y no debe confundirse visualmente con las
+// mecánicas de Núcleo. Sustituye la reutilización previa de `NUCLEO_COLOR_HEX.DEFENSA`/`AGRESION`.
+const LEADER_COLOR = 0x4caf6f; // = --success
+const ENEMY_COLOR = 0xd1495b; // = --danger
+// H4 spec §5 — tipografía Staatliches (webfont ya cargado por `apps/shell`/`main.tsx`); Phaser puede
+// usar cualquier fuente ya presente en el DOM vía CSS `@font-face`, sin asset propio de Phaser.
+const BANNER_FONT_FAMILY = "'Staatliches', 'Impact', sans-serif";
 
 function toCssHex(color: number): string {
   return `#${color.toString(16).padStart(6, '0')}`;
@@ -63,8 +67,8 @@ export function createTurnBannerRecipe(): JuiceRecipe<TurnBannerParams> {
         bannerRect.setDepth(BANNER_DEPTH);
 
         bannerText = scene.add.text(SCENARIO_POSITION.x, SCENARIO_POSITION.y, message, {
+          fontFamily: BANNER_FONT_FAMILY,
           fontSize: '48px',
-          fontStyle: 'bold',
         });
         bannerText.setOrigin(0.5, 0.5);
         bannerText.setAlpha(0);

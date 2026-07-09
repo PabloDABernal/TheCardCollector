@@ -1,0 +1,33 @@
+/* H4 spec §1.2 — sistema de diseño real de "The Collector". Fuente única de verdad de color/
+ * espaciado/radio/sombra para todo `apps/shell`. `design-tokens.ts` re-exporta estos mismos
+ * valores como constantes TS (duplicado documentado 1:1, mismo criterio que `board-layout.ts` usa
+ * para constantes cruzadas entre módulos) para los sitios que necesitan el valor en JS (inline
+ * styles de React, `Phaser.GameObjects.Text` con `fontFamily` apuntando al webfont ya en el DOM). */
+:root {
+  --ink: #14141a; /* fondo base — nunca negro puro */
+  --binder: #1f1e26; /* superficie de panel/carta */
+  --rule: #3a3744; /* bordes/divisores */
+  --parchment: #ece7de; /* texto principal — blanco roto cálido, nunca #fff */
+  --foil: #d4a24c; /* ÚNICO acento de acción/selección — úsalo con moderación */
+  --success: #4caf6f; /* semántico — curación, banner "tu turno" */
+  --danger: #d1495b; /* semántico — daño, banner "turno del enemigo" */
+
+  /* Derivados de texto — mismo parchment, distinta opacidad, para jerarquía sin inventar hex nuevos */
+  --text-primary: var(--parchment);
+  --text-secondary: rgba(236, 231, 222, 0.64);
+  --text-disabled: rgba(236, 231, 222, 0.32);
+
+  /* Espaciado — base 4px */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --radius-panel: 12px;
+  --radius-chip: 10px;
+
+  --shadow-panel: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-modal: 0 20px 60px rgba(0, 0, 0, 0.6);
+}

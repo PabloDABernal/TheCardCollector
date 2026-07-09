@@ -40,6 +40,13 @@ vi.mock('@collector/combat-scene', () => ({
   // real vía `@collector/combat-scene`; el mock del paquete debe exponerla, aunque devuelva `false`
   // siempre (mismo espíritu que el resto de este mock: superficie mínima, no lógica real).
   isAnyLeaderAbilityActivatable: vi.fn(() => false),
+  // H4 spec §2 — `CombatBoardOverlay` (renderizado dentro de `CombatScreen`) lee estas constantes de
+  // posición/paneles vía `@collector/combat-scene`; el mock debe exponerlas con valores mínimos
+  // arbitrarios (el test no verifica coordenadas, solo que el árbol renderiza sin lanzar).
+  LEADER_POSITION: { x: 540, y: 1708 },
+  ENEMY_POSITION: { x: 540, y: 300 },
+  SCENARIO_POSITION: { x: 540, y: 960 },
+  PANEL_ZONES: [],
 }));
 
 const fakeSnapshot: CombatStateSnapshot = {
@@ -73,7 +80,19 @@ const fakeBridge = {
 } as unknown as CombatBridge;
 
 vi.mock('../combat/build-combat-setup', () => ({
-  buildCombatSetup: () => Promise.resolve({ bridge: fakeBridge, boardContext: { leaderAbilities: [] } }),
+  buildCombatSetup: () =>
+    Promise.resolve({
+      bridge: fakeBridge,
+      // H4 spec §2 — `CombatBoardOverlay` (renderizado dentro de `CombatScreen`) lee estos campos de
+      // `boardContext` para la línea de rol; valores mínimos arbitrarios, el test no verifica su
+      // contenido numérico, solo que el árbol renderiza sin lanzar.
+      boardContext: {
+        leaderAbilities: [],
+        leaderMaxHealth: 30,
+        enemyMaxHealth: 40,
+        scenarioPlotDefeatThreshold: 10,
+      },
+    }),
 }));
 
 describe('CombatScreen — contenedor de Phaser con tamaño real (Bug 1, FIX_combat_viewport_and_layout.md §1)', () => {

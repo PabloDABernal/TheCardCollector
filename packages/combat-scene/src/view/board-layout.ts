@@ -105,14 +105,17 @@ export const NUCLEO_EXTRA_DIE_STACK_OFFSET_PX = 70;
 // 1080px con margen sobrado.
 export const ABILITY_ICON_SEPARATION_PX = 200;
 
-// H4 spec §2.2/§2.3 — paleta y tabla de paneles delimitados por zona (E4.2). `board-layout.ts`
-// sigue siendo la única fuente de verdad de coordenadas; `panel-view.ts` consume `PANEL_ZONES` sin
-// recalcular nada.
-export const PANEL_FILL_COLOR = 0x1e1e24; // ~mitad de camino entre #222 y #333 (decisions.md/backlog H4)
-export const PANEL_FILL_ALPHA = 0.55; // translúcido — se lee como "panel" sin tapar contenido detrás
-export const PANEL_BORDER_COLOR = 0x3a3a42;
+// H4 spec §4.1 — paleta y tabla de paneles delimitados por zona (E4.2), sustituye la paleta gris
+// genérica anterior por el sistema de diseño real (`--binder`/`--rule`, `apps/shell/src/ui/tokens.css`).
+// `board-layout.ts` sigue siendo la única fuente de verdad de coordenadas; `panel-view.ts` consume
+// `PANEL_ZONES` sin recalcular nada.
+export const PANEL_FILL_COLOR = 0x1f1e26; // = --binder
+export const PANEL_FILL_ALPHA = 0.62; // ligeramente más opaco que antes (0.55) — más lectura de
+                                       // "funda de carta" sólida, menos "cristal flotante"
+export const PANEL_BORDER_COLOR = 0x3a3744; // = --rule
 export const PANEL_BORDER_WIDTH_PX = 2;
-export const ZONE_LABEL_COLOR_HEX = '#9a9aa4'; // SUSTITUYE '#666666' de board.ts (bajo contraste)
+// ZONE_LABEL_COLOR_HEX retirado (H4 spec §4.1) — la etiqueta de zona deja de dibujarse en Phaser,
+// migrada a `CombatBoardOverlay.tsx` (apps/shell), ver §2 de la spec.
 
 export interface PanelZone {
   readonly id: string; // nombre estable, usado como scene name (debug/QA)
