@@ -3,12 +3,35 @@ import type { CombatStateSnapshot } from '@collector/domain-combat';
 import { FOCUS_ID_LEADER, FOCUS_ID_ENEMY, FOCUS_ID_SCENARIO } from '../juice';
 import type { BoardViewContext } from './board-view-context';
 import { LEADER_POSITION, ENEMY_POSITION, SCENARIO_POSITION } from './board-layout';
+import { createRoundedFrameRectangle } from './rounded-frame';
 
 const ROLE_SIZE = { width: 200, height: 200 };
 const LEADER_COLOR = 0x2980b9; // azul
 const ENEMY_COLOR = 0xc0392b; // rojo
 const SCENARIO_COLOR = 0x8e44ad; // violeta
 const SCENARIO_ALERT_COLOR = 0xc0392b; // NUEVO H2.11 — mismo rojo de alerta que ENEMY_COLOR
+
+// FIX visual (feedback Director Creativo en móvil real, docs/specs/H4_diseno_real_ui.md) — los tiles
+// de rol eran cuadrados planos sin marco, un lenguaje visual distinto al de `CardTile.tsx`
+// (`apps/shell/src/ui/design-tokens.ts`: RADIUS_PANEL=12, --rule=#3a3744, SHADOW_PANEL). `Rectangle`
+// de Phaser no soporta esquinas redondeadas nativas, así que el REDONDEADO real se logra con un
+// `GeometryMask` (Graphics `fillRoundedRect` usado solo como máscara, nunca añadido visualmente) —
+// enmascara TODO el render del `Rectangle` (fill Y stroke). El borde temático (`--rule`) y la sombra
+// se dibujan aparte, en `Graphics` puramente decorativos que NUNCA reciben `targetId`
+// (targeting-highlight-view.ts los ignora al buscar por `getData('targetId')`).
+// FIX crítico (review post-marco redondeado) — `targeting-highlight-view.ts` YA NO llama
+// `setStrokeStyle` sobre este `rect`: ese stroke quedaba parcialmente recortado por el
+// `GeometryMask` (mismo tamaño que el `rect`) y, en la mitad que sobrevivía, tapado por `border`
+// (creado después en la display list, opaco). El highlight ahora es un `Graphics` propio que ese
+// módulo dibuja por encima de todo (`setDepth`), leyendo la geometría del `rect` vía
+// `data.highlightRadius` (ver `setData` más abajo) — el orden de creación de `shadow`/`border` deja
+// de importarle a targeting.
+const ROLE_RADIUS_PX = 12; // = RADIUS_PANEL (design-tokens.ts)
+const ROLE_BORDER_COLOR = 0x3a3744; // = --rule
+const ROLE_BORDER_WIDTH_PX = 2;
+const ROLE_SHADOW_COLOR = 0x000000;
+const ROLE_SHADOW_ALPHA = 0.4; // = SHADOW_PANEL "rgba(0,0,0,0.4)"
+const ROLE_SHADOW_OFFSET_PX = 4;
 
 export interface RoleView {
   /** Actualiza el estado visual del tile contra el snapshot actual (sin tween). H4 spec §2.4 — ya
@@ -23,9 +46,31 @@ function createRoleTile(
   color: number,
   name: string,
 ): Phaser.GameObjects.Rectangle {
-  const rect = scene.add.rectangle(position.x, position.y, ROLE_SIZE.width, ROLE_SIZE.height, color);
+  const { width, height } = ROLE_SIZE;
+
+  // Sombra + GeometryMask redondeado + borde temático (`--rule`) — helper compartido con
+  // `nucleo-table-view.ts` (`rounded-frame.ts`, extraído en review post-marco-redondeado). El
+  // `Rectangle` devuelto es EXACTAMENTE el mismo tipo/comportamiento de siempre (mismo
+  // fillColor/setName/setInteractive/setData, spec §1.1 y `role-view.test.ts`); el borde/sombra
+  // decorativos NUNCA reciben `targetId` (targeting-highlight-view.ts los ignora al buscar por
+  // `getData('targetId')`), y su glow de targeting vive en un `Graphics` propio con `setDepth`
+  // explícito, así que el orden de creación aquí ya no compite con él (ver comentario arriba).
+  const rect = createRoundedFrameRectangle(scene, {
+    x: position.x,
+    y: position.y,
+    width,
+    height,
+    fillColor: color,
+    radius: ROLE_RADIUS_PX,
+    borderColor: ROLE_BORDER_COLOR,
+    borderWidthPx: ROLE_BORDER_WIDTH_PX,
+    shadowColor: ROLE_SHADOW_COLOR,
+    shadowAlpha: ROLE_SHADOW_ALPHA, // = SHADOW_PANEL "rgba(0,0,0,0.4)" (sin blur real, offset + alpha baja)
+    shadowOffsetPx: ROLE_SHADOW_OFFSET_PX,
+  });
   rect.setName(name);
   rect.setInteractive().setData('targetId', name);
+
   return rect;
 }
 

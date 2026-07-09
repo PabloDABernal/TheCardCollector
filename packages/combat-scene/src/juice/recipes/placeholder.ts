@@ -9,14 +9,17 @@ import type Phaser from 'phaser';
 // FIX QA post-`6d14b52` — `leader.y` (antes 1700) y `CARD_HAND_POSITION.y` (antes 1600, abajo) se
 // recalcularon: el tile REAL del Líder (200×200, `view/role-view.ts`) invadía visualmente el panel
 // vecino "Mano" (`view/board-layout.ts` `PANEL_ZONES`/`panel-hand`) — con 1700, el borde superior del
-// tile (1700-100=1600) coincidía exactamente con el centro de la fila de Mano. Los nuevos valores
-// (1708/1498) son el resultado de la misma derivación por bounding-box + `CONTENT_GAP_PX` (20) que
-// `view/board-layout.ts` usa para `ALLIES_ROW_Y`/`NUCLEO_TABLE_ROW_Y` — no se deriva aquí en runtime
-// porque este archivo es importado POR `board-layout.ts`, no al revés (evita un ciclo de imports).
+// tile (1700-100=1600) coincidía exactamente con el centro de la fila de Mano. Los valores son el
+// resultado de la misma derivación por bounding-box + `CONTENT_GAP_PX` que `view/board-layout.ts` usa
+// para `ALLIES_ROW_Y`/`NUCLEO_TABLE_ROW_Y` — no se deriva aquí en runtime porque este archivo es
+// importado POR `board-layout.ts`, no al revés (evita un ciclo de imports).
 // Ver comentario extenso en `view/board-layout.ts` junto a `LEADER_POSITION`/`HAND_ROW_POSITION`, y
 // la cobertura de `board-layout.test.ts` (bounding box de cada tile dentro de su panel).
+// FIX visual (feedback Director Creativo en móvil real) — recalculados a 1676/1474 (antes 1708/1498)
+// tras bajar `CONTENT_GAP_PX` de 20 a 12 en `view/board-layout.ts` (mismos huecos negros muertos que
+// motivaron ese cambio). Misma fórmula, GAP nuevo.
 export const PLACEHOLDER_POSITIONS: Record<string, { x: number; y: number }> = {
-  leader: { x: 540, y: 1708 },
+  leader: { x: 540, y: 1676 },
   enemy: { x: 540, y: 300 },
   scenario: { x: 540, y: 960 },
 };
@@ -27,8 +30,9 @@ export const DEFAULT_PLACEHOLDER_POSITION = { x: 540, y: 960 };
 
 /** Posición de "mano/mesa" genérica para placeholders de carta cuyo `focusId` no es uno de los 3
  *  roles fijos (spec §3.2 punto 1). FIX QA post-`6d14b52` — `y` antes 1600, ver comentario extenso
- *  junto a `PLACEHOLDER_POSITIONS.leader` arriba. */
-export const CARD_HAND_POSITION = { x: 540, y: 1498 };
+ *  junto a `PLACEHOLDER_POSITIONS.leader` arriba. FIX visual (feedback Director Creativo) — antes
+ *  1498, recalculado a 1474 tras bajar `CONTENT_GAP_PX` de 20 a 12. */
+export const CARD_HAND_POSITION = { x: 540, y: 1474 };
 
 const GENERIC_PLACEHOLDER_SIZE = 96;
 const CARD_PLACEHOLDER_WIDTH = 120;

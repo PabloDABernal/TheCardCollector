@@ -27,6 +27,16 @@ describe('createNucleoTable (H3, spec §5.2)', () => {
     expect(view.getDieObject(mockNucleoInstanceId('n1'))).toBeDefined();
   });
 
+  it('contrato de decoración redondeada (review post-marco-redondeado): cada dado expone data.highlightRadius y crea 3 Graphics decorativos (sombra, máscara, borde)', () => {
+    const { scene, rectangles, graphicsObjects } = createFakeBoardScene();
+    createNucleoTable(scene, [mockDie('n1', 'AGRESION', 2)]);
+
+    const n1Id = String(mockNucleoInstanceId('n1'));
+    const n1Rect = rectangles.find((r) => r.getData('targetId') === n1Id)!;
+    expect(n1Rect.getData('highlightRadius')).toBe(10);
+    expect(graphicsObjects).toHaveLength(3);
+  });
+
   it('gastar un dado (AVAILABLE→SPENT) vía syncFromSnapshot lo atenúa sin destruirlo', () => {
     const { scene, rectangles } = createFakeBoardScene();
     const view = createNucleoTable(scene, []);

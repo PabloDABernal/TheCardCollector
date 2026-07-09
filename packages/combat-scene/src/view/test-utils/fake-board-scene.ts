@@ -27,6 +27,28 @@ export interface FakeRectangle {
   setScale(x: number, y?: number): FakeRectangle;
   setFillStyle(color?: number, alpha?: number): FakeRectangle;
   setStrokeStyle(width?: number, color?: number): FakeRectangle;
+  setMask(mask: unknown): FakeRectangle;
+  setVisible(visible: boolean): FakeRectangle;
+  destroy(): void;
+}
+
+/** FIX visual (rol/dado de Núcleo) — superficie mínima de `Phaser.GameObjects.Graphics` que
+ *  `role-view.ts`/`nucleo-table-view.ts` consumen para dibujar sombra/borde/máscara redondeada
+ *  decorativa. No-op puro (sin canvas real) — nada en estos tests verifica el trazo dibujado, solo
+ *  que las vistas no revienten al llamarlo, mismo criterio que `add.particles()` arriba. */
+export interface FakeGraphics {
+  x: number;
+  y: number;
+  destroyed: boolean;
+  fillStyle(color?: number, alpha?: number): FakeGraphics;
+  lineStyle(width?: number, color?: number, alpha?: number): FakeGraphics;
+  fillRoundedRect(x?: number, y?: number, width?: number, height?: number, radius?: number): FakeGraphics;
+  strokeRoundedRect(x?: number, y?: number, width?: number, height?: number, radius?: number): FakeGraphics;
+  clear(): FakeGraphics;
+  setPosition(x: number, y: number): FakeGraphics;
+  setVisible(visible: boolean): FakeGraphics;
+  setDepth(depth: number): FakeGraphics;
+  createGeometryMask(): unknown;
   destroy(): void;
 }
 
@@ -66,6 +88,7 @@ export interface FakeBoardScene {
   readonly scene: Phaser.Scene;
   readonly rectangles: FakeRectangle[];
   readonly texts: FakeText[];
+  readonly graphicsObjects: FakeGraphics[];
   readonly recordedTweens: RecordedFakeTween[];
   /** H2.12 — dispara manualmente el `onComplete` (y aplica las propiedades finales) de la tween en
    *  la posición `index` (orden de creación). No-op si `autoComplete` es `true` (ya se resolvió al
@@ -135,11 +158,58 @@ function createFakeRectangle(
     setStrokeStyle() {
       return rect;
     },
+    setMask() {
+      return rect;
+    },
+    setVisible() {
+      return rect;
+    },
     destroy() {
       rect.destroyed = true;
     },
   };
   return rect;
+}
+
+function createFakeGraphics(x: number, y: number): FakeGraphics {
+  const graphics: FakeGraphics = {
+    x,
+    y,
+    destroyed: false,
+    fillStyle() {
+      return graphics;
+    },
+    lineStyle() {
+      return graphics;
+    },
+    fillRoundedRect() {
+      return graphics;
+    },
+    strokeRoundedRect() {
+      return graphics;
+    },
+    clear() {
+      return graphics;
+    },
+    setPosition(newX: number, newY: number) {
+      graphics.x = newX;
+      graphics.y = newY;
+      return graphics;
+    },
+    setVisible() {
+      return graphics;
+    },
+    setDepth() {
+      return graphics;
+    },
+    createGeometryMask() {
+      return {};
+    },
+    destroy() {
+      graphics.destroyed = true;
+    },
+  };
+  return graphics;
 }
 
 function createFakeText(
@@ -194,6 +264,7 @@ export function createFakeBoardScene(options: CreateFakeBoardSceneOptions = {}):
 
   const rectangles: FakeRectangle[] = [];
   const texts: FakeText[] = [];
+  const graphicsObjects: FakeGraphics[] = [];
   const recordedTweens: RecordedFakeTween[] = [];
   const tweenEntries: FakeTweenEntry[] = [];
   const byName = new Map<string, FakeRectangle | FakeText>();
@@ -244,6 +315,11 @@ export function createFakeBoardScene(options: CreateFakeBoardSceneOptions = {}):
         const text = createFakeText(x ?? 0, y ?? 0, value ?? '', registerByName);
         texts.push(text);
         return text;
+      },
+      graphics(config?: { x?: number; y?: number }): FakeGraphics {
+        const graphicsObj = createFakeGraphics(config?.x ?? 0, config?.y ?? 0);
+        graphicsObjects.push(graphicsObj);
+        return graphicsObj;
       },
       // H2.12 — `add.particles`/`time.delayedCall`, mínimo necesario para `spawnDieParticleBurst`
       // (`nucleo-roll-animation.ts`) invocado desde `nucleo-pool-view.ts` en el caso "relanzado
@@ -309,6 +385,7 @@ export function createFakeBoardScene(options: CreateFakeBoardSceneOptions = {}):
     scene: fakeScene as unknown as Phaser.Scene,
     rectangles,
     texts,
+    graphicsObjects,
     recordedTweens,
     completeTween: resolveTween,
   };

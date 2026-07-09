@@ -25,6 +25,23 @@ function createMockContext(overrides: Partial<BoardViewContext> = {}): BoardView
   };
 }
 
+describe('createRoleTile — contrato de decoración redondeada consumido por targeting-highlight-view (review post-marco-redondeado)', () => {
+  it('el rect de rol expone data.highlightRadius (glow de targeting lee la geometría desde ahí, no del stroke del rect)', () => {
+    const { scene, rectangles } = createFakeBoardScene();
+    createScenarioRoleView(scene);
+
+    const rect = rectangles.find((r) => r.name === 'scenario')!;
+    expect(rect.getData('highlightRadius')).toBe(12);
+  });
+
+  it('crea exactamente 3 Graphics decorativos (sombra, máscara, borde) por tile de rol — ninguno debe recibir targetId', () => {
+    const { scene, graphicsObjects } = createFakeBoardScene();
+    createScenarioRoleView(scene);
+
+    expect(graphicsObjects).toHaveLength(3);
+  });
+});
+
 describe('createScenarioRoleView — resaltado de umbral de Trama (H2.11)', () => {
   it('scenarioPlot < scenarioPlotDefeatThreshold: fillColor permanece en SCENARIO_COLOR (violeta)', () => {
     const { scene, rectangles } = createFakeBoardScene();

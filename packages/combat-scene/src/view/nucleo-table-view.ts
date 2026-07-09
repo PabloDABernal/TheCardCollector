@@ -5,6 +5,7 @@ import { ALL_NUCLEO_COLORS } from '@collector/domain-shared';
 import { NUCLEO_TABLE_ROW_Y, TILE_SEPARATION_PX, NUCLEO_EXTRA_DIE_STACK_OFFSET_PX } from './board-layout';
 import { NUCLEO_COLOR_HEX } from './nucleo-colors';
 import { rotationDegreesFor, spawnDieParticleBurst } from './nucleo-roll-animation';
+import { createRoundedFrameRectangle } from './rounded-frame';
 
 /**
  * RENOMBRADO H3 (capa visual, spec §5.1/§5.2) de `nucleo-pool-view.ts` — sustituye el modelo viejo
@@ -18,6 +19,19 @@ const NUCLEO_DIE_SIZE = 64;
 const NUCLEO_TABLE_X_ORIGIN = 200;
 const ALPHA_AVAILABLE = 1;
 const ALPHA_SPENT = 0.4;
+
+// FIX visual (feedback Director Creativo en móvil real) — mismo tratamiento de esquinas
+// redondeadas/borde/sombra sutil que `role-view.ts` (ver comentario allí para el razonamiento
+// completo de por qué se usa un `GeometryMask` en vez de tocar el `Rectangle` directamente: preserva
+// intacto `fillColor`/interactividad). El glow de `targeting-highlight-view.ts` sobre los dados
+// válidos vive en su propio `Graphics` (ver comentario en ese módulo tras el FIX crítico
+// post-marco-redondeado) — este `rect` solo le expone su geometría vía `data.highlightRadius`.
+const NUCLEO_RADIUS_PX = 10; // = RADIUS_CHIP (design-tokens.ts) — un poco menor que RADIUS_PANEL, tile más pequeño
+const NUCLEO_BORDER_COLOR = 0x3a3744; // = --rule
+const NUCLEO_BORDER_WIDTH_PX = 2;
+const NUCLEO_SHADOW_COLOR = 0x000000;
+const NUCLEO_SHADOW_ALPHA = 0.4;
+const NUCLEO_SHADOW_OFFSET_PX = 2;
 /** Spec §5.2 — mismo tween que `diceRoll` (H2.5) para el "dado rodando", reutilizado aquí sobre el
  *  sprite REAL (persistente) en vez de uno recreado. */
 const ROLL_TWEEN_DURATION_MS = 500;
@@ -90,7 +104,23 @@ export function createNucleoTable(scene: Phaser.Scene, table: readonly NucleoDie
   function createStaticTile(die: NucleoDie): NucleoTile {
     const { x, y } = positionFor(die, currentTable);
 
-    const rect = scene.add.rectangle(x, y, NUCLEO_DIE_SIZE, NUCLEO_DIE_SIZE, NUCLEO_COLOR_HEX[die.color]);
+    // Sombra + GeometryMask redondeado + borde temático — helper compartido con `role-view.ts`
+    // (`rounded-frame.ts`, extraído en review post-marco-redondeado; ver comentario allí para el
+    // razonamiento completo, incluido por qué el glow de `targeting-highlight-view.ts` ya no
+    // depende del orden de creación de esta decoración).
+    const rect = createRoundedFrameRectangle(scene, {
+      x,
+      y,
+      width: NUCLEO_DIE_SIZE,
+      height: NUCLEO_DIE_SIZE,
+      fillColor: NUCLEO_COLOR_HEX[die.color],
+      radius: NUCLEO_RADIUS_PX,
+      borderColor: NUCLEO_BORDER_COLOR,
+      borderWidthPx: NUCLEO_BORDER_WIDTH_PX,
+      shadowColor: NUCLEO_SHADOW_COLOR,
+      shadowAlpha: NUCLEO_SHADOW_ALPHA,
+      shadowOffsetPx: NUCLEO_SHADOW_OFFSET_PX,
+    });
     rect.setInteractive().setData('targetId', die.id);
     rect.setAlpha(alphaFor(die));
 

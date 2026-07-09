@@ -15,12 +15,13 @@ import { PLACEHOLDER_POSITIONS, CARD_HAND_POSITION } from '../juice/recipes/plac
  * de su panel. `LEADER_POSITION.y`/`HAND_ROW_POSITION.y` (`PLACEHOLDER_POSITIONS.leader`/
  * `CARD_HAND_POSITION`, `juice/recipes/placeholder.ts`) están ahora recalculados junto con
  * `ALLIES_ROW_Y`/`NUCLEO_TABLE_ROW_Y` (abajo) para que el BOUNDING BOX real de cada tile quepa dentro
- * de su panel con margen (`CONTENT_GAP_PX`) — verificado por `board-layout.test.ts`.
+ * de su panel con margen (`CONTENT_GAP_PX`, hoy 12px tras el FIX visual descrito más abajo) —
+ * verificado por `board-layout.test.ts`.
  */
-export const LEADER_POSITION = PLACEHOLDER_POSITIONS.leader!; // {x:540, y:1708} — antes 1700, ver FIX QA arriba
+export const LEADER_POSITION = PLACEHOLDER_POSITIONS.leader!; // {x:540, y:1676} — recalculado con CONTENT_GAP_PX=12, ver FIX visual abajo
 export const ENEMY_POSITION = PLACEHOLDER_POSITIONS.enemy!; // {x:540, y:300}
 export const SCENARIO_POSITION = PLACEHOLDER_POSITIONS.scenario!; // {x:540, y:960}
-export const HAND_ROW_POSITION = CARD_HAND_POSITION; // {x:540, y:1498} — antes 1600, ver FIX QA arriba
+export const HAND_ROW_POSITION = CARD_HAND_POSITION; // {x:540, y:1474} — recalculado con CONTENT_GAP_PX=12, ver FIX visual abajo
 
 // FIX QA post-`6d14b52` — duplicados documentados de las dimensiones reales de sprite que SÍ dibujan
 // `role-view.ts` (`ROLE_SIZE` 200×200, tile de Líder/Enemigo/Escenario) y `nucleo-table-view.ts`
@@ -67,7 +68,15 @@ export const ENEMY_ABILITIES_ROW_Y = ENEMY_POSITION.y + 180;
 // para derivar `ALLIES_ROW_Y`/`NUCLEO_TABLE_ROW_Y` aquí, y — con el mismo valor — para fijar
 // `LEADER_POSITION.y`/`HAND_ROW_POSITION.y` en `juice/recipes/placeholder.ts` (no se puede derivar
 // ahí en runtime porque `placeholder.ts` es importado POR este archivo, no al revés — evita ciclo).
-export const CONTENT_GAP_PX = 20;
+// FIX visual (feedback Director Creativo en móvil real, docs/specs/H4_diseno_real_ui.md) — bajado de
+// 20 a 12: el Director señaló huecos negros muertos entre paneles (HUD↔panel-scenario, dentro de
+// panel-scenario alrededor del tile, panel-allies vacío ocupando demasiado alto) en su móvil real.
+// 12px sigue dejando margen real y positivo entre bounding boxes de contenido consecutivas (encima de
+// `PANEL_CONTENT_PADDING_PX` × 2 = 10, así que el fondo de dos `PanelZone` vecinas nunca llega a
+// tocarse — `board-layout.test.ts` "sin solapes" lo verifica), solo reduce el AIRE sobrante que no
+// aportaba nada. `LEADER_POSITION.y`/`CARD_HAND_POSITION.y` (`juice/recipes/placeholder.ts`) se
+// recalcularon a mano con la misma fórmula (ver comentario allí) para no romper la cadena derivada.
+export const CONTENT_GAP_PX = 12;
 
 // Borde inferior real del contenido de `panel-scenario`: el texto HUD (offset 120 + una línea, 144)
 // cae más abajo que el propio tile (100) — Math.max cubre ambos casos sin asumir cuál domina.
@@ -133,9 +142,10 @@ export interface PanelZone {
 // de su BOUNDING BOX de contenido real (tile + HUD/iconos, usando las mismas constantes de tamaño
 // que sus vistas — `ROLE_TILE_HALF_PX`, `CARD_TILE_HALF_PX`, `NUCLEO_TILE_HALF_PX`, etc.) y el panel
 // se construye como ese bounding box + un margen fijo (`PANEL_CONTENT_PADDING_PX`). Como
-// `CONTENT_GAP_PX` (20) ya garantiza esa separación mínima entre bounding boxes de filas vecinas, y
-// `PANEL_CONTENT_PADDING_PX` (5) consume como mucho 10 de esos 20px en cada frontera, ningún panel
-// puede solaparse con su vecino ni dejar su sprite fuera — por construcción, no por coincidencia.
+// `CONTENT_GAP_PX` (12, tras el FIX visual de más arriba) ya garantiza esa separación mínima entre
+// bounding boxes de filas vecinas, y `PANEL_CONTENT_PADDING_PX` (5) consume como mucho 10 de esos
+// 12px en cada frontera (dejando ~2px libres reales entre fondos de panel), ningún panel puede
+// solaparse con su vecino ni dejar su sprite fuera — por construcción, no por coincidencia.
 const PANEL_CONTENT_PADDING_PX = 5;
 
 interface ContentBox {
