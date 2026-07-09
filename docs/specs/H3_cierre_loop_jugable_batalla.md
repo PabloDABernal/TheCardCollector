@@ -62,7 +62,7 @@ packages/domain/combat/src/
   nucleo-pool.test.ts          # RENOMBRADO → nucleo-table.test.ts — reescrito contra el nuevo modelo
   types/turn-phase.ts          # NUEVO — estado del paso previo gratuito del turno del Líder
   types/hand.ts                # NUEVO — mano/mazo de robo del Líder
-  types/minion.ts              # MODIFICADO — +maxLife/life en MinionDefinition/MinionInPlay (§3.9.1)
+  types/minion.ts              # MODIFICADO — +maxLife/life en MinionDefinition/MinionInPlay (§3.9.1); +DEFAULT_MAX_MINIONS_IN_PLAY (§3.10.3)
   types/minion-behavior.ts     # NUEVO/MODIFICADO — MinionBehaviorSpec, MinionSelectionCriterion +HIGHEST_LIFE/LOWEST_LIFE (§3.9.4)
   types/combat-target.ts       # NUEVO — AttackTarget (targeting explícito Enemigo/Secuaz, §3.9.2)
   minion-ai.ts                 # NUEVO/MODIFICADO — selectActingMinions (pura), sustituye lógica ad-hoc; +HIGHEST_LIFE/LOWEST_LIFE (§3.9.4)
@@ -77,13 +77,14 @@ packages/domain/combat/src/
   catalog-adapter.ts           # MODIFICADO — dramaturgiaDeck pasa objetos completos; alternativeVictoryConditions; leaderDeckCardIds; minionDefinitions +maxLife
 
 packages/domain/catalog/src/
-  types/dramaturgia-card.ts    # MODIFICADO — +minionBehavior?: MinionBehaviorSpec
+  types/dramaturgia-card.ts    # MODIFICADO — +minionBehavior?: MinionBehaviorSpec; +summonEffect?: DramaturgiaSummonEffect (§3.10.1)
   types/minion-behavior.ts     # NUEVO/MODIFICADO — mirror estructural (catalog no importa combat, mismo patrón que enemy-ai.ts); +HIGHEST_LIFE/LOWEST_LIFE
-  types/enemy.ts               # MODIFICADO — +alternativeVictoryConditions?
-  types/scenario.ts            # MODIFICADO — +alternativeVictoryConditions?
+  types/enemy.ts               # MODIFICADO — +alternativeVictoryConditions?; +minions?: readonly MinionDefinition[] (§3.10.4)
+  types/scenario.ts            # MODIFICADO — +alternativeVictoryConditions?; +minions?: readonly MinionDefinition[] (§3.10.4)
   types/victory-condition.ts   # NUEVO — mirror estructural
-  types/minion.ts              # MODIFICADO (si existe definición de catálogo propia del Secuaz — ver nota §3.9.1) — +maxLife
-  validation/schema.ts         # MODIFICADO — valida minionBehavior, alternativeVictoryConditions, maxLife de Secuaz
+  types/minion.ts              # NUEVO §3.10.4 — MinionDefinition/MinionPassiveEffectDefinition de catálogo, mirror de domain/combat
+  validation/schema.ts         # MODIFICADO — valida minionBehavior, alternativeVictoryConditions, maxLife de Secuaz, summonEffect (§3.10.1)
+  validation/cross-reference.ts # MODIFICADO — valida summonEffect.minionDefinitionId contra minions[].id (§3.10.4)
 
 packages/combat-scene/view/    # MODIFICADO — ver §5
 packages/combat-scene/juice/   # MODIFICADO (JuiceConfig, fuera de alcance de esta spec en detalle) — ver §5
@@ -1259,6 +1260,359 @@ del rechazo (`MUST_TARGET_DEFENSOR`) — decisión de UX de detalle, no de este 
       catálogo y su consumo en muerte/Arrollar, y (d) `HIGHEST_LIFE`/`LOWEST_LIFE` como
       criterios de Dramaturgia disponibles para contenido — hoy el texto de H1.16 en
       backlog.md solo cubre la selección determinista por Dramaturgia sin estos 4 puntos.
+
+---
+
+## 3.10 `SUMMON_MINION` atado a Dramaturgia (cierra el punto dejado fuera de H3)
+
+> **⚠️ Sustituye por completo** la nota "fuera de alcance de H3" dejada en
+> `packages/data/enemies/bestia-base.json`, carta `dramacard-bestia-base-03` ("Mordisco
+> Salvaje": *"Invoca un secuaz menor (SUMMON_MINION no está atado a esta carta todavía,
+> fuera de alcance de H3 — ver spec H3 §3.3)"*). Motivo del cierre: sin esta pieza,
+> ningún Secuaz aparece nunca en combate, lo que bloqueaba a QA verificar jugablemente el
+> targeting Enemigo/Secuaz que §3.9 ya implementó (`AttackTarget`, Defensor, vida de
+> Secuaz). El comando `SUMMON_MINION` (`types/commands.ts`, H1.16) y `handleSummonMinion`
+> (`combat-engine.ts` §1753) ya existen sin cambios de contrato — esta sección añade
+> únicamente el DISPARO automático desde una carta de Dramaturgia concreta, más el
+> contenido mínimo de `bestia-base.json` para probarlo.
+
+### 3.10.1 `DramaturgiaCardDefinition.summonEffect` — campo de datos nuevo
+
+Mismo patrón que `minionBehavior` (§3.3): un campo de catálogo opcional en la misma
+carta, sin tocar el union de `CombatCommand` ni inventar un segundo mecanismo.
+
+```ts
+// packages/domain/catalog/src/types/dramaturgia-card.ts — MODIFICADO
+import type { MinionDefinitionId } from './minion-behavior'; // ya exportado, reutilizado tal cual
+
+export interface DramaturgiaSummonEffect {
+  readonly minionDefinitionId: MinionDefinitionId;
+}
+
+export interface DramaturgiaCardDefinition {
+  readonly id: DramaturgiaCardId;
+  readonly name: string;
+  readonly icon: EnemyAbilityBranch;
+  readonly effectDescription?: string;
+  readonly minionBehavior?: MinionBehaviorSpec;
+  /** NUEVO §3.10.1. Ausente = esta carta no invoca ningún Secuaz al jugarse (la mayoría
+   *  del mazo). Presente = el motor dispara `SUMMON_MINION` para
+   *  `minionDefinitionId` automáticamente, en el MISMO turno de Enemigo en que esta
+   *  carta se resuelve, sin coste de acción/Núcleo/Energía adicional (mismo criterio ya
+   *  documentado en `commands.ts` para `SUMMON_MINION`). `summonEffect` y
+   *  `minionBehavior` son campos INDEPENDIENTES de la misma carta — una carta puede
+   *  invocar un Secuaz nuevo Y, en el mismo turno, dictar qué Secuaces YA en mesa actúan
+   *  (`minionBehavior` opera sobre `minionsInPlay` ANTES de que el Secuaz recién invocado
+   *  exista — ver orden en §3.10.2, el recién invocado nunca actúa el mismo turno en que
+   *  aparece). No hay validación cruzada de que `minionDefinitionId` exista en
+   *  `EnemyDefinition.minions` en tiempo de tipos — se valida en
+   *  `validation/cross-reference.ts` (mismo patrón que otras referencias cruzadas de
+   *  H1.8 §4) y, en runtime del motor, en la construcción de
+   *  `CombatEngineConfig.minionDefinitions` (§3.10.4). */
+  readonly summonEffect?: DramaturgiaSummonEffect;
+}
+```
+
+`validation/schema.ts` gana el parseo de `summonEffect` (mismo estilo que
+`parseMinionBehaviorSpec`, §3.3): objeto con `minionDefinitionId` string no vacío,
+ausente = `undefined`.
+
+### 3.10.2 Punto exacto del disparo en `runAutomaticEnemyTurn`
+
+`combat-engine.ts` (~L2187) ya resuelve, en este orden, el turno automático de Enemigo:
+(1) roba carta de Dramaturgia (`drawDramaturgiaCard`, guarda la carta completa en
+`this.currentEnemyDramaturgiaCard`), (2) decide y activa la habilidad de
+Ataque/Trama correspondiente al icono (`handleActivateAbility`), (3) si
+`combatStatus !== 'IN_PROGRESS'` corta la cascada, (4) si hay Secuaces en mesa, resuelve
+su acción (`RESOLVE_MINION_ACTION`, que lee `minionBehavior` de la misma carta).
+
+**El disparo de `summonEffect` se inserta como un nuevo paso (2.5), entre el paso (2) y
+el paso (3)** — después de que el efecto normal de Ataque/Trama de la carta ya se
+resolvió, pero antes de la parada de cascada por fin de combate y antes de
+`RESOLVE_MINION_ACTION` (para que `minionBehavior` de la MISMA carta, si también lo
+declara, opere sobre el estado de `minionsInPlay` ANTERIOR a esta invocación — un Secuaz
+recién invocado por `summonEffect` no puede ser seleccionado por el `minionBehavior` de
+su propia carta de aparición; actuará normalmente a partir del turno de Enemigo
+siguiente, cuando otra carta lo seleccione o su pasivo se sume en el bloque de "presencia
+pasiva de Secuaces", L1425).
+
+```ts
+private runAutomaticEnemyTurn(events: CombatEvent[]): void {
+  if (!this.enemyAiEnabled) return;
+
+  const icon = this.drawDramaturgiaCard(events);
+  const candidates = this.buildEnemyAbilityCandidates();
+  const availableDice = this.nucleoTable.filter((d) => d.status === 'AVAILABLE');
+  const decision = decideEnemyAbility(icon, candidates, availableDice, this.randomSource);
+
+  const requirement = this.abilityCoreCosts.get(decision.abilityId) as CoreCostRequirement;
+  const playerColors = derivePlayerColorsFromLeaderAbilities(this.abilityCoreCosts, this.abilityCooldowns);
+  const nucleoDecision = decideEnemyNucleoToSpend(requirement, availableDice, playerColors, this.randomSource);
+
+  const abilityResult = this.handleActivateAbility({
+    type: 'ACTIVATE_ABILITY',
+    abilityId: decision.abilityId,
+    sourceId: 'enemy',
+    side: 'ENEMY',
+    nucleoInstanceId: nucleoDecision.nucleo.id,
+  });
+  if (abilityResult.ok) events.push(...abilityResult.value);
+
+  if (this.combatStatus !== 'IN_PROGRESS') return;
+
+  // NUEVO §3.10.2 — paso (2.5): dispara SUMMON_MINION si la carta robada este turno lo
+  // declara. `this.currentEnemyDramaturgiaCard` ya está poblada por drawDramaturgiaCard
+  // de arriba (mismo campo que ya consume RESOLVE_MINION_ACTION más abajo).
+  const summonEffect = this.currentEnemyDramaturgiaCard?.summonEffect;
+  if (summonEffect) {
+    const summonResult = this.handleSummonMinion({
+      type: 'SUMMON_MINION',
+      minionDefinitionId: summonEffect.minionDefinitionId,
+      sourceId: 'dramaturgia:' + this.currentEnemyDramaturgiaCard!.id,
+    });
+    // handleSummonMinion puede devolver err() en 2 casos no invariantes de contenido:
+    // MINION_DEFINITION_UNKNOWN (bug de contenido real — sí debe lanzar/loggear distinto
+    // a los "no puede fallar por construcción" de ability/núcleo de arriba) y el nuevo
+    // MINION_TABLE_AT_MAX de §3.10.3 (caso de juego válido, no-op silencioso). Ver
+    // manejo exacto en §3.10.3 — NO se asume ok() incondicional aquí, a diferencia del
+    // bloque de arriba.
+    if (summonResult.ok) events.push(...summonResult.value);
+  }
+
+  if (this.minionsInPlay.length > 0) {
+    const minionResult = this.handleResolveMinionAction({ type: 'RESOLVE_MINION_ACTION' });
+    if (minionResult.ok) events.push(...minionResult.value);
+  }
+}
+```
+
+**Por qué no reutilizar el comando público `SUMMON_MINION` desde fuera del motor:** el
+comando ya existe y es despachable en teoría por cualquier caller (`sourceId` genérico),
+pero nada en H1.16 lo conectaba a una fuente automática — este disparo es la primera vez
+que `CombatEngine` lo invoca desde sí mismo (mismo patrón interno que ya usa para
+`ACTIVATE_ABILITY`/`RESOLVE_MINION_ACTION` del turno de IA), no una responsabilidad que
+se delega a `packages/cli`/Phaser. `sourceId: 'dramaturgia:' + card.id` documenta el
+origen para depuración/log, sin que ningún test dependa de su formato exacto (es
+informativo, igual que `sourceId: 'enemy'`/`'minion-passive'` ya usados en este mismo
+método).
+
+### 3.10.3 Tope de Secuaces en mesa simultáneos
+
+No existe hoy ningún tope de `minionsInPlay.length` en el motor (§3.9.1 confirma que un
+Secuaz solo sale de mesa al morir; nada limita cuántos pueden invocarse). Sin tope, un
+mazo de Dramaturgia con `summonEffect` en más de una carta (o la misma carta reapareciendo
+tras reciclar la pila de descarte) podría acumular Secuaces sin límite en una batalla
+larga — mismo riesgo de diseño ya identificado para dados extra de Núcleo
+(`DEFAULT_NUCLEO_TABLE_MAX_DICE`, §1.4).
+
+**Decisión (Architect):** se añade un tope duro, mismo patrón de "no-op silencioso, sin
+error de comando" ya usado para `ADD_EXTRA_NUCLEO_DIE`/`NUCLEO_DIE_ADD_SKIPPED` (§1.5).
+
+```ts
+// packages/domain/combat/src/types/minion.ts — NUEVO
+/** Tope duro de Secuaces simultáneos en mesa — valor de diseño sugerido para el
+ *  contenido de juguete actual (2×2×2), sin balanceo formal todavía (mismo estatus que
+ *  DEFAULT_NUCLEO_TABLE_MAX_DICE, "a confirmar en balanceo"). Con un único
+ *  summonEffect en el mazo de bestia-base (§3.10.5) y sin efecto de invocación múltiple
+ *  en el contenido actual, este tope no se alcanza en la práctica hoy — existe para que
+ *  el motor no dependa de la disciplina del contenido futuro. */
+export const DEFAULT_MAX_MINIONS_IN_PLAY = 3;
+```
+
+```ts
+// types/config.ts — NUEVO campo opcional en CombatEngineConfig
+/** NUEVO §3.10.3. Tope duro de `minionsInPlay.length`. Default DEFAULT_MAX_MINIONS_IN_PLAY (3). */
+readonly maxMinionsInPlay?: number;
+```
+
+`handleSummonMinion` (§1753, ya existente) gana una validación de tope ANTES de la
+mutación, en la misma posición donde ya valida `turnOwner`:
+
+```ts
+if (this.minionsInPlay.length >= this.maxMinionsInPlay) {
+  const event: CombatEvent = {
+    type: 'MINION_SUMMON_SKIPPED', // NUEVO — mismo patrón que NUCLEO_DIE_ADD_SKIPPED
+    minionDefinitionId: command.minionDefinitionId,
+    sourceId: command.sourceId,
+    reason: 'TABLE_AT_MAX',
+  };
+  this.eventBus.emit(event);
+  return ok([event]); // NO es CombatCommandError — caso de juego válido, no invariante rota
+}
+```
+
+Esto es coherente con el flujo de §3.10.2: cuando el tope se alcanza, `summonResult.ok`
+sigue siendo `true` (el comando "tiene éxito" en el sentido de que se procesó
+correctamente), pero el evento emitido es informativo (`MINION_SUMMON_SKIPPED`) en vez
+de `MINION_SUMMONED` — ningún Secuaz nuevo entra a `minionsInPlay`.
+
+### 3.10.4 `CombatEngineConfig.minionDefinitions` deja de estar vacío por defecto en contenido real
+
+Hoy `catalog-adapter.ts` (§L105) pasa `minionDefinitions: new Map()` — vacío, hardcoded,
+sin leer nada de `enemy`/`scenario`. Esto es lo que hace que `SUMMON_MINION` siempre
+falle con `MINION_DEFINITION_UNKNOWN` en cualquier contenido real hoy, incluso si una
+carta de Dramaturgia lo disparase manualmente. Se cierra aquí porque §3.10.2 depende de
+que exista al menos 1 `MinionDefinition` resuelta para `bestia-base`.
+
+**Catálogo — `EnemyDefinition` gana un campo nuevo** (mismo patrón que
+`alternativeVictoryConditions`, ya opcional y ya mergeado Enemigo+Escenario en el
+adaptador):
+
+```ts
+// packages/domain/catalog/src/types/enemy.ts — MODIFICADO
+import type { MinionDefinition } from './minion'; // NUEVO tipo de catálogo — ver nota abajo
+
+export interface EnemyDefinition {
+  // ...campos existentes sin cambios...
+  /** NUEVO §3.10.4. Secuaces que este Enemigo puede invocar (vía `SUMMON_MINION`,
+   *  disparado hoy únicamente desde `DramaturgiaCardDefinition.summonEffect`, §3.10.1).
+   *  Ausente/vacío = este Enemigo no invoca Secuaces — combate sin Secuaces, igual que
+   *  hoy. */
+  readonly minions?: readonly MinionDefinition[];
+}
+```
+
+`packages/domain/catalog/src/types/minion.ts` (NUEVO — hoy no existe ningún tipo de
+catálogo propio de Secuaz, solo el mirror de comportamiento en `minion-behavior.ts`):
+
+```ts
+import type { AbilityId } from '@collector/domain-shared';
+import type { MinionDefinitionId } from './minion-behavior';
+
+/** Mirror estructural EXACTO de `domain/combat`'s `MinionDefinition`/
+ *  `MinionPassiveEffectDefinition` (`packages/domain/combat/src/types/minion.ts`) —
+ *  catalog no importa combat, mismo patrón que el resto de mirrors de este documento
+ *  (`EnemyAbilityBranch`, `MinionSelectionCriterion`). `catalog-adapter.ts` asigna
+ *  directamente (cast estructural, sin conversión de campos), mismo criterio ya usado
+ *  para `AbilityEffectDefinition` (§2.2.a de este documento). */
+export interface MinionPassiveEffectDefinition {
+  readonly kind: 'ATTACK' | 'PLOT';
+  readonly amount: number;
+  readonly arrollar?: boolean;
+}
+
+export interface MinionDefinition {
+  readonly id: MinionDefinitionId;
+  readonly name: string;
+  readonly passiveEffect: MinionPassiveEffectDefinition;
+  readonly specialActionAbilityId?: AbilityId;
+  readonly planoAttackAmount: number;
+  readonly isDefensor: boolean;
+  readonly maxLife: number;
+}
+```
+
+`catalog-adapter.ts` (§L105) — reemplaza el `new Map()` hardcoded:
+
+```ts
+// NUEVO §3.10.4 — mismo merge Enemigo+Escenario que alternativeVictoryConditions (§L84-87)
+const minionDefinitions = new Map<MinionDefinitionId, MinionDefinition>(
+  [...(enemy.minions ?? []), ...(scenario.minions ?? [])].map((m) => [m.id, m])
+);
+// ...
+return {
+  // ...
+  minionDefinitions, // ELIMINADO: minionDefinitions: new Map(),
+};
+```
+
+`ScenarioDefinition` gana el mismo campo opcional `minions?: readonly MinionDefinition[]`
+que `EnemyDefinition` (mismo patrón ya usado para `alternativeVictoryConditions`,
+presente en ambas — GDD §3.8: "efecto pasivo definido por el enemigo y/o el escenario").
+Para el contenido de prueba de esta spec (§3.10.5) solo `bestia-base.json` (Enemigo) lo
+usa; `escenario` puede quedar sin `minions` sin romper nada (default `[]`).
+
+`validation/schema.ts`/`validation/cross-reference.ts` ganan el parseo/validación de
+`minions[]` en `EnemyDefinition`/`ScenarioDefinition` (mismo estilo que el resto de
+listas de catálogo: `id` no vacío y único dentro del array, `maxLife` entero > 0,
+`planoAttackAmount` entero >= 0) y la referencia cruzada de
+`DramaturgiaCardDefinition.summonEffect.minionDefinitionId` contra el conjunto de
+`minions[].id` del Enemigo+Escenario al que pertenece esa carta de Dramaturgia (mismo
+patrón que la validación ya pendiente de `minionBehavior.criterion.minionDefinitionId`,
+§3.3).
+
+### 3.10.5 Contenido de prueba: `MinionDefinition` mínimo para "Mordisco Salvaje" en `bestia-base.json`
+
+Coherente con el resto del contenido 2×2×2 (Bestia Base: 60 HP, ataques básicos de
+Umbral bajo, GDD "Daño bajo" para plano attack de Secuaz, §3.8). Un único Secuaz nuevo,
+sin acción especial (mantiene el contenido de prueba simple — `specialActionAbilityId`
+ausente), sin Defensor (no se quiere forzar el targeting en el primer contenido que
+prueba el flujo, para no ocultar que el jugador también puede seguir atacando al
+Enemigo directamente), vida baja para que sea derrotable en 1-2 golpes del Líder y así
+validar rápido el camino de `MINION_DEFEATED`/Arrollar de §3.9.3 en una partida de
+prueba corta.
+
+```json
+// packages/data/enemies/bestia-base.json — NUEVO campo raíz "minions"
+"minions": [
+  {
+    "id": "minion-bestia-base-cachorro",
+    "name": "Cachorro Salvaje",
+    "passiveEffect": { "kind": "ATTACK", "amount": 1 },
+    "planoAttackAmount": 1,
+    "isDefensor": false,
+    "maxLife": 4
+  }
+]
+```
+
+**"Mordisco Salvaje" (`dramacard-bestia-base-03`) — `summonEffect` añadido, nota de
+alcance retirada:**
+
+```json
+{
+  "id": "dramacard-bestia-base-03",
+  "name": "Mordisco Salvaje",
+  "icon": "ATTACK",
+  "effectDescription": "Invoca un Cachorro Salvaje.",
+  "summonEffect": { "minionDefinitionId": "minion-bestia-base-cachorro" },
+  "minionBehavior": { "criterion": { "kind": "ALL" } }
+}
+```
+
+`minionBehavior: { kind: 'ALL' }` se conserva sin cambios — sigue significando "todos los
+Secuaces YA en mesa antes de esta carta atacan" (§3.10.2: el recién invocado por esta
+misma carta no participa en ese `ALL` de este turno). Con un mazo de 6 cartas de
+Dramaturgia (§0 de `bestia-base.json`) y reciclado de pila al agotarse, esta carta puede
+volver a salir en la misma batalla; cada vez que sale, intenta invocar OTRO Cachorro
+Salvaje (hasta el tope de §3.10.3) — comportamiento de contenido aceptado explícitamente
+para este cierre (no se añade lógica de "máximo 1 invocación por carta por combate";
+puerta abierta a contenido futuro si se detecta que esto desbalancea el toy content).
+
+### 3.10.6 Definition of Done de §3.10
+
+- [ ] `DramaturgiaCardDefinition.summonEffect?: DramaturgiaSummonEffect` añadido
+      (§3.10.1); `validation/schema.ts` lo parsea/valida.
+- [ ] `runAutomaticEnemyTurn`: nuevo paso (2.5) entre activación de habilidad y
+      `RESOLVE_MINION_ACTION`, exactamente en el orden de §3.10.2 (Secuaz invocado este
+      turno NO participa en el `minionBehavior` de la misma carta).
+- [ ] `DEFAULT_MAX_MINIONS_IN_PLAY = 3` en `types/minion.ts`; `CombatEngineConfig.maxMinionsInPlay?`
+      añadido; `handleSummonMinion` valida el tope y emite `MINION_SUMMON_SKIPPED` en vez
+      de mutar `minionsInPlay` cuando se alcanza (§3.10.3) — sin `CombatCommandError`
+      nuevo, es un caso de juego válido.
+- [ ] `CombatEvent` añade `MINION_SUMMON_SKIPPED { minionDefinitionId, sourceId, reason: 'TABLE_AT_MAX' }`.
+- [ ] `EnemyDefinition`/`ScenarioDefinition` (catalog) ganan `minions?: readonly MinionDefinition[]`;
+      nuevo `packages/domain/catalog/src/types/minion.ts` (§3.10.4).
+- [ ] `catalog-adapter.ts`: `minionDefinitions` se construye a partir de
+      `enemy.minions`/`scenario.minions` (merge, mismo patrón que
+      `alternativeVictoryConditions`) — deja de ser `new Map()` hardcoded.
+- [ ] `validation/cross-reference.ts` valida `summonEffect.minionDefinitionId` contra
+      `minions[].id` del Enemigo/Escenario propietario de esa carta de Dramaturgia.
+- [ ] `bestia-base.json`: nuevo campo raíz `minions` con `minion-bestia-base-cachorro`
+      (§3.10.5); `dramacard-bestia-base-03` gana `summonEffect`, pierde la nota "fuera de
+      alcance de H3" de `effectDescription` (texto libre actualizado a
+      "Invoca un Cachorro Salvaje.").
+- [ ] Tests nuevos en `combat-engine.minions.test.ts`/`combat-engine.turn-loop.test.ts`:
+      (a) carta con `summonEffect` en el turno de IA añade 1 `MinionInPlay` nuevo antes de
+      `RESOLVE_MINION_ACTION` del mismo turno; (b) el Secuaz recién invocado NO es
+      seleccionado por un `minionBehavior: { kind: 'ALL' }` de la misma carta (mesa
+      previa vacía → `MINION_ACTION_SKIPPED`, no un ataque del recién llegado); (c) tope
+      de `maxMinionsInPlay` alcanzado → `MINION_SUMMON_SKIPPED`, `minionsInPlay.length`
+      sin cambios; (d) carta sin `summonEffect` no invoca nada (comportamiento actual
+      preservado); (e) integración end-to-end con contenido real de `bestia-base.json`
+      (vía `catalog-adapter.ts`/`CatalogLoader`): jugar suficientes turnos hasta que salga
+      "Mordisco Salvaje" produce un `Cachorro Salvaje` targeteable por el jugador
+      (`AttackTarget.MINION`, §3.9.2).
 
 ---
 
