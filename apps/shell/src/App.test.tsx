@@ -11,10 +11,22 @@ import type { CombatBridge } from '@collector/combat-bridge';
 import type { CombatStateSnapshot } from '@collector/domain-combat';
 import type { App as AppComponent } from './App';
 
+// NUEVO H4 spec §5.2/§6.1 — `CombatScene.create()` (real, mockeada aquí) devuelve un
+// `getTargetingSignal()`/`getGestureCommandTranslator()` fake — `CombatScreen` los llama
+// síncronamente justo después de `scene.start(...)` dentro del handler de `READY`.
+const fakeTargetingSignal = { getState: () => ({ kind: 'NONE' as const }), subscribe: () => () => {} };
+const fakeGestureHandle = { handleCardTap: vi.fn(), handleAbilityTap: vi.fn(), cancelPending: vi.fn() };
+
 vi.mock('phaser', () => {
   class FakeGame {
     events = { once: (_evt: string, cb: () => void) => cb() };
-    scene = { add: vi.fn(), start: vi.fn() };
+    scene = {
+      add: vi.fn(() => ({
+        getTargetingSignal: () => fakeTargetingSignal,
+        getGestureCommandTranslator: () => fakeGestureHandle,
+      })),
+      start: vi.fn(),
+    };
     destroy = vi.fn();
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- firma calcada de `new Phaser.Game(config)`
     constructor(_config: unknown) {}
@@ -43,6 +55,13 @@ vi.mock('@collector/combat-scene', () => ({
   ENEMY_POSITION: { x: 540, y: 300 },
   SCENARIO_POSITION: { x: 540, y: 960 },
   PANEL_ZONES: [],
+  // NUEVO H4 spec §6 — `HandCardRow`/`AbilityRow` (renderizados dentro de `CombatBoardOverlay`) leen
+  // estas constantes de posición vía `@collector/combat-scene`.
+  HAND_ROW_POSITION: { x: 540, y: 1498 },
+  TILE_SEPARATION_PX: 140,
+  LEADER_ABILITIES_ROW_Y: 1888,
+  ENEMY_ABILITIES_ROW_Y: 480,
+  ABILITY_ICON_SEPARATION_PX: 200,
 }));
 
 const fakeSnapshot: CombatStateSnapshot = {
@@ -66,6 +85,7 @@ const fakeSnapshot: CombatStateSnapshot = {
   leaderHand: [],
   leaderDeckRemaining: 0,
   leaderFreeStep: { takenThisTurn: false },
+  enemyActiveDramaturgiaCardId: null,
 };
 
 const fakeBridge = {
@@ -77,7 +97,10 @@ const fakeBridge = {
 
 const buildCombatSetupMock = vi.fn(
   (_params: { readonly leaderId?: string; readonly enemyId?: string; readonly scenarioId?: string }) =>
-    Promise.resolve({ bridge: fakeBridge, boardContext: { leaderAbilities: [] } })
+    Promise.resolve({
+      bridge: fakeBridge,
+      boardContext: { leaderCardPool: [], leaderAbilities: [], enemyAbilities: [], enemyDramaturgiaDeck: [] },
+    })
 );
 
 vi.mock('./combat/build-combat-setup', () => ({

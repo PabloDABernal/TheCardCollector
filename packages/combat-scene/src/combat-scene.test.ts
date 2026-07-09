@@ -50,16 +50,34 @@ vi.mock('./input', () => ({
 // `view/*` (ya cubierto en `view/board-view.test.ts`).
 const boardViewRenderMock = vi.fn();
 const createBoardViewMock = vi.fn(() => ({ render: boardViewRenderMock }));
+// NUEVO H4 spec §5.4 — `create()` también construye `createTargetingHighlightView(this,
+// targetingSignal)`, mockeada aquí con la misma superficie mínima (`destroy()`) que
+// `targeting-highlight-view.test.ts` (si existiera) ejercitaría en detalle.
+const targetingHighlightDestroyMock = vi.fn();
+const createTargetingHighlightViewMock = vi.fn(() => ({ destroy: targetingHighlightDestroyMock }));
 vi.mock('./view', () => ({
   createBoardView: (...args: unknown[]) => createBoardViewMock(...(args as [])),
+  createTargetingHighlightView: (...args: unknown[]) => createTargetingHighlightViewMock(...(args as [])),
 }));
 
-// H2.9 spec §4.1 — mockea `./interaction` (análogo al mock de `./input`/`./view`) para verificar
-// que `create()` construye el `GestureCommandTranslator` y lo suscribe a `inputAdapter.subscribe`,
-// sin ejercitar la máquina de estados real (ya cubierta en
-// `interaction/gesture-command-translator.test.ts`).
+// H2.9 spec §4.1 (extendida H4 §5.2/§6.1) — mockea `./interaction` (análogo al mock de
+// `./input`/`./view`) para verificar que `create()` construye el `GestureCommandTranslator` y lo
+// suscribe a `inputAdapter.subscribe`, sin ejercitar la máquina de estados real (ya cubierta en
+// `interaction/gesture-command-translator.test.ts`). El translator fake expone también
+// `targetingSignal`/`handleCardTap`/`handleAbilityTap`/`cancelPending` (H4), consumidos por
+// `CombatScene.getTargetingSignal()`/`getGestureCommandTranslator()`.
 const translatorHandleGestureMock = vi.fn();
-const createGestureCommandTranslatorMock = vi.fn(() => ({ handleGesture: translatorHandleGestureMock }));
+const translatorHandleCardTapMock = vi.fn();
+const translatorHandleAbilityTapMock = vi.fn();
+const translatorCancelPendingMock = vi.fn();
+const fakeTargetingSignal = { getState: vi.fn(() => ({ kind: 'NONE' })), subscribe: vi.fn(() => vi.fn()) };
+const createGestureCommandTranslatorMock = vi.fn(() => ({
+  handleGesture: translatorHandleGestureMock,
+  handleCardTap: translatorHandleCardTapMock,
+  handleAbilityTap: translatorHandleAbilityTapMock,
+  cancelPending: translatorCancelPendingMock,
+  targetingSignal: fakeTargetingSignal,
+}));
 vi.mock('./interaction', () => ({
   createGestureCommandTranslator: (...args: unknown[]) => createGestureCommandTranslatorMock(...(args as [])),
 }));
@@ -108,8 +126,20 @@ describe('CombatScene — init/create/shutdown (H2.6/H2.8)', () => {
     createBoardViewMock.mockImplementation(() => ({ render: boardViewRenderMock }));
     boardViewRenderMock.mockClear();
     createGestureCommandTranslatorMock.mockClear();
-    createGestureCommandTranslatorMock.mockImplementation(() => ({ handleGesture: translatorHandleGestureMock }));
+    createGestureCommandTranslatorMock.mockImplementation(() => ({
+      handleGesture: translatorHandleGestureMock,
+      handleCardTap: translatorHandleCardTapMock,
+      handleAbilityTap: translatorHandleAbilityTapMock,
+      cancelPending: translatorCancelPendingMock,
+      targetingSignal: fakeTargetingSignal,
+    }));
     translatorHandleGestureMock.mockClear();
+    translatorHandleCardTapMock.mockClear();
+    translatorHandleAbilityTapMock.mockClear();
+    translatorCancelPendingMock.mockClear();
+    createTargetingHighlightViewMock.mockClear();
+    createTargetingHighlightViewMock.mockImplementation(() => ({ destroy: targetingHighlightDestroyMock }));
+    targetingHighlightDestroyMock.mockClear();
   });
 
   it('init(data) guarda el CombatBridge/boardContext inyectados sin dispatch ni side-effects', () => {
@@ -268,5 +298,34 @@ describe('CombatScene — init/create/shutdown (H2.6/H2.8)', () => {
     fireShutdown();
 
     expect(translatorUnsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('shutdown invoca targetingHighlightView.destroy() (H4 spec §5.4)', () => {
+    const scene = new CombatScene();
+    const { fireShutdown } = createFakeCombatSceneSurface(scene);
+    const bridge = createFakeBridge();
+    scene.init({ bridge, boardContext: fakeBoardContext });
+    scene.create();
+    fireShutdown();
+
+    expect(targetingHighlightDestroyMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('getTargetingSignal()/getGestureCommandTranslator() exponen la superficie del translator tras create() (H4 spec §5.3/§6.1)', () => {
+    const scene = new CombatScene();
+    createFakeCombatSceneSurface(scene);
+    const bridge = createFakeBridge();
+    scene.init({ bridge, boardContext: fakeBoardContext });
+    scene.create();
+
+    expect(scene.getTargetingSignal()).toBe(fakeTargetingSignal);
+
+    const handle = scene.getGestureCommandTranslator();
+    handle.handleCardTap('card-1' as never);
+    handle.handleAbilityTap('ability-1' as never);
+    handle.cancelPending();
+    expect(translatorHandleCardTapMock).toHaveBeenCalledWith('card-1');
+    expect(translatorHandleAbilityTapMock).toHaveBeenCalledWith('ability-1');
+    expect(translatorCancelPendingMock).toHaveBeenCalledTimes(1);
   });
 });

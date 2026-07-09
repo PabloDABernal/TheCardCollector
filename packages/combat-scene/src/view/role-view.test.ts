@@ -20,6 +20,7 @@ function createMockContext(overrides: Partial<BoardViewContext> = {}): BoardView
     leaderCardPool: [],
     leaderAbilities: [],
     enemyAbilities: [],
+    enemyDramaturgiaDeck: [],
     ...overrides,
   };
 }

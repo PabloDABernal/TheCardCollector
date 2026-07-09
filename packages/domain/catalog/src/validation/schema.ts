@@ -93,6 +93,10 @@ export function parseCardDefinition(raw: unknown, context: string): CardDefiniti
     fail(context, 'campo "universeSkin", si está presente, debe ser un string');
   }
 
+  if (raw.ruleText !== undefined && typeof raw.ruleText !== 'string') {
+    fail(context, 'campo "ruleText", si está presente, debe ser un string');
+  }
+
   return {
     id: createId<'CardId'>('CardId', raw.id) as CardId,
     name: raw.name,
@@ -100,6 +104,7 @@ export function parseCardDefinition(raw: unknown, context: string): CardDefiniti
     cost: { energy: raw.cost.energy },
     keywords,
     ...(raw.universeSkin !== undefined ? { universeSkin: raw.universeSkin } : {}),
+    ...(raw.ruleText !== undefined ? { ruleText: raw.ruleText } : {}),
   };
 }
 
@@ -189,12 +194,17 @@ export function parseAbilityDefinition(raw: unknown, context: string): AbilityDe
 
   const effect = raw.effect === undefined ? undefined : parseCatalogAbilityEffect(raw.effect, `${context}.effect`);
 
+  if (raw.ruleText !== undefined && typeof raw.ruleText !== 'string') {
+    fail(context, 'campo "ruleText", si está presente, debe ser un string');
+  }
+
   return {
     id: createId<'AbilityId'>('AbilityId', raw.id) as AbilityId,
     name: raw.name,
     coreCost,
     baseCooldown: raw.baseCooldown,
     ...(effect !== undefined ? { effect } : {}),
+    ...(raw.ruleText !== undefined ? { ruleText: raw.ruleText } : {}),
   };
 }
 

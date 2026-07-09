@@ -1,12 +1,14 @@
 import type { ReactNode } from 'react';
 import type { CombatStateSnapshot } from '@collector/domain-combat';
-import type { BoardViewContext } from '@collector/combat-scene';
+import type { BoardViewContext, GestureCommandTranslatorHandle } from '@collector/combat-scene';
 import {
   COMBAT_SCENE_VIEWPORT,
   LEADER_POSITION,
   ENEMY_POSITION,
   SCENARIO_POSITION,
   PANEL_ZONES,
+  LEADER_ABILITIES_ROW_Y,
+  ENEMY_ABILITIES_ROW_Y,
 } from '@collector/combat-scene';
 import {
   COLOR_DANGER,
@@ -17,6 +19,9 @@ import {
   TYPE,
 } from '../ui/design-tokens';
 import type { PhaserViewportTransform } from './use-phaser-viewport-transform';
+import { HandCardRow } from './card/HandCardRow';
+import { AbilityRow } from './card/AbilityRow';
+import { EnemyDramaturgiaCardSlot } from './card/EnemyDramaturgiaCardSlot';
 
 // H4 spec §2 — mismo offset que `role-view.ts` usaba para su `Text` de estado (retirado de Phaser,
 // migrado aquí), para que la posición visual de la línea de rol no cambie respecto a la versión
@@ -31,6 +36,11 @@ export interface CombatBoardOverlayProps {
   readonly leaderName: string;
   readonly enemyName?: string;
   readonly scenarioName?: string;
+  /** NUEVO H4 spec §1/§2/§3/§6.1 — `null` mientras `CombatScene` no ha emitido `READY` todavía
+   *  (mismo ciclo de vida que `boardContext`). Con `gestureHandle` presente se montan `HandCardRow`/
+   *  `AbilityRow` (interactivos); sin él, el overlay sigue pintando las líneas de rol/etiquetas de
+   *  zona igual que antes, pero sin mano ni habilidades interactivas todavía. */
+  readonly gestureHandle: GestureCommandTranslatorHandle | null;
 }
 
 /**
@@ -51,11 +61,18 @@ export function CombatBoardOverlay({
   leaderName,
   enemyName,
   scenarioName,
+  gestureHandle,
 }: CombatBoardOverlayProps): JSX.Element {
   const leaderRemainingRatio =
     (ctx.leaderMaxHealth - snapshot.leaderDamage) / Math.max(ctx.leaderMaxHealth, 1);
   const isLeaderLowHealth = leaderRemainingRatio < LOW_HEALTH_RATIO;
   const isScenarioAtThreshold = snapshot.scenarioPlot >= ctx.scenarioPlotDefeatThreshold;
+
+  // NUEVO H4 spec §3.3 — resuelve `snapshot.enemyActiveDramaturgiaCardId` a sus datos completos
+  // contra `ctx.enemyDramaturgiaDeck` (resuelto una vez en `build-combat-setup.ts`).
+  const activeDramaturgiaCard = snapshot.enemyActiveDramaturgiaCardId
+    ? (ctx.enemyDramaturgiaDeck.find((c) => c.dramaturgiaCardId === snapshot.enemyActiveDramaturgiaCardId) ?? null)
+    : null;
 
   return (
     <div
@@ -126,6 +143,30 @@ export function CombatBoardOverlay({
           Fase {snapshot.scenarioPhase.phaseNumber}/{snapshot.scenarioPhase.totalPhases}
         </span>
       </RoleBlock>
+
+      {/* NUEVO H4 spec §3.3 — carta de Dramaturgia activa del Enemigo, `size="featured"`. */}
+      <EnemyDramaturgiaCardSlot activeCard={activeDramaturgiaCard} />
+
+      {/* NUEVO H4 spec §1/§4/§6 — mano del Líder, sustituye `card-hand-view.ts` (Phaser). */}
+      {gestureHandle && <HandCardRow snapshot={snapshot} ctx={ctx} gestureHandle={gestureHandle} />}
+
+      {/* NUEVO H4 spec §2/§6 — habilidades del Líder (interactivas) y del Enemigo (informativas),
+          sustituye `ability-cooldown-view.ts` (Phaser). */}
+      <AbilityRow
+        snapshot={snapshot}
+        abilities={ctx.leaderAbilities}
+        side="LEADER"
+        rowY={LEADER_ABILITIES_ROW_Y}
+        interactive={gestureHandle !== null}
+        {...(gestureHandle ? { gestureHandle } : {})}
+      />
+      <AbilityRow
+        snapshot={snapshot}
+        abilities={ctx.enemyAbilities}
+        side="ENEMY"
+        rowY={ENEMY_ABILITIES_ROW_Y}
+        interactive={false}
+      />
     </div>
   );
 }

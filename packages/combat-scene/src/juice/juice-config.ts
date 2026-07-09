@@ -27,7 +27,10 @@ export const JUICE_CONFIG: JuiceConfig = {
   // NUEVO H4 (spec §3.2) — banner de canvas "Tu turno"/"Turno del Enemigo", enganchado al evento
   // real de dominio TURN_ENDED (nextTurnOwner). Antes: [].
   TURN_ENDED: [{ recipeId: 'turnBanner', mode: 'sequential' }],
-  COOLDOWNS_TICKED: [{ recipeId: 'cooldownReady', mode: 'parallel' }], // NUEVO H2.10 (antes: [])
+  // H4 (fix Reviewer) — `cooldownReady` (H2.10) RETIRADA del registro (`recipes/index.ts`): el
+  // pulso de "cooldown listo" vive ahora en CSS (`card-tile--ready`, `AbilityTile.tsx`), la
+  // habilidad migró de icono Phaser a tile HTML. Sin receta de canvas para este evento.
+  COOLDOWNS_TICKED: [],
   LEADER_DAMAGED: [
     { recipeId: 'floatingNumber', mode: 'parallel' }, // NUEVO H2.11 — antes de hitImpact, spec §1.8
     { recipeId: 'hitImpact', mode: 'sequential', soundId: 'hit' }, // soundId NUEVO H2.13

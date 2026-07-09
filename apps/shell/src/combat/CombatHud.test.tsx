@@ -83,6 +83,7 @@ function createMockSnapshot(overrides: Partial<CombatStateSnapshot> = {}): Comba
     leaderHand: [],
     leaderDeckRemaining: 0,
     leaderFreeStep: { takenThisTurn: false },
+    enemyActiveDramaturgiaCardId: null,
   };
   return { ...base, ...overrides };
 }

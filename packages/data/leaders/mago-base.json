@@ -6,27 +6,31 @@
       "id": "ability-mago-base-canalizar",
       "name": "Canalizar",
       "coreCost": { "kind": "ANY" },
-      "baseCooldown": 1
+      "baseCooldown": 1,
+      "ruleText": "Habilidad básica del Líder, siempre disponible con cualquier dado de Núcleo."
     },
     {
       "id": "ability-mago-base-distorsion",
       "name": "Distorsión",
       "coreCost": { "kind": "COLOR", "colors": ["CONTROL"] },
       "baseCooldown": 2,
-      "effect": { "kind": "PLOT", "amount": 1 }
+      "effect": { "kind": "PLOT", "amount": 1 },
+      "ruleText": "Trama +1 a favor del Líder. Requiere Núcleo Control."
     },
     {
       "id": "ability-mago-base-barrera-arcana",
       "name": "Barrera Arcana",
       "coreCost": { "kind": "COLOR", "colors": ["CAOS"] },
-      "baseCooldown": 3
+      "baseCooldown": 3,
+      "ruleText": "Erige una barrera arcana protectora. Requiere Núcleo Caos."
     },
     {
       "id": "ability-mago-base-tormenta-arcana",
       "name": "Tormenta Arcana",
       "coreCost": { "kind": "COLOR", "colors": ["CONTROL", "CAOS"] },
       "baseCooldown": 4,
-      "effect": { "kind": "PLOT", "amount": 2 }
+      "effect": { "kind": "PLOT", "amount": 2 },
+      "ruleText": "Trama +2 a favor del Líder. Requiere Núcleo Control o Caos."
     }
   ],
   "cardPoolIds": [

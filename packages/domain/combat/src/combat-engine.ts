@@ -46,6 +46,7 @@ import {
 } from './enemy-ai'; // NUEVO H1.16, reusa H1.7
 import type { EnemyAbilityAiProfile, EnemyAbilityCandidate, DramaturgiaCardIcon } from './types/enemy-ai'; // NUEVO H1.18, reusa H1.7
 import type { PhaseDefinition, PhaseChangeCondition, DramaturgiaCardDefinition } from '@collector/domain-catalog'; // NUEVO H1.17 — ver spec H1.17 §0.1; DramaturgiaCardDefinition MODIFICADO H1.16
+import type { DramaturgiaCardId } from '@collector/domain-shared'; // NUEVO H4.x
 import { LEADER_LEVEL_BASE, LEADER_LEVEL_UPS_MAX } from './types/leader-state'; // NUEVO H1.17
 import type { PlayableCardDefinition, PlayableCardEffectDefinition } from './types/playable-card'; // NUEVO H1.18
 import type { CombatOutcome, DefeatReason } from './types/combat-status'; // NUEVO H1.18
@@ -153,6 +154,11 @@ export class CombatEngine {
   private dramaturgiaDrawPile: DramaturgiaCardDefinition[]; // MODIFICADO H1.16 — antes DramaturgiaCardIcon[]
   private dramaturgiaDiscardPile: DramaturgiaCardDefinition[];
   private currentEnemyDramaturgiaCard: DramaturgiaCardDefinition | undefined; // NUEVO H1.16 (rediseño)
+  // NUEVO H4.x — separado de `currentEnemyDramaturgiaCard`: ese campo se limpia al
+  // empezar cada turno de Enemigo (línea ~1436, uso interno de minionBehavior); este
+  // persiste para la UI hasta el siguiente robo, incluso durante el turno del Líder.
+  // Ver spec H4_componente_carta.md §3.2 Gap A.
+  private activeDramaturgiaCardId: DramaturgiaCardId | null = null;
 
   private combatStatus: 'IN_PROGRESS' | CombatOutcome;
   private defeatReason: DefeatReason | undefined;
@@ -2295,6 +2301,7 @@ export class CombatEngine {
     const card = this.dramaturgiaDrawPile.pop() as DramaturgiaCardDefinition;
     this.dramaturgiaDiscardPile.push(card);
     this.currentEnemyDramaturgiaCard = card; // NUEVO H1.16 (rediseño)
+    this.activeDramaturgiaCardId = card.id; // NUEVO H4.x
     const drawn: CombatEvent = { type: 'DRAMATURGIA_CARD_DRAWN', icon: card.icon };
     events.push(drawn);
     this.eventBus.emit(drawn);
@@ -2367,6 +2374,7 @@ export class CombatEngine {
       leaderHand: [...this.leaderHand], // NUEVO H3.6
       leaderDeckRemaining: this.leaderDeckDrawPile.length, // NUEVO H3.6
       leaderFreeStep: { takenThisTurn: this.leaderFreeStepTakenThisTurn }, // NUEVO H3.6
+      enemyActiveDramaturgiaCardId: this.activeDramaturgiaCardId, // NUEVO H4.x
     };
   }
 }

@@ -2,15 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import Phaser from 'phaser';
 import { CombatScene, COMBAT_SCENE_VIEWPORT } from '@collector/combat-scene';
-import type { AbilityViewData, BoardViewContext } from '@collector/combat-scene';
+import type { AbilityViewData, BoardViewContext, GestureCommandTranslatorHandle, TargetingSignal } from '@collector/combat-scene';
 import type { CombatBridge } from '@collector/combat-bridge';
 import './CombatScreen.css';
 import { buildCombatSetup } from '../combat/build-combat-setup';
 import { useCombatSnapshot } from '../combat/use-combat-snapshot';
 import { usePhaserViewportTransform } from '../combat/use-phaser-viewport-transform';
+import { useTargetingPrompt } from '../combat/use-targeting-prompt';
 import { CombatBoardOverlay } from '../combat/CombatBoardOverlay';
 import { CombatHud } from '../combat/CombatHud';
 import { CombatResultModal } from '../combat/CombatResultModal';
+import { TargetingPromptBanner } from '../combat/card/TargetingPromptBanner';
 import { LEADER_OPTIONS, DEFAULT_LEADER_OPTION } from '../combat/leader-options';
 import { ENEMY_OPTIONS, DEFAULT_ENEMY_OPTION } from '../combat/enemy-options';
 import { SCENARIO_OPTIONS, DEFAULT_SCENARIO_OPTION } from '../combat/scenario-options';
@@ -62,6 +64,10 @@ export function CombatScreen(): JSX.Element {
   // H4 spec §2 — `boardContext` completo, necesario por `CombatBoardOverlay` para las líneas de rol
   // (leaderMaxHealth/enemyMaxHealth/scenarioPlotDefeatThreshold).
   const [boardContext, setBoardContext] = useState<BoardViewContext | null>(null);
+  // NUEVO H4 spec §5.2/§6.1 — obtenidos de `CombatScene` tras `Phaser.Core.Events.READY` (la escena
+  // se crea/arranca DENTRO del handler de READY, así que estos dos solo existen a partir de ahí).
+  const [targetingSignal, setTargetingSignal] = useState<TargetingSignal | null>(null);
+  const [gestureHandle, setGestureHandle] = useState<GestureCommandTranslatorHandle | null>(null);
   // H4 spec §2.3 — sincroniza la capa HTML del overlay con el escalado real que
   // `Phaser.Scale.FIT` aplica al canvas.
   const transform = usePhaserViewportTransform(mountRef);
@@ -90,9 +96,13 @@ export function CombatScreen(): JSX.Element {
                    // directamente en `scene: [...]` de la config del Game).
       });
       game.events.once(Phaser.Core.Events.READY, () => {
-        const scene = game!.scene.add('CombatScene', CombatScene, false);
+        const scene = game!.scene.add('CombatScene', CombatScene, false) as CombatScene;
         game!.scene.start('CombatScene', { bridge: newBridge, boardContext });
-        void scene; // solo para dejar constancia del mismo patrón que main.ts (H2.7)
+        // NUEVO H4 spec §5.2/§6.1 — `CombatScene.create()` construye `targetingSignal`/el
+        // traductor de gestos DENTRO de `start()` (síncrono desde aquí en Phaser), así que ya
+        // están disponibles inmediatamente después de `scene.start(...)`.
+        setTargetingSignal(scene.getTargetingSignal());
+        setGestureHandle(scene.getGestureCommandTranslator());
       });
       setLeaderAbilities(boardContext.leaderAbilities);
       setBoardContext(boardContext);
@@ -119,6 +129,8 @@ export function CombatScreen(): JSX.Element {
           leaderAbilities={leaderAbilities}
           boardContext={boardContext}
           transform={transform}
+          targetingSignal={targetingSignal}
+          gestureHandle={gestureHandle}
         />
       )}
     </div>
@@ -143,6 +155,8 @@ function CombatHudOverlay({
   leaderAbilities,
   boardContext,
   transform,
+  targetingSignal,
+  gestureHandle,
 }: {
   readonly bridge: CombatBridge;
   readonly leaderName: string;
@@ -151,20 +165,37 @@ function CombatHudOverlay({
   readonly leaderAbilities: readonly AbilityViewData[];
   readonly boardContext: BoardViewContext;
   readonly transform: ReturnType<typeof usePhaserViewportTransform>;
+  readonly targetingSignal: TargetingSignal | null;
+  readonly gestureHandle: GestureCommandTranslatorHandle | null;
 }): JSX.Element {
   const snapshot = useCombatSnapshot(bridge);
+  // NUEVO H4 spec §5.2/§5.3 — banner "Elige un objetivo"/"Elige un Núcleo", montado justo debajo de
+  // `CombatHud` (franja fija, fuera de la transformación de viewport virtual del canvas).
+  const targetingPrompt = useTargetingPrompt(targetingSignal);
   return (
     <>
-      <CombatHud
-        snapshot={snapshot}
-        bridge={bridge}
-        onEndTurn={() => bridge.dispatch({ type: 'END_TURN' })}
-        leaderName={leaderName}
-        leaderAbilities={leaderAbilities}
-      />
+      {/* H4 spec §5.3 — envoltorio `position: absolute` compartido por `CombatHud` (franja fija) y
+          `TargetingPromptBanner` (banner justo debajo): al ser ambos hijos de flujo normal DENTRO de
+          este wrapper (en vez de cada uno `position: absolute` independiente), el banner cae
+          automáticamente bajo `CombatHud` sin necesidad de medir su altura variable
+          (`ResizeObserver`) — el propio flujo del navegador resuelve el offset. */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 4 }}>
+        <CombatHud
+          snapshot={snapshot}
+          bridge={bridge}
+          onEndTurn={() => bridge.dispatch({ type: 'END_TURN' })}
+          leaderName={leaderName}
+          leaderAbilities={leaderAbilities}
+        />
+        <TargetingPromptBanner
+          prompt={targetingPrompt}
+          onCancel={() => gestureHandle?.cancelPending()}
+        />
+      </div>
       <CombatBoardOverlay
         snapshot={snapshot}
         ctx={boardContext}
+        gestureHandle={gestureHandle}
         transform={transform}
         leaderName={leaderName}
         enemyName={enemyName}

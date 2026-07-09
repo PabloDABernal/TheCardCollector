@@ -12,6 +12,7 @@ import '@fontsource/manrope/700.css';
 import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/600.css';
 import './index.css';
+import './combat/card/card.css';
 import { App } from './App';
 
 registerSW({ immediate: true });

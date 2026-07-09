@@ -9,6 +9,7 @@ import type { CardInstanceId, CardId } from '@collector/domain-shared';
 import type { LeaderState } from './leader-state'; // NUEVO H1.17
 import type { CombatOutcome, DefeatReason } from './combat-status'; // NUEVO H1.18
 import type { LeaderFreeStepState } from './turn-phase'; // NUEVO H3.6
+import type { DramaturgiaCardId } from '@collector/domain-shared'; // NUEVO H4.x
 
 /**
  * Slice de H1.3 de `CombatStateSnapshot` (architecture_stack.md §2.2). Historias
@@ -115,4 +116,12 @@ export interface CombatStateSnapshot {
 
   /** NUEVO H3.6. Estado del paso previo gratuito del turno actual del Líder. */
   readonly leaderFreeStep: LeaderFreeStepState;
+
+  /** NUEVO H4.x — id de la carta de Dramaturgia robada más recientemente por el Enemigo
+   *  (persiste entre snapshots hasta el siguiente robo, incluye durante el turno del
+   *  Líder para que la UI pueda mostrar "lo último que jugó el Enemigo" en todo momento,
+   *  no solo durante su turno). `null` antes del primer robo de la run/combate o si
+   *  `enemyAiEnabled` es `false` (sin Dramaturgia). Ver spec H4_componente_carta.md §3.2
+   *  Gap A. */
+  readonly enemyActiveDramaturgiaCardId: DramaturgiaCardId | null;
 }

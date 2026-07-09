@@ -16,7 +16,6 @@ import type Phaser from 'phaser';
 import { createEffectsDirector } from '../effects-director';
 import { JUICE_CONFIG } from '../juice-config';
 import { createRecipeRegistry } from './index';
-import { cooldownReady } from './cooldown-ready';
 import { floatingNumber } from './floating-number';
 import { soundOnly } from './sound-only';
 import type { SoundManager } from '../../audio/sound-manager';
@@ -108,12 +107,11 @@ describe('createRecipeRegistry + EffectsDirector — integración de secuencia (
     expect(soundManager.play).toHaveBeenCalledWith('diceRoll');
   });
 
-  it('H2.10: JUICE_CONFIG.COOLDOWNS_TICKED apunta a cooldownReady, registrado en createRecipeRegistry', () => {
+  it('H4 (fix Reviewer): JUICE_CONFIG.COOLDOWNS_TICKED sin receta de canvas — cooldownReady fue retirada (pulso vive en CSS card-tile--ready)', () => {
     const soundManager = createFakeSoundManager();
     const registry = createRecipeRegistry(soundManager);
-    expect(JUICE_CONFIG.COOLDOWNS_TICKED).toEqual([{ recipeId: 'cooldownReady', mode: 'parallel' }]);
-    expect(registry['cooldownReady']).toBe(cooldownReady);
-    expect(registry['cooldownReady']?.id).toBe('cooldownReady');
+    expect(JUICE_CONFIG.COOLDOWNS_TICKED).toEqual([]);
+    expect(registry['cooldownReady']).toBeUndefined();
   });
 
   it('H2.11: floatingNumber registrado en createRecipeRegistry con id correcto', () => {

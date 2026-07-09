@@ -7,11 +7,17 @@ import { createMockSnapshot, mockCardId, mockNucleoInstanceId, mockCardInstanceI
 import { createGestureCommandTranslator } from './gesture-command-translator';
 
 /**
- * H2.9 spec §6.1 (extendida H3 §5.4/§6) — mismo espíritu que `input-adapter.test.ts` (H2.7)/
- * `board-view.test.ts` (H2.8): un `CombatBridge` FAKE mínimo (`dispatch` mock que registra
- * llamadas, `getSnapshot` devolviendo un `CombatStateSnapshot` mock controlable entre llamadas) y
- * un `BoardViewContext` mock con 5 cartas cubriendo los 4 `cardType` + ambos valores de
+ * H2.9 spec §6.1 (extendida H3 §5.4/§6, H4 §5/§6.1) — mismo espíritu que `input-adapter.test.ts`
+ * (H2.7)/`board-view.test.ts` (H2.8): un `CombatBridge` FAKE mínimo (`dispatch` mock que registra
+ * llamadas, `getSnapshot` devolviendo un `CombatStateSnapshot` mock controlable entre llamadas) y un
+ * `BoardViewContext` mock con 5 cartas cubriendo los 4 `cardType` + ambos valores de
  * `requiresNucleoInstance`.
+ *
+ * H4 §6.1 — el tap real de carta/habilidad migró de `handleGesture` (Phaser `PointerGesture`) a
+ * `handleCardTap`/`handleAbilityTap` (invocados directo desde DOM `onClick`, `CardTile`/
+ * `AbilityTile`). `handleGesture` sigue resolviendo taps de Phaser: rol, Secuaz en mesa, dado de
+ * Núcleo — nunca cartas/habilidades. Esta suite se actualiza para reflejar ese cableado nuevo,
+ * preservando exactamente la misma cobertura de casos.
  */
 const ALLY_CARD_ID = mockCardId('card-ally');
 const CONTRATIEMPO_CARD_ID = mockCardId('card-contratiempo');
@@ -26,13 +32,14 @@ function mockDie(id: string, color: NucleoDie['color'], value: number, overrides
 
 function createMockContext(abilities: AbilityViewData[] = []): BoardViewContext {
   const leaderCardPool: HandCardViewData[] = [
-    { cardId: ALLY_CARD_ID, name: 'Aliado', energyCost: 1, cardType: 'ALIADO', requiresNucleoInstance: false },
+    { cardId: ALLY_CARD_ID, name: 'Aliado', energyCost: 1, cardType: 'ALIADO', requiresNucleoInstance: false, keywords: [] },
     {
       cardId: CONTRATIEMPO_CARD_ID,
       name: 'Contratiempo',
       energyCost: 1,
       cardType: 'CONTRATIEMPO',
       requiresNucleoInstance: false,
+      keywords: [],
     },
     {
       cardId: NO_NUCLEO_CARD_ID,
@@ -40,6 +47,7 @@ function createMockContext(abilities: AbilityViewData[] = []): BoardViewContext 
       energyCost: 1,
       cardType: 'EVENTO',
       requiresNucleoInstance: false,
+      keywords: [],
     },
     {
       cardId: REQUIRES_NUCLEO_CARD_A_ID,
@@ -47,6 +55,7 @@ function createMockContext(abilities: AbilityViewData[] = []): BoardViewContext 
       energyCost: 2,
       cardType: 'EQUIPO',
       requiresNucleoInstance: true,
+      keywords: [],
     },
     {
       cardId: REQUIRES_NUCLEO_CARD_B_ID,
@@ -54,6 +63,7 @@ function createMockContext(abilities: AbilityViewData[] = []): BoardViewContext 
       energyCost: 2,
       cardType: 'EQUIPO',
       requiresNucleoInstance: true,
+      keywords: [],
     },
   ];
 
@@ -65,6 +75,7 @@ function createMockContext(abilities: AbilityViewData[] = []): BoardViewContext 
     leaderCardPool,
     leaderAbilities: abilities,
     enemyAbilities: [],
+    enemyDramaturgiaDeck: [],
   };
 }
 
@@ -81,13 +92,13 @@ function createFakeBridge(snapshot: CombatStateSnapshot): { bridge: CombatBridge
   return { bridge, dispatch, setSnapshot: (s) => { currentSnapshot = s; } };
 }
 
-describe('createGestureCommandTranslator (H2.9 spec §4-§6.1, migrado a nucleoTable H3)', () => {
-  it('caso 1: TAP en ALIADO dispatch PLAY_ALLY inmediato; un TAP posterior en un Núcleo no dispara nada más', () => {
+describe('createGestureCommandTranslator (H2.9 spec §4-§6.1, migrado a nucleoTable H3, tap de carta/habilidad migrado a DOM H4)', () => {
+  it('caso 1: handleCardTap ALIADO dispatch PLAY_ALLY inmediato; un TAP posterior en un Núcleo no dispara nada más', () => {
     const snapshot = createMockSnapshot({ nucleoTable: [mockDie('n1', 'AGRESION', 3)] });
     const { bridge, dispatch } = createFakeBridge(snapshot);
     const translator = createGestureCommandTranslator(bridge, createMockContext());
 
-    translator.handleGesture({ kind: 'TAP', targetId: cardTileName(ALLY_CARD_ID), point: { x: 0, y: 0 } });
+    translator.handleCardTap(ALLY_CARD_ID);
 
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(dispatch).toHaveBeenCalledWith({
@@ -100,11 +111,11 @@ describe('createGestureCommandTranslator (H2.9 spec §4-§6.1, migrado a nucleoT
     expect(dispatch).toHaveBeenCalledTimes(1);
   });
 
-  it('caso 2: TAP en CONTRATIEMPO dispatch PLAY_CONTRATIEMPO inmediato', () => {
+  it('caso 2: handleCardTap CONTRATIEMPO dispatch PLAY_CONTRATIEMPO inmediato', () => {
     const { bridge, dispatch } = createFakeBridge(createMockSnapshot());
     const translator = createGestureCommandTranslator(bridge, createMockContext());
 
-    translator.handleGesture({ kind: 'TAP', targetId: cardTileName(CONTRATIEMPO_CARD_ID), point: { x: 0, y: 0 } });
+    translator.handleCardTap(CONTRATIEMPO_CARD_ID);
 
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(dispatch).toHaveBeenCalledWith({
@@ -114,11 +125,11 @@ describe('createGestureCommandTranslator (H2.9 spec §4-§6.1, migrado a nucleoT
     });
   });
 
-  it('caso 3: TAP en EVENTO/EQUIPO con requiresNucleoInstance=false dispatch PLAY_CARD inmediato SIN nucleoInstanceId ni target', () => {
+  it('caso 3: handleCardTap EVENTO/EQUIPO con requiresNucleoInstance=false dispatch PLAY_CARD inmediato SIN nucleoInstanceId ni target', () => {
     const { bridge, dispatch } = createFakeBridge(createMockSnapshot());
     const translator = createGestureCommandTranslator(bridge, createMockContext());
 
-    translator.handleGesture({ kind: 'TAP', targetId: cardTileName(NO_NUCLEO_CARD_ID), point: { x: 0, y: 0 } });
+    translator.handleCardTap(NO_NUCLEO_CARD_ID);
 
     expect(dispatch).toHaveBeenCalledTimes(1);
     const command = dispatch.mock.calls[0]![0] as CombatCommand;
@@ -127,12 +138,12 @@ describe('createGestureCommandTranslator (H2.9 spec §4-§6.1, migrado a nucleoT
     expect('target' in command).toBe(false);
   });
 
-  it('caso 4: TAP en carta de Ataque sin Secuaces en mesa → target ENEMY automático; no dispatch hasta el TAP en un Núcleo', () => {
+  it('caso 4: handleCardTap carta de Ataque sin Secuaces en mesa → target ENEMY automático; no dispatch hasta el TAP en un Núcleo', () => {
     const snapshot = createMockSnapshot({ nucleoTable: [mockDie('n1', 'AGRESION', 3)] });
     const { bridge, dispatch } = createFakeBridge(snapshot);
     const translator = createGestureCommandTranslator(bridge, createMockContext());
 
-    translator.handleGesture({ kind: 'TAP', targetId: cardTileName(REQUIRES_NUCLEO_CARD_A_ID), point: { x: 0, y: 0 } });
+    translator.handleCardTap(REQUIRES_NUCLEO_CARD_A_ID);
     expect(dispatch).not.toHaveBeenCalled();
 
     translator.handleGesture({ kind: 'TAP', targetId: String(mockNucleoInstanceId('n1')), point: { x: 0, y: 0 } });
@@ -147,7 +158,7 @@ describe('createGestureCommandTranslator (H2.9 spec §4-§6.1, migrado a nucleoT
     });
   });
 
-  it('caso 4b: TAP en carta de Ataque CON Secuaces en mesa → espera TAP de objetivo (Enemigo o Secuaz) antes del Núcleo', () => {
+  it('caso 4b: handleCardTap carta de Ataque CON Secuaces en mesa → espera TAP de objetivo (Enemigo o Secuaz) antes del Núcleo', () => {
     const minionInstanceId = mockCardInstanceId('minion-1');
     const minion = { instanceId: minionInstanceId } as unknown as MinionInPlay;
     const snapshot = createMockSnapshot({
@@ -157,7 +168,7 @@ describe('createGestureCommandTranslator (H2.9 spec §4-§6.1, migrado a nucleoT
     const { bridge, dispatch } = createFakeBridge(snapshot);
     const translator = createGestureCommandTranslator(bridge, createMockContext());
 
-    translator.handleGesture({ kind: 'TAP', targetId: cardTileName(REQUIRES_NUCLEO_CARD_A_ID), point: { x: 0, y: 0 } });
+    translator.handleCardTap(REQUIRES_NUCLEO_CARD_A_ID);
     expect(dispatch).not.toHaveBeenCalled();
 
     translator.handleGesture({ kind: 'TAP', targetId: String(minionInstanceId), point: { x: 0, y: 0 } });
@@ -173,13 +184,13 @@ describe('createGestureCommandTranslator (H2.9 spec §4-§6.1, migrado a nucleoT
     });
   });
 
-  it('caso 5: selección pendiente sustituida — TAP A, TAP B (ambos requieren Núcleo), TAP Núcleo → dispatch con cardId de B, nunca A', () => {
+  it('caso 5: selección pendiente sustituida — handleCardTap A, handleCardTap B (ambos requieren Núcleo), TAP Núcleo → dispatch con cardId de B, nunca A', () => {
     const snapshot = createMockSnapshot({ nucleoTable: [mockDie('n1', 'AGRESION', 3)] });
     const { bridge, dispatch } = createFakeBridge(snapshot);
     const translator = createGestureCommandTranslator(bridge, createMockContext());
 
-    translator.handleGesture({ kind: 'TAP', targetId: cardTileName(REQUIRES_NUCLEO_CARD_A_ID), point: { x: 0, y: 0 } });
-    translator.handleGesture({ kind: 'TAP', targetId: cardTileName(REQUIRES_NUCLEO_CARD_B_ID), point: { x: 0, y: 0 } });
+    translator.handleCardTap(REQUIRES_NUCLEO_CARD_A_ID);
+    translator.handleCardTap(REQUIRES_NUCLEO_CARD_B_ID);
     expect(dispatch).not.toHaveBeenCalled();
 
     translator.handleGesture({ kind: 'TAP', targetId: String(mockNucleoInstanceId('n1')), point: { x: 0, y: 0 } });
@@ -194,15 +205,30 @@ describe('createGestureCommandTranslator (H2.9 spec §4-§6.1, migrado a nucleoT
     });
   });
 
-  it('caso 6: cancelación explícita — TAP A (requiere Núcleo), TAP en vacío, TAP Núcleo → ningún dispatch ocurre nunca', () => {
+  it('caso 6: cancelación explícita — handleCardTap A (requiere Núcleo), TAP en vacío, TAP Núcleo → ningún dispatch ocurre nunca', () => {
     const snapshot = createMockSnapshot({ nucleoTable: [mockDie('n1', 'AGRESION', 3)] });
     const { bridge, dispatch } = createFakeBridge(snapshot);
     const translator = createGestureCommandTranslator(bridge, createMockContext());
 
-    translator.handleGesture({ kind: 'TAP', targetId: cardTileName(REQUIRES_NUCLEO_CARD_A_ID), point: { x: 0, y: 0 } });
+    translator.handleCardTap(REQUIRES_NUCLEO_CARD_A_ID);
     translator.handleGesture({ kind: 'TAP', targetId: null, point: { x: 0, y: 0 } });
     translator.handleGesture({ kind: 'TAP', targetId: String(mockNucleoInstanceId('n1')), point: { x: 0, y: 0 } });
 
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('caso 6b: cancelPending() explícito (botón "Cancelar" del banner) — mismo efecto que un TAP en vacío', () => {
+    const snapshot = createMockSnapshot({ nucleoTable: [mockDie('n1', 'AGRESION', 3)] });
+    const { bridge, dispatch } = createFakeBridge(snapshot);
+    const translator = createGestureCommandTranslator(bridge, createMockContext());
+
+    translator.handleCardTap(REQUIRES_NUCLEO_CARD_A_ID);
+    expect(translator.targetingSignal.getState().kind).not.toBe('NONE');
+
+    translator.cancelPending();
+    expect(translator.targetingSignal.getState()).toEqual({ kind: 'NONE' });
+
+    translator.handleGesture({ kind: 'TAP', targetId: String(mockNucleoInstanceId('n1')), point: { x: 0, y: 0 } });
     expect(dispatch).not.toHaveBeenCalled();
   });
 
@@ -211,7 +237,7 @@ describe('createGestureCommandTranslator (H2.9 spec §4-§6.1, migrado a nucleoT
     const { bridge, dispatch } = createFakeBridge(snapshot);
     const translator = createGestureCommandTranslator(bridge, createMockContext());
 
-    translator.handleGesture({ kind: 'TAP', targetId: cardTileName(REQUIRES_NUCLEO_CARD_A_ID), point: { x: 0, y: 0 } });
+    translator.handleCardTap(REQUIRES_NUCLEO_CARD_A_ID);
     expect(dispatch).not.toHaveBeenCalled();
 
     const n1Id = String(mockNucleoInstanceId('n1'));
@@ -238,7 +264,7 @@ describe('createGestureCommandTranslator (H2.9 spec §4-§6.1, migrado a nucleoT
     const { bridge, dispatch, setSnapshot } = createFakeBridge(initialSnapshot);
     const translator = createGestureCommandTranslator(bridge, createMockContext());
 
-    translator.handleGesture({ kind: 'TAP', targetId: cardTileName(REQUIRES_NUCLEO_CARD_A_ID), point: { x: 0, y: 0 } });
+    translator.handleCardTap(REQUIRES_NUCLEO_CARD_A_ID);
 
     // La mesa cambió (NUCLEO_TABLE_REROLLED) mientras la selección estaba pendiente.
     setSnapshot(createMockSnapshot({ nucleoTable: [mockDie('n2', 'DEFENSA', 5)] }));
@@ -260,11 +286,11 @@ describe('createGestureCommandTranslator (H2.9 spec §4-§6.1, migrado a nucleoT
     const { bridge, dispatch } = createFakeBridge(snapshot);
     const translator = createGestureCommandTranslator(bridge, createMockContext());
 
+    translator.handleCardTap(ALLY_CARD_ID);
+    translator.handleCardTap(CONTRATIEMPO_CARD_ID);
+    translator.handleCardTap(NO_NUCLEO_CARD_ID);
+    translator.handleCardTap(REQUIRES_NUCLEO_CARD_A_ID);
     for (const gesture of [
-      { kind: 'TAP' as const, targetId: cardTileName(ALLY_CARD_ID), point: { x: 0, y: 0 } },
-      { kind: 'TAP' as const, targetId: cardTileName(CONTRATIEMPO_CARD_ID), point: { x: 0, y: 0 } },
-      { kind: 'TAP' as const, targetId: cardTileName(NO_NUCLEO_CARD_ID), point: { x: 0, y: 0 } },
-      { kind: 'TAP' as const, targetId: cardTileName(REQUIRES_NUCLEO_CARD_A_ID), point: { x: 0, y: 0 } },
       { kind: 'TAP' as const, targetId: String(mockNucleoInstanceId('n1')), point: { x: 0, y: 0 } },
       { kind: 'TAP' as const, targetId: 'FOCUS_ID_LEADER', point: { x: 0, y: 0 } },
     ]) {
@@ -278,7 +304,7 @@ describe('createGestureCommandTranslator (H2.9 spec §4-§6.1, migrado a nucleoT
     }
   });
 
-  describe('NUEVO H3.1/§5.4 — TAP en icono de habilidad del Líder', () => {
+  describe('NUEVO H3.1/§5.4 (migrado a handleAbilityTap H4 §6.1) — tap en icono de habilidad del Líder', () => {
     function abilityContext(coreCost: AbilityViewData['coreCost']): BoardViewContext {
       const ability: AbilityViewData = { abilityId: ABILITY_ID, name: 'Golpe', baseCooldown: 2, coreCost };
       return createMockContext([ability]);
@@ -289,7 +315,7 @@ describe('createGestureCommandTranslator (H2.9 spec §4-§6.1, migrado a nucleoT
       const { bridge, dispatch } = createFakeBridge(snapshot);
       const translator = createGestureCommandTranslator(bridge, abilityContext({ kind: 'ANY' }));
 
-      translator.handleGesture({ kind: 'TAP', targetId: ABILITY_ID, point: { x: 0, y: 0 } });
+      translator.handleAbilityTap(ABILITY_ID);
 
       expect(dispatch).toHaveBeenCalledTimes(1);
       expect(dispatch).toHaveBeenCalledWith({
@@ -308,7 +334,7 @@ describe('createGestureCommandTranslator (H2.9 spec §4-§6.1, migrado a nucleoT
       const { bridge, dispatch } = createFakeBridge(snapshot);
       const translator = createGestureCommandTranslator(bridge, abilityContext({ kind: 'ANY' }));
 
-      translator.handleGesture({ kind: 'TAP', targetId: ABILITY_ID, point: { x: 0, y: 0 } });
+      translator.handleAbilityTap(ABILITY_ID);
       expect(dispatch).not.toHaveBeenCalled();
 
       translator.handleGesture({ kind: 'TAP', targetId: String(mockNucleoInstanceId('n2')), point: { x: 0, y: 0 } });
@@ -328,9 +354,55 @@ describe('createGestureCommandTranslator (H2.9 spec §4-§6.1, migrado a nucleoT
       const { bridge, dispatch } = createFakeBridge(snapshot);
       const translator = createGestureCommandTranslator(bridge, abilityContext({ kind: 'COLOR', colors: ['AGRESION'] }));
 
-      translator.handleGesture({ kind: 'TAP', targetId: ABILITY_ID, point: { x: 0, y: 0 } });
+      translator.handleAbilityTap(ABILITY_ID);
 
       expect(dispatch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('NUEVO H4 §5.2 — targetingSignal refleja el estado de `pending`', () => {
+    it('AWAITING_NUCLEO_FOR_CARD expone cardName + validDieIds (dados AVAILABLE)', () => {
+      const snapshot = createMockSnapshot({
+        nucleoTable: [mockDie('n1', 'AGRESION', 3), mockDie('n2', 'DEFENSA', 1, { status: 'SPENT' })],
+      });
+      const { bridge } = createFakeBridge(snapshot);
+      const translator = createGestureCommandTranslator(bridge, createMockContext());
+
+      translator.handleCardTap(REQUIRES_NUCLEO_CARD_A_ID);
+
+      expect(translator.targetingSignal.getState()).toEqual({
+        kind: 'AWAITING_NUCLEO_FOR_CARD',
+        cardName: 'Equipo A (requiere Núcleo)',
+        validDieIds: [String(mockNucleoInstanceId('n1'))],
+      });
+    });
+
+    it('AWAITING_ATTACK_TARGET expone cardName + validTargetIds (Enemigo + Secuaces en mesa)', () => {
+      const minionInstanceId = mockCardInstanceId('minion-1');
+      const minion = { instanceId: minionInstanceId } as unknown as MinionInPlay;
+      const snapshot = createMockSnapshot({ minionsInPlay: [minion] });
+      const { bridge } = createFakeBridge(snapshot);
+      const translator = createGestureCommandTranslator(bridge, createMockContext());
+
+      translator.handleCardTap(REQUIRES_NUCLEO_CARD_A_ID);
+
+      const prompt = translator.targetingSignal.getState();
+      expect(prompt.kind).toBe('AWAITING_ATTACK_TARGET');
+      expect(prompt).toMatchObject({ cardName: 'Equipo A (requiere Núcleo)' });
+      if (prompt.kind === 'AWAITING_ATTACK_TARGET') {
+        expect(prompt.validTargetIds).toContain(String(minionInstanceId));
+      }
+    });
+
+    it('vuelve a NONE tras completar la selección', () => {
+      const snapshot = createMockSnapshot({ nucleoTable: [mockDie('n1', 'AGRESION', 3)] });
+      const { bridge } = createFakeBridge(snapshot);
+      const translator = createGestureCommandTranslator(bridge, createMockContext());
+
+      translator.handleCardTap(REQUIRES_NUCLEO_CARD_A_ID);
+      translator.handleGesture({ kind: 'TAP', targetId: String(mockNucleoInstanceId('n1')), point: { x: 0, y: 0 } });
+
+      expect(translator.targetingSignal.getState()).toEqual({ kind: 'NONE' });
     });
   });
 });

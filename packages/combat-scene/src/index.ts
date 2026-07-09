@@ -10,15 +10,32 @@
 // gestos — son detalles internos que `CombatScene` ya orquesta; `apps/shell` nunca necesita
 // tocarlos directamente (spec §0.1).
 export { CombatScene, COMBAT_SCENE_VIEWPORT } from './scenes/CombatScene';
-export type { CombatSceneInitData } from './scenes/CombatScene';
-export type { BoardViewContext, HandCardViewData, AbilityViewData } from './view';
+export type { CombatSceneInitData, GestureCommandTranslatorHandle } from './scenes/CombatScene';
+export type { BoardViewContext, HandCardViewData, AbilityViewData, DramaturgiaCardViewData } from './view';
+export { cardTileName } from './view';
 export type { DefaultCombatSetup } from './default-combat-setup';
+// NUEVO H4 spec §5/§6.1 — `apps/shell` necesita estos 2 tipos para `useTargetingPrompt`/
+// `TargetingPromptBanner`/`HandCardRow`/`AbilityRow`: `TargetingSignal`/`TargetingPrompt` (lectura de
+// estado de targeting, expuesta por `CombatScene.getTargetingSignal()` tras `READY`) y
+// `GestureCommandTranslatorHandle` (superficie reducida de `handleCardTap`/`handleAbilityTap`/
+// `cancelPending`, expuesta por `CombatScene.getGestureCommandTranslator()`).
+export type { TargetingSignal, TargetingPrompt } from './interaction';
 // H4 spec §2.3 — `PANEL_ZONES`/`PanelZone` SÍ se reexportan (excepción puntual, mismo espíritu que
 // `isAnyLeaderAbilityActivatable` abajo): `apps/shell` (`CombatBoardOverlay.tsx`) necesita las MISMAS
 // coordenadas de zona que `board-layout.ts` ya calcula, para las etiquetas de zona y las líneas de
 // rol de la capa HTML sincronizada — nunca duplica un número de posición.
 export type { PanelZone } from './view';
 export { LEADER_POSITION, ENEMY_POSITION, SCENARIO_POSITION, PANEL_ZONES } from './view';
+// NUEVO H4 spec §6 — `HandCardRow.tsx`/`AbilityRow.tsx` (apps/shell) reutilizan literalmente estas
+// coordenadas para posicionar `CardTile`/`AbilityTile` HTML — mismo criterio que `PANEL_ZONES`
+// arriba, nunca duplicar un número de posición.
+export {
+  HAND_ROW_POSITION,
+  TILE_SEPARATION_PX,
+  LEADER_ABILITIES_ROW_Y,
+  ENEMY_ABILITIES_ROW_Y,
+  ABILITY_ICON_SEPARATION_PX,
+} from './view';
 // FIX Reviewer post-H3 (commit `cce72a3`) — `isAnyLeaderAbilityActivatable` SÍ se reexporta
 // (excepción puntual a "sin detalles internos" de arriba): `apps/shell` (`CombatHud.tsx`) lo
 // necesita para calcular la disponibilidad agregada de "Activar Habilidad" con el mismo criterio

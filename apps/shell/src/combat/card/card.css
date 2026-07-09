@@ -1,0 +1,64 @@
+/* H4_componente_carta.md §4 — animaciones CSS/DOM de carta/habilidad, co-localizadas con
+   CardTile.tsx/AbilityTile.tsx/HandCardRow.tsx (import único desde main.tsx o CombatScreen.css,
+   nunca duplicado en index.css general). */
+
+/* §4.3 — glow --foil pulsante, reutilizado por: (a) selección de CardTile/AbilityTile (`selected`),
+   ya expresada como box-shadow estático; esta clase es para el pulso VIVO ("listo para jugar" /
+   cooldown listo), (b) AbilityTile con remaining === 0. */
+@keyframes foil-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(212, 162, 76, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(212, 162, 76, 0.45);
+  }
+}
+
+.card-tile--ready {
+  animation: foil-pulse 1.4s ease-in-out infinite;
+}
+
+/* Variante de fondo del mismo keyframe — usada por TargetingPromptBanner (H4 §5.3). */
+@keyframes foil-pulse-bg {
+  0%,
+  100% {
+    background: rgba(212, 162, 76, 0.12);
+  }
+  50% {
+    background: rgba(212, 162, 76, 0.22);
+  }
+}
+
+/* §4.2 — animación de "jugar carta": elevar + descartar hacia el centro del tablero, 280ms, dos
+   fases con ease-out. Se aplica sobre el <div> de CardTile ya posicionado con left/top absolutos
+   (dentro de CombatBoardOverlay/HandCardRow) — transform/opacity puros, GPU-compositado. */
+@keyframes card-play-exit {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  35% {
+    transform: translateY(-40px) scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(120px) scale(0.85);
+    opacity: 0;
+  }
+}
+
+.card-tile--playing {
+  animation: card-play-exit 280ms ease-out forwards;
+  pointer-events: none !important;
+}
+
+/* §4.2 punto 4 — el resto de la mano se reposiciona con transition de `left`/`top` cuando el padre
+   recalcula `tileX` contra el nuevo `hand.length`. Se aplica siempre (no solo durante --playing) al
+   contenedor posicionado de cada CardTile de mano. */
+.hand-card-slot {
+  position: absolute;
+  transition:
+    left 200ms ease-out,
+    top 200ms ease-out;
+}

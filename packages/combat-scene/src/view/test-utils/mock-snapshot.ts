@@ -28,6 +28,7 @@ export function createMockSnapshot(overrides: Partial<CombatStateSnapshot> = {})
     leaderHand: [],
     leaderDeckRemaining: 0,
     leaderFreeStep: { takenThisTurn: false },
+    enemyActiveDramaturgiaCardId: null,
   };
 
   return { ...base, ...overrides };

@@ -7,7 +7,7 @@ import { CombatEngine, buildCombatEngineConfig, cardHasAttackEffect } from '@col
 import { createCombatBridge } from '@collector/combat-bridge';
 import { CombatScene, COMBAT_SCENE_VIEWPORT } from './scenes/CombatScene';
 import type { DefaultCombatSetup } from './default-combat-setup';
-import type { BoardViewContext, HandCardViewData, AbilityViewData } from './view';
+import type { BoardViewContext, HandCardViewData, AbilityViewData, DramaturgiaCardViewData } from './view';
 
 // H2.9 spec §1.4 — `main.ts` (harness standalone de `combat-scene`, playground de iteración
 // rápida sin levantar `apps/shell` completo) pierde su import de `buildDefaultCombatBridge`
@@ -80,6 +80,8 @@ async function buildHarnessCombatSetup(): Promise<DefaultCombatSetup> {
       energyCost: card.cost.energy,
       cardType: card.type,
       requiresNucleoInstance: cardHasAttackEffect(card),
+      keywords: card.keywords, // NUEVO H4 spec §1
+      ...(card.ruleText !== undefined ? { ruleText: card.ruleText } : {}), // NUEVO H4 spec §3.2 Gap B
     };
   });
 
@@ -88,12 +90,22 @@ async function buildHarnessCombatSetup(): Promise<DefaultCombatSetup> {
     name: ability.name,
     baseCooldown: ability.baseCooldown,
     coreCost: ability.coreCost, // NUEVO H3 (spec §5.4)
+    ...(ability.ruleText !== undefined ? { ruleText: ability.ruleText } : {}), // NUEVO H4 spec §3.2 Gap B
   }));
   const enemyAbilities: AbilityViewData[] = enemy.abilities.map((ability) => ({
     abilityId: ability.id,
     name: ability.name,
     baseCooldown: ability.baseCooldown,
     coreCost: ability.coreCost, // NUEVO H3 (spec §5.4)
+    ...(ability.ruleText !== undefined ? { ruleText: ability.ruleText } : {}), // NUEVO H4 spec §3.2 Gap B
+  }));
+
+  const enemyDramaturgiaDeck: DramaturgiaCardViewData[] = enemy.dramaturgiaDeck.map((card) => ({
+    dramaturgiaCardId: card.id,
+    name: card.name,
+    icon: card.icon,
+    ...(card.effectDescription !== undefined ? { ruleText: card.effectDescription } : {}),
+    keywords: [],
   }));
 
   const boardContext: BoardViewContext = {
@@ -104,6 +116,7 @@ async function buildHarnessCombatSetup(): Promise<DefaultCombatSetup> {
     leaderCardPool,
     leaderAbilities,
     enemyAbilities,
+    enemyDramaturgiaDeck, // NUEVO H4 spec §3.3
   };
 
   return { bridge, boardContext };

@@ -54,4 +54,8 @@ export interface AbilityDefinition {
   /** Ausente = sin efecto numérico modelado todavía (igual que una habilidad ausente de
    *  `CombatEngineConfig.abilityEffects` hoy — ver §0.2 nota sobre Líder/enemyHealth). */
   readonly effect?: CatalogAbilityEffect;
+  /** NUEVO H4.x — texto de regla libre, mismo patrón que `CardDefinition.ruleText` /
+   *  `DramaturgiaCardDefinition.effectDescription`. Ver H4_componente_carta.md §3.2
+   *  Gap B. */
+  readonly ruleText?: string;
 }

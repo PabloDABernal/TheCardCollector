@@ -3,7 +3,13 @@ import type { LeaderId, EnemyId, ScenarioId } from '@collector/domain-shared';
 import { CatalogLoader, buildNameLookup } from '@collector/domain-catalog';
 import { CombatEngine, buildCombatEngineConfig, cardHasAttackEffect } from '@collector/domain-combat';
 import { createCombatBridge } from '@collector/combat-bridge';
-import type { BoardViewContext, HandCardViewData, AbilityViewData, DefaultCombatSetup } from '@collector/combat-scene';
+import type {
+  BoardViewContext,
+  HandCardViewData,
+  AbilityViewData,
+  DramaturgiaCardViewData,
+  DefaultCombatSetup,
+} from '@collector/combat-scene';
 import { loadRawContent } from './load-raw-content';
 import { DEFAULT_LEADER_OPTION } from './leader-options';
 
@@ -62,6 +68,8 @@ export async function buildCombatSetup(params: BuildCombatSetupParams = {}): Pro
       energyCost: card.cost.energy,
       cardType: card.type,
       requiresNucleoInstance: cardHasAttackEffect(card), // NUEVO H2.9 spec §4.2
+      keywords: card.keywords, // NUEVO H4 spec §1
+      ...(card.ruleText !== undefined ? { ruleText: card.ruleText } : {}), // NUEVO H4 spec §3.2 Gap B
     };
   });
 
@@ -70,12 +78,25 @@ export async function buildCombatSetup(params: BuildCombatSetupParams = {}): Pro
     name: ability.name,
     baseCooldown: ability.baseCooldown,
     coreCost: ability.coreCost, // NUEVO H3 (spec §5.4)
+    ...(ability.ruleText !== undefined ? { ruleText: ability.ruleText } : {}), // NUEVO H4 spec §3.2 Gap B
   }));
   const enemyAbilities: AbilityViewData[] = enemy.abilities.map((ability) => ({
     abilityId: ability.id,
     name: ability.name,
     baseCooldown: ability.baseCooldown,
     coreCost: ability.coreCost, // NUEVO H3 (spec §5.4)
+    ...(ability.ruleText !== undefined ? { ruleText: ability.ruleText } : {}), // NUEVO H4 spec §3.2 Gap B
+  }));
+
+  // NUEVO H4 spec §3.3 — todo el `dramaturgiaDeck` del Enemigo activo, resuelto una vez, para que
+  // `EnemyDramaturgiaCardSlot` pueda resolver `snapshot.enemyActiveDramaturgiaCardId` a sus datos
+  // completos sin acoplar `apps/shell` al catálogo crudo.
+  const enemyDramaturgiaDeck: DramaturgiaCardViewData[] = enemy.dramaturgiaDeck.map((card) => ({
+    dramaturgiaCardId: card.id,
+    name: card.name,
+    icon: card.icon,
+    ...(card.effectDescription !== undefined ? { ruleText: card.effectDescription } : {}),
+    keywords: [],
   }));
 
   const boardContext: BoardViewContext = {
@@ -86,6 +107,7 @@ export async function buildCombatSetup(params: BuildCombatSetupParams = {}): Pro
     leaderCardPool,
     leaderAbilities, // NUEVO H2.10
     enemyAbilities, // NUEVO H2.10
+    enemyDramaturgiaDeck, // NUEVO H4 spec §3.3
   };
 
   return { bridge, boardContext };

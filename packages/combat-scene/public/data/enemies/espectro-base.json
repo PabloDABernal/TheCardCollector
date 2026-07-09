@@ -9,7 +9,8 @@
       "coreCost": { "kind": "ANY" },
       "baseCooldown": 1,
       "effect": { "kind": "ATTACK", "formula": { "baseFormula": { "kind": "VALUE" } } },
-      "aiProfile": { "branch": "ATTACK", "tier": "BASICA" }
+      "aiProfile": { "branch": "ATTACK", "tier": "BASICA" },
+      "ruleText": "Ataque directo al Líder, sin bonificación adicional."
     },
     {
       "id": "ability-espectro-base-susurro",
@@ -17,7 +18,8 @@
       "coreCost": { "kind": "ANY" },
       "baseCooldown": 1,
       "effect": { "kind": "PLOT", "amount": 1 },
-      "aiProfile": { "branch": "PLOT", "tier": "BASICA" }
+      "aiProfile": { "branch": "PLOT", "tier": "BASICA" },
+      "ruleText": "Trama +1 a favor del Enemigo."
     },
     {
       "id": "ability-espectro-base-golpe-espectral",
@@ -25,7 +27,8 @@
       "coreCost": { "kind": "COLOR", "colors": ["CONTROL"] },
       "baseCooldown": 3,
       "effect": { "kind": "ATTACK", "formula": { "baseFormula": { "kind": "MULTIPLY", "amount": 2 } } },
-      "aiProfile": { "branch": "ATTACK", "tier": "FIRMA" }
+      "aiProfile": { "branch": "ATTACK", "tier": "FIRMA" },
+      "ruleText": "Ataque ×2, escalando con el valor del dado usado."
     },
     {
       "id": "ability-espectro-base-eco-de-tragedia",
@@ -33,7 +36,8 @@
       "coreCost": { "kind": "COLOR", "colors": ["CONTROL", "CAOS"] },
       "baseCooldown": 4,
       "effect": { "kind": "PLOT", "amount": 3 },
-      "aiProfile": { "branch": "PLOT", "tier": "STANDARD" }
+      "aiProfile": { "branch": "PLOT", "tier": "STANDARD" },
+      "ruleText": "Trama +3 a favor del Enemigo."
     }
   ],
   "phases": [
@@ -41,11 +45,11 @@
     { "phaseNumber": 2, "changeCondition": { "kind": "TURN_COUNT_AT_LEAST", "turn": 1 } }
   ],
   "dramaturgiaDeck": [
-    { "id": "dramacard-espectro-base-01", "name": "Frío Mortal", "icon": "ATTACK" },
-    { "id": "dramacard-espectro-base-02", "name": "Zarpa Fantasmal", "icon": "ATTACK" },
-    { "id": "dramacard-espectro-base-03", "name": "Lamento", "icon": "PLOT" },
-    { "id": "dramacard-espectro-base-04", "name": "Presagio", "icon": "PLOT" },
+    { "id": "dramacard-espectro-base-01", "name": "Frío Mortal", "icon": "ATTACK", "effectDescription": "El Espectro congela al Líder con un ataque gélido." },
+    { "id": "dramacard-espectro-base-02", "name": "Zarpa Fantasmal", "icon": "ATTACK", "effectDescription": "Una garra espectral atraviesa las defensas del Líder." },
+    { "id": "dramacard-espectro-base-03", "name": "Lamento", "icon": "PLOT", "effectDescription": "El lamento del Espectro añade Trama al Escenario." },
+    { "id": "dramacard-espectro-base-04", "name": "Presagio", "icon": "PLOT", "effectDescription": "Un mal presagio adelanta el destino del Escenario." },
     { "id": "dramacard-espectro-base-05", "name": "Maldición Menor", "icon": "PLOT", "effectDescription": "Daño extra directo (no ejecutable todavía, ver spec H1.10 §0.3)." },
-    { "id": "dramacard-espectro-base-06", "name": "Aparición", "icon": "ATTACK" }
+    { "id": "dramacard-espectro-base-06", "name": "Aparición", "icon": "ATTACK", "effectDescription": "El Espectro se materializa para golpear por sorpresa." }
   ]
 }

@@ -6,27 +6,31 @@
       "id": "ability-soldado-base-guardia-firme",
       "name": "Guardia Firme",
       "coreCost": { "kind": "ANY" },
-      "baseCooldown": 1
+      "baseCooldown": 1,
+      "ruleText": "Habilidad básica del Líder, siempre disponible con cualquier dado de Núcleo."
     },
     {
       "id": "ability-soldado-base-avance-agresivo",
       "name": "Avance Agresivo",
       "coreCost": { "kind": "COLOR", "colors": ["AGRESION"] },
       "baseCooldown": 2,
-      "effect": { "kind": "PLOT", "amount": 1 }
+      "effect": { "kind": "PLOT", "amount": 1 },
+      "ruleText": "Trama +1 a favor del Líder. Requiere Núcleo Agresión."
     },
     {
       "id": "ability-soldado-base-linea-defensiva",
       "name": "Línea Defensiva",
       "coreCost": { "kind": "COLOR", "colors": ["DEFENSA"] },
-      "baseCooldown": 3
+      "baseCooldown": 3,
+      "ruleText": "Refuerza la posición defensiva del Líder. Requiere Núcleo Defensa."
     },
     {
       "id": "ability-soldado-base-grito-de-guerra",
       "name": "Grito de Guerra",
       "coreCost": { "kind": "COLOR", "colors": ["AGRESION", "DEFENSA"] },
       "baseCooldown": 4,
-      "effect": { "kind": "PLOT", "amount": 2 }
+      "effect": { "kind": "PLOT", "amount": 2 },
+      "ruleText": "Trama +2 a favor del Líder. Requiere Núcleo Agresión o Defensa."
     }
   ],
   "cardPoolIds": [

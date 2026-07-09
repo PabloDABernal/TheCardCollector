@@ -4,7 +4,6 @@ import type { NucleoDie } from '@collector/domain-combat';
 import { createBoardView } from './board-view';
 import { FOCUS_ID_LEADER, FOCUS_ID_ENEMY, FOCUS_ID_SCENARIO } from '../juice';
 import { PLACEHOLDER_POSITIONS } from '../juice/recipes/placeholder';
-import { cardTileName } from './card-hand-view';
 import { NUCLEO_COLOR_HEX } from './nucleo-colors';
 import { createFakeBoardScene } from './test-utils/fake-board-scene';
 import { createMockSnapshot, mockCardId, mockCardInstanceId, mockNucleoInstanceId } from './test-utils/mock-snapshot';
@@ -26,11 +25,12 @@ function createMockContext(overrides: Partial<BoardViewContext> = {}): BoardView
     enemyMaxHealth: 40,
     scenarioPlotDefeatThreshold: 10,
     leaderCardPool: [
-      { cardId: mockCardId('card-cheap'), name: 'Carta Barata', energyCost: 1, cardType: 'EVENTO', requiresNucleoInstance: false },
-      { cardId: mockCardId('card-expensive'), name: 'Carta Cara', energyCost: 5, cardType: 'EQUIPO', requiresNucleoInstance: false },
+      { cardId: mockCardId('card-cheap'), name: 'Carta Barata', energyCost: 1, cardType: 'EVENTO', requiresNucleoInstance: false, keywords: [] },
+      { cardId: mockCardId('card-expensive'), name: 'Carta Cara', energyCost: 5, cardType: 'EQUIPO', requiresNucleoInstance: false, keywords: [] },
     ],
     leaderAbilities: [],
     enemyAbilities: [],
+    enemyDramaturgiaDeck: [],
     ...overrides,
   };
 }
@@ -81,7 +81,7 @@ describe('BoardView — render (H2.8, migrado a nucleoTable H3)', () => {
     expect(scenarioRect!.y).toBe(PLACEHOLDER_POSITIONS.scenario!.y);
   });
 
-  it('render() llamado dos veces con el mismo snapshot no duplica roles ni tiles de mano; la mesa de Núcleos conserva la misma referencia (H3: los dados nunca se destruyen/recrean)', () => {
+  it('render() llamado dos veces con el mismo snapshot no duplica roles; la mesa de Núcleos conserva la misma referencia (H3: los dados nunca se destruyen/recrean)', () => {
     const { scene, rectangles } = createFakeBoardScene();
     const ctx = createMockContext();
     const boardView = createBoardView(scene, ctx);
@@ -95,9 +95,6 @@ describe('BoardView — render (H2.8, migrado a nucleoTable H3)', () => {
     const rolesAfterFirst = rectangles.filter(
       (r) => r.name === FOCUS_ID_LEADER || r.name === FOCUS_ID_ENEMY || r.name === FOCUS_ID_SCENARIO,
     );
-    const handTilesAfterFirst = rectangles.filter(
-      (r) => r.name === cardTileName(ctx.leaderCardPool[0]!.cardId) || r.name === cardTileName(ctx.leaderCardPool[1]!.cardId),
-    );
     const n1Id = String(mockNucleoInstanceId('n1'));
     const nucleoRectsAfterFirst = rectangles.filter((r) => r.getData('targetId') === n1Id && !r.destroyed);
 
@@ -106,15 +103,10 @@ describe('BoardView — render (H2.8, migrado a nucleoTable H3)', () => {
     const rolesAfterSecond = rectangles.filter(
       (r) => r.name === FOCUS_ID_LEADER || r.name === FOCUS_ID_ENEMY || r.name === FOCUS_ID_SCENARIO,
     );
-    const handTilesAfterSecond = rectangles.filter(
-      (r) => r.name === cardTileName(ctx.leaderCardPool[0]!.cardId) || r.name === cardTileName(ctx.leaderCardPool[1]!.cardId),
-    );
     const nucleoRectsAlive = rectangles.filter((r) => r.getData('targetId') === n1Id && !r.destroyed);
 
     expect(rolesAfterSecond).toHaveLength(rolesAfterFirst.length);
     expect(rolesAfterSecond).toHaveLength(3);
-    expect(handTilesAfterSecond).toHaveLength(handTilesAfterFirst.length);
-    expect(handTilesAfterSecond).toHaveLength(2);
 
     expect(nucleoRectsAfterFirst).toHaveLength(1);
     expect(nucleoRectsAlive).toHaveLength(1);
@@ -211,49 +203,10 @@ describe('BoardView — render (H2.8, migrado a nucleoTable H3)', () => {
     expect(minionRectsSecond[0]).toBe(minionRectFirst);
   });
 
-  it('existe un tile de mano por cada entrada de leaderCardPool, nombrado card-{cardId}, con alpha reducido si no hay Energía suficiente', () => {
-    const { scene, rectangles } = createFakeBoardScene();
-    const ctx = createMockContext();
-    const boardView = createBoardView(scene, ctx);
-
-    const cheapCard = ctx.leaderCardPool[0]!;
-    const expensiveCard = ctx.leaderCardPool[1]!;
-    const hand = [cheapCard.cardId, expensiveCard.cardId];
-
-    boardView.render(createMockSnapshot({ leaderEnergy: 3, leaderHand: hand }));
-
-    const cheapTile = rectangles.find((r) => r.name === cardTileName(cheapCard.cardId))!;
-    const expensiveTile = rectangles.find((r) => r.name === cardTileName(expensiveCard.cardId))!;
-
-    expect(cheapTile).toBeDefined();
-    expect(expensiveTile).toBeDefined();
-    expect(cheapTile.alpha).toBe(1);
-    expect(expensiveTile.alpha).toBeLessThan(1);
-
-    boardView.render(createMockSnapshot({ leaderEnergy: 0, leaderHand: hand }));
-    expect(cheapTile.alpha).toBeLessThan(1);
-    expect(expensiveTile.alpha).toBeLessThan(1);
-  });
-
-  it('el Text de cada tile de mano recibe la misma alpha que su Rectangle (fix Reviewer: opacidad inconsistente)', () => {
-    const { scene, rectangles, texts } = createFakeBoardScene();
-    const ctx = createMockContext();
-    const boardView = createBoardView(scene, ctx);
-
-    const cheapCard = ctx.leaderCardPool[0]!;
-    const expensiveCard = ctx.leaderCardPool[1]!;
-
-    boardView.render(createMockSnapshot({ leaderEnergy: 3, leaderHand: [cheapCard.cardId, expensiveCard.cardId] }));
-
-    const cheapTile = rectangles.find((r) => r.name === cardTileName(cheapCard.cardId))!;
-    const expensiveTile = rectangles.find((r) => r.name === cardTileName(expensiveCard.cardId))!;
-    const cheapText = texts.find((t) => t.text.startsWith(cheapCard.name))!;
-    const expensiveText = texts.find((t) => t.text.startsWith(expensiveCard.name))!;
-
-    expect(cheapText).toBeDefined();
-    expect(expensiveText).toBeDefined();
-    expect(cheapText.alpha).toBe(cheapTile.alpha);
-    expect(expensiveText.alpha).toBe(expensiveTile.alpha);
-    expect(expensiveText.alpha).toBeLessThan(1);
-  });
+  // H4 spec §6 — los tests de "tile de mano" (Rectangle/Text de Phaser por carta) se retiran: la
+  // mano migró por completo a HTML (`HandCardRow.tsx`/`CardTile.tsx`, `apps/shell`), fuera del
+  // árbol de renderizado de `BoardView`/Phaser. Fix Reviewer post-H4: la cobertura equivalente
+  // (afordabilidad por Energía/alpha reducido, ruleText, keywords, ciclo de exit-animation al jugar
+  // una carta) vive ahora en `apps/shell/src/combat/card/HandCardRow.test.tsx` (React Testing
+  // Library) — confirmada real, no solo referenciada en comentario.
 });

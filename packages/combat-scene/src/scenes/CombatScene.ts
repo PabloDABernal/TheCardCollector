@@ -1,10 +1,21 @@
 import Phaser from 'phaser';
+import type { AbilityId, CardId } from '@collector/domain-shared';
 import type { CombatBridge, Unsubscribe } from '@collector/combat-bridge';
 import { createEffectsDirector, JUICE_CONFIG, createRecipeRegistry } from '../juice';
 import { createInputAdapter, type InputAdapter } from '../input';
-import { createBoardView, type BoardViewContext } from '../view';
-import { createGestureCommandTranslator } from '../interaction';
+import { createBoardView, createTargetingHighlightView, type BoardViewContext } from '../view';
+import { createGestureCommandTranslator, type TargetingSignal } from '../interaction';
 import { createWebAudioSoundManager } from '../audio';
+
+/** H4 spec §5.3/§6.1 — superficie REDUCIDA de `GestureCommandTranslator` expuesta a `apps/shell`
+ *  (React): solo los 3 métodos que `CardTile`/`AbilityTile`/`TargetingPromptBanner` necesitan
+ *  invocar directo desde `onClick`, sin exponer `handleGesture` (interno, sigue siendo alimentado
+ *  únicamente por `InputAdapter`). */
+export interface GestureCommandTranslatorHandle {
+  handleCardTap(cardId: CardId): void;
+  handleAbilityTap(abilityId: AbilityId): void;
+  cancelPending(): void;
+}
 
 /** Viewport virtual de diseño — mobile-first, ver docs/architecture_stack.md §4.2. Misma resolución que
  *  `main.ts` (H2.1) ya usaba para el propio `Phaser.Game`; ahora también gobierna el `Scale Manager`
@@ -36,9 +47,25 @@ export class CombatScene extends Phaser.Scene {
   /** NUEVO H2.8 — contexto de catálogo resuelto que `BoardView` necesita para pintar (spec §2.2), mismo
    *  patrón de propiedad de instancia que `this.bridge`. */
   private boardContext!: BoardViewContext;
+  /** NUEVO H4 spec §5.2/§6.1 — traductor de gestos, ahora también fuente de `targetingSignal`
+   *  (poblado en `create()`, no en `init()` — mismo criterio que el resto de recursos de escena). */
+  private translatorHandle!: GestureCommandTranslatorHandle;
+  private targetingSignal!: TargetingSignal;
 
   constructor() {
     super('CombatScene');
+  }
+
+  /** NUEVO H4 spec §5.3 — expuesto a `apps/shell` (`CombatScreen.tsx`) tras `Phaser.Core.Events.READY`,
+   *  para que `useTargetingPrompt` pueda suscribirse al estado de targeting vigente. */
+  getTargetingSignal(): TargetingSignal {
+    return this.targetingSignal;
+  }
+
+  /** NUEVO H4 spec §6.1 — expuesto a `apps/shell` tras `READY`, para que `CardTile`/`AbilityTile`/
+   *  `TargetingPromptBanner` (React) invoquen directo el tap real sin pasar por `InputAdapter`. */
+  getGestureCommandTranslator(): GestureCommandTranslatorHandle {
+    return this.translatorHandle;
   }
 
   /** Fase 1 del ciclo de vida Phaser — recibe `CombatSceneInitData`. Únicamente asigna `this.bridge`/
@@ -103,11 +130,26 @@ export class CombatScene extends Phaser.Scene {
 
     // NUEVO H2.9 (spec §4.1) — traducción `PointerGesture → CombatCommand` conectada al mismo
     // stream de `InputAdapter` que consume el debug de H2.7; sin intermediarios, cableado dentro
-    // de `create()` igual que EffectsDirector/BoardView.
+    // de `create()` igual que EffectsDirector/BoardView. H4 §5.2/§6.1: `translator.targetingSignal`
+    // se guarda como `this.targetingSignal`, y una superficie reducida (`handleCardTap`/
+    // `handleAbilityTap`/`cancelPending`) como `this.translatorHandle` — ambos expuestos a
+    // `apps/shell` tras `READY` vía los getters públicos de arriba.
     const translator = createGestureCommandTranslator(this.bridge, this.boardContext);
+    this.targetingSignal = translator.targetingSignal;
+    this.translatorHandle = {
+      handleCardTap: (cardId) => translator.handleCardTap(cardId),
+      handleAbilityTap: (abilityId) => translator.handleAbilityTap(abilityId),
+      cancelPending: () => translator.cancelPending(),
+    };
     const unsubscribeTranslator: Unsubscribe = this.inputAdapter.subscribe((gesture) => {
       translator.handleGesture(gesture);
     });
+
+    // NUEVO H4 spec §5.4 — highlight visual (glow `--foil` pulsante) sobre los sprites de mesa
+    // válidos del prompt de targeting vigente. Se suscribe directo a `targetingSignal`, no a
+    // `bridge` — mismo criterio de "co-localizado con el sprite que resalta" que el resto de
+    // `view/*`.
+    const targetingHighlightView = createTargetingHighlightView(this, this.targetingSignal);
 
     // `SHUTDOWN` (no `DESTROY`, spec §2.4): cubre tanto el cierre del `Phaser.Game` completo como el
     // reinicio de esta escena (`scene.start()` de nuevo) sin destruir el `Game` — caso relevante para H2.9
@@ -119,6 +161,7 @@ export class CombatScene extends Phaser.Scene {
       unsubscribeInput();
       unsubscribeBoard();
       unsubscribeTranslator(); // NUEVO H2.9
+      targetingHighlightView.destroy(); // NUEVO H4 §5.4
     });
   }
 

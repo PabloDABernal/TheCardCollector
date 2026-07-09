@@ -14,10 +14,20 @@ import type { CombatStateSnapshot } from '@collector/domain-combat';
 
 let capturedParent: HTMLElement | null = null;
 
+// NUEVO H4 spec §5.2/§6.1 — ver App.test.tsx, mismo espíritu de mock.
+const fakeTargetingSignal = { getState: () => ({ kind: 'NONE' as const }), subscribe: () => () => {} };
+const fakeGestureHandle = { handleCardTap: vi.fn(), handleAbilityTap: vi.fn(), cancelPending: vi.fn() };
+
 vi.mock('phaser', () => {
   class FakeGame {
     events = { once: (_evt: string, cb: () => void) => cb() };
-    scene = { add: vi.fn(), start: vi.fn() };
+    scene = {
+      add: vi.fn(() => ({
+        getTargetingSignal: () => fakeTargetingSignal,
+        getGestureCommandTranslator: () => fakeGestureHandle,
+      })),
+      start: vi.fn(),
+    };
     destroy = vi.fn();
     constructor(config: { parent: HTMLElement }) {
       capturedParent = config.parent;
@@ -47,6 +57,11 @@ vi.mock('@collector/combat-scene', () => ({
   ENEMY_POSITION: { x: 540, y: 300 },
   SCENARIO_POSITION: { x: 540, y: 960 },
   PANEL_ZONES: [],
+  HAND_ROW_POSITION: { x: 540, y: 1498 },
+  TILE_SEPARATION_PX: 140,
+  LEADER_ABILITIES_ROW_Y: 1888,
+  ENEMY_ABILITIES_ROW_Y: 480,
+  ABILITY_ICON_SEPARATION_PX: 200,
 }));
 
 const fakeSnapshot: CombatStateSnapshot = {
@@ -70,6 +85,7 @@ const fakeSnapshot: CombatStateSnapshot = {
   leaderHand: [],
   leaderDeckRemaining: 0,
   leaderFreeStep: { takenThisTurn: false },
+  enemyActiveDramaturgiaCardId: null,
 };
 
 const fakeBridge = {
@@ -87,7 +103,10 @@ vi.mock('../combat/build-combat-setup', () => ({
       // `boardContext` para la línea de rol; valores mínimos arbitrarios, el test no verifica su
       // contenido numérico, solo que el árbol renderiza sin lanzar.
       boardContext: {
+        leaderCardPool: [],
         leaderAbilities: [],
+        enemyAbilities: [],
+        enemyDramaturgiaDeck: [],
         leaderMaxHealth: 30,
         enemyMaxHealth: 40,
         scenarioPlotDefeatThreshold: 10,

@@ -1,18 +1,21 @@
-export type { BoardViewContext, HandCardViewData, AbilityViewData } from './board-view-context';
+export type { BoardViewContext, HandCardViewData, AbilityViewData, DramaturgiaCardViewData } from './board-view-context';
 export type { BoardView } from './board-view';
 export { createBoardView } from './board-view';
 export type { RoleView } from './role-view';
 export { createLeaderRoleView, createEnemyRoleView, createScenarioRoleView } from './role-view';
-export type { CardHandView } from './card-hand-view';
-export { cardTileName, createCardHandView } from './card-hand-view';
+// H4 spec §6 — `card-hand-view.ts`/`ability-cooldown-view.ts` ELIMINADOS (mano y habilidades del
+// Líder migraron a HTML). `cardTileName` sobrevive en `tile-names.ts` (sigue haciendo falta como
+// `sourceId` estable de comando). `abilityIconGroupName` RETIRADA junto a la juice recipe
+// `cooldownReady` que era su único consumidor (fix Reviewer, ver `../juice/recipes/index.ts`).
+export { cardTileName } from './tile-names';
 export type { AlliesView } from './allies-view';
 export { createAlliesView } from './allies-view';
 export type { MinionsView } from './minions-view';
 export { createMinionsView } from './minions-view';
 export type { NucleoTableView } from './nucleo-table-view';
 export { createNucleoTable } from './nucleo-table-view';
-export type { AbilityCooldownView } from './ability-cooldown-view';
-export { createAbilityCooldownView, abilityIconGroupName } from './ability-cooldown-view';
+export type { TargetingHighlightView } from './targeting-highlight-view';
+export { createTargetingHighlightView } from './targeting-highlight-view';
 export { createBoard } from './board';
 export type { PanelZone } from './board-layout';
 export {

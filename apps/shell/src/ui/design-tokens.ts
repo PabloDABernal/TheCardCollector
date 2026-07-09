@@ -12,6 +12,11 @@
  * `board-layout.ts`, se deja solo ahí). Ver tabla de migración en `docs/specs/H4_diseno_real_ui.md` §1.2.
  */
 
+// H4_componente_carta.md §1.2 — `CardIconKind` vive en `apps/shell/src/combat/card/card-icon.ts`
+// (módulo puro, sin dependencias) — se importa aquí solo el TIPO, para tipar `CARD_TYPE_COLORS` sin
+// crear un ciclo de módulos.
+import type { CardIconKind } from '../combat/card/card-icon';
+
 export const COLOR_INK = '#14141a';
 export const COLOR_BINDER = '#1f1e26';
 export const COLOR_RULE = '#3a3744';
@@ -34,6 +39,19 @@ export const COLOR_OVERLAY = 'rgba(10, 10, 12, 0.78)';
 // reutiliza --foil aquí: el foil es el acento de acción de la UI, los colores de Núcleo son
 // semántica de juego, familias separadas a propósito (grounding, H4 spec §1.1).
 export const NUCLEO_ACCENT_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f1c40f', '#9b59b6'] as const;
+
+// H4_componente_carta.md §2 — mismos hex que `NUCLEO_COLOR_HEX` (packages/combat-scene,
+// `view/nucleo-colors.ts`) pero en formato CSS string en vez de número Phaser, indexado por
+// `NucleoColor` (no por posición round-robin como `NUCLEO_ACCENT_COLORS`) — necesario para el
+// círculo de coste de `AbilityTile` (única pieza de esta pasada donde el mapeo de color de Núcleo
+// SÍ aplica, ver spec §1.1).
+export const NUCLEO_COLOR_HEX_CSS: Record<import('@collector/domain-shared').NucleoColor, string> = {
+  AGRESION: '#e74c3c',
+  CONTROL: '#3498db',
+  DEFENSA: '#2ecc71',
+  RECURSO: '#f1c40f',
+  CAOS: '#9b59b6',
+};
 
 export const FONT_DISPLAY = "'Staatliches', 'Impact', sans-serif";
 export const FONT_UI = "'Manrope', system-ui, -apple-system, sans-serif";
@@ -62,3 +80,16 @@ export const RADIUS_CHIP = 10;
 export const SHADOW_PANEL = '0 2px 8px rgba(0, 0, 0, 0.4)';
 export const SHADOW_MODAL = '0 20px 60px rgba(0, 0, 0, 0.6)';
 export const MIN_TAP_TARGET_PX = 44; // criterio de aceptación H4.1, botones/tarjetas táctiles
+
+// H4_componente_carta.md §1.2 — color de borde/acento por tipo de carta, familia PROPIA, NUNCA
+// `NUCLEO_COLOR_HEX` (§1.1: `CardDefinition.cost` es solo Energía, el color de Núcleo pertenece a
+// `AbilityDefinition.coreCost`). Elegidos por contraste entre sí y legibilidad sobre `--binder`, sin
+// pisar `--foil` (reservado a selección/acento de acción) ni `--success`/`--danger` (semántica de
+// sistema).
+export const CARD_TYPE_COLORS: Record<CardIconKind, string> = {
+  ATAQUE: '#b5482f', // terracota — cálido, distinto de --danger (#d1495b) para no leerse como alerta
+  TRAMA: '#6a5a8c', // violeta apagado
+  EQUIPO: '#4c7a8c', // acero azulado
+  ALIADO: '#5c8c5a', // verde apagado, distinto de --success
+  CONTRATIEMPO: '#8c7a4c', // ocre
+};

@@ -7,6 +7,9 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}'],
-    setupFiles: ['./src/test-setup.ts']
+    // `test-setup-jsdom-animation-events.ts` DEBE ir primero — polyfilla `window.AnimationEvent`
+    // antes de que `test-setup.ts` importe `@testing-library/react` (y por tanto `react-dom`), ver
+    // el comentario de cabecera de ese archivo.
+    setupFiles: ['./src/test-setup-jsdom-animation-events.ts', './src/test-setup.ts']
   }
 });

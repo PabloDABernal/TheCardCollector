@@ -22,4 +22,9 @@ export interface CardDefinition {
   /** Referencia opaca a `assets-manifest` (no validada en esta historia — ver spec §0.3,
    *  ese catálogo no es uno de los 5 tipos de H1.8). */
   readonly universeSkin?: string;
+  /** NUEVO H4.x — texto de regla libre, prosa autorada en el catálogo, mismo patrón que
+   *  `DramaturgiaCardDefinition.effectDescription`. No se valida contra `keywords`/
+   *  efectos ejecutables — puramente descriptivo para UI. Ausente = sin cuerpo de texto
+   *  que mostrar (ver H4_componente_carta.md §3.2 Gap B). */
+  readonly ruleText?: string;
 }
