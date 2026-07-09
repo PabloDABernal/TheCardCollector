@@ -137,10 +137,6 @@ export function CombatHud({ snapshot, bridge, onEndTurn, leaderName, leaderAbili
     <div
       className="combat-hud"
       style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
         background: COLOR_BINDER,
         borderBottom: `2px solid ${COLOR_RULE}`,
         padding: SPACING.md,
