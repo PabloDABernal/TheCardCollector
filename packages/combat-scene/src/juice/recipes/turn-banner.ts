@@ -1,7 +1,7 @@
 import type Phaser from 'phaser';
 import type { JuiceRecipe } from '../juice-recipe';
 import { NUCLEO_COLOR_HEX } from '../../view/nucleo-colors';
-import { SCENARIO_POSITION } from '../../view/board-layout';
+import { SCENARIO_POSITION, PANEL_ZONES } from '../../view/board-layout';
 
 // H4 spec §3.4 — indicador visual de cambio de turno, enganchado a `TURN_ENDED` (E4.3).
 export interface TurnBannerParams {
@@ -12,7 +12,16 @@ export interface TurnBannerParams {
 const DEFAULT_HOLD_MS = 400;
 const FADE_MS = 150;
 const BANNER_ALPHA = 0.9;
-const BANNER_WIDTH = 1080;
+// FIX Reviewer post-E4.4 (commit `f912c92`) — antes 1080 (ancho completo del viewport, spec §3.4
+// literal), pero eso hace que el banner sobresalga 40px por cada lado del panel Escenario (1000px,
+// centrado), tapando su borde (confirmado en captura `03-turn-banner.png`). Se deriva del ancho REAL
+// del panel Escenario (`PANEL_ZONES`, E4.2) en vez de fijar un segundo número suelto — "ancho
+// completo" queda sustituido por "ancho del panel Escenario" como nota de spec.
+const SCENARIO_PANEL_ZONE = PANEL_ZONES.find((zone) => zone.id === 'panel-scenario');
+if (!SCENARIO_PANEL_ZONE) {
+  throw new Error('turn-banner: no se encontró panel-scenario en PANEL_ZONES');
+}
+const BANNER_WIDTH = SCENARIO_PANEL_ZONE.width;
 const BANNER_HEIGHT = 120;
 const BANNER_DEPTH = 1000; // por encima de paneles/tiles (E4.2), spec §3.4
 const LEADER_TEXT = 'Tu turno';

@@ -68,15 +68,81 @@ export interface PanelZone {
   readonly label: string; // reutiliza el mismo texto que board.ts ya usaba en `zoneLabels`
 }
 
-// Bounds calculados centrando cada panel sobre el contenido conocido de esa fila + un margen
-// (spec §2.3). Punto de partida derivado de constantes reales del código, verificado contra
-// capturas reales — ver nota de implementación de la spec sobre posible solape panel-hand/panel-nucleos.
+// FIX Reviewer post-E4.2 (commit `f912c92`) — la tabla anterior fijaba 7 pares (y, height) a mano
+// ("números mágicos sueltos"); `panel-nucleos`/`panel-hand`/`panel-leader` se solapaban entre sí
+// (130px y 60px respectivamente) porque esos números nunca se recalcularon tras ajustar las
+// constantes de fila reales. Se deriva aquí cada zona matemáticamente a partir de las MISMAS
+// constantes de fila/posición ya definidas arriba en este archivo (mismo patrón que
+// `LEADER_ABILITIES_ROW_Y = LEADER_POSITION.y + 180`): el centro Y de cada panel es el punto medio
+// del contenido que aloja, y su semi-altura es la distancia mínima hasta el punto medio (boundary)
+// con el panel vecino, menos un margen de separación (`PANEL_ZONE_GAP_PX`) — así ningún panel
+// consecutivo puede solaparse por construcción, en vez de por coincidencia numérica.
+// Cobertura verificada por `board-layout.test.ts` ("ningún PanelZone consecutivo se solapa").
+const PANEL_ZONE_GAP_PX = 10; // separación mínima garantizada entre el borde de dos paneles consecutivos
+
+// Centro Y del panel Enemigo/Líder: punto medio entre el tile de rol y su fila de habilidades
+// (mismo dato que ya combina `ENEMY_ABILITIES_ROW_Y`/`LEADER_ABILITIES_ROW_Y` con su tile).
+const PANEL_CENTER_ENEMY_Y = (ENEMY_POSITION.y + ENEMY_ABILITIES_ROW_Y) / 2; // 390
+const PANEL_CENTER_LEADER_Y = (LEADER_POSITION.y + LEADER_ABILITIES_ROW_Y) / 2; // 1790
+
+// Boundaries (punto medio) entre paneles consecutivos — cada semi-altura de panel se acota contra
+// su boundary más cercano para no poder invadir al vecino.
+const BOUNDARY_ENEMY_MINIONS_Y = (PANEL_CENTER_ENEMY_Y + MINIONS_ROW_Y) / 2; // 505
+const BOUNDARY_MINIONS_SCENARIO_Y = (MINIONS_ROW_Y + SCENARIO_POSITION.y) / 2; // 790
+const BOUNDARY_SCENARIO_ALLIES_Y = (SCENARIO_POSITION.y + ALLIES_ROW_Y) / 2; // 1130
+const BOUNDARY_ALLIES_NUCLEOS_Y = (ALLIES_ROW_Y + NUCLEO_TABLE_ROW_Y) / 2; // 1375
+const BOUNDARY_NUCLEOS_HAND_Y = (NUCLEO_TABLE_ROW_Y + HAND_ROW_POSITION.y) / 2; // 1525
+const BOUNDARY_HAND_LEADER_Y = (HAND_ROW_POSITION.y + PANEL_CENTER_LEADER_Y) / 2; // 1695
+
+// Semi-alturas: paneles extremos (enemy/leader) espejan su única distancia conocida (no tienen
+// vecino por el otro lado); los paneles intermedios usan la distancia MÍNIMA a cualquiera de los
+// dos boundaries que los rodean, para quedar centrados en su fila de contenido sin invadir a ningún
+// vecino a ningún lado.
+const ENEMY_HALF_HEIGHT = BOUNDARY_ENEMY_MINIONS_Y - PANEL_CENTER_ENEMY_Y - PANEL_ZONE_GAP_PX / 2; // 110
+const MINIONS_HALF_HEIGHT =
+  Math.min(MINIONS_ROW_Y - BOUNDARY_ENEMY_MINIONS_Y, BOUNDARY_MINIONS_SCENARIO_Y - MINIONS_ROW_Y) -
+  PANEL_ZONE_GAP_PX / 2; // 110
+const SCENARIO_HALF_HEIGHT =
+  Math.min(SCENARIO_POSITION.y - BOUNDARY_MINIONS_SCENARIO_Y, BOUNDARY_SCENARIO_ALLIES_Y - SCENARIO_POSITION.y) -
+  PANEL_ZONE_GAP_PX / 2; // 165
+const ALLIES_HALF_HEIGHT =
+  Math.min(ALLIES_ROW_Y - BOUNDARY_SCENARIO_ALLIES_Y, BOUNDARY_ALLIES_NUCLEOS_Y - ALLIES_ROW_Y) -
+  PANEL_ZONE_GAP_PX / 2; // 70
+const NUCLEOS_HALF_HEIGHT =
+  Math.min(NUCLEO_TABLE_ROW_Y - BOUNDARY_ALLIES_NUCLEOS_Y, BOUNDARY_NUCLEOS_HAND_Y - NUCLEO_TABLE_ROW_Y) -
+  PANEL_ZONE_GAP_PX / 2; // 70
+const HAND_HALF_HEIGHT =
+  Math.min(HAND_ROW_POSITION.y - BOUNDARY_NUCLEOS_HAND_Y, BOUNDARY_HAND_LEADER_Y - HAND_ROW_POSITION.y) -
+  PANEL_ZONE_GAP_PX / 2; // 70
+const LEADER_HALF_HEIGHT = PANEL_CENTER_LEADER_Y - BOUNDARY_HAND_LEADER_Y - PANEL_ZONE_GAP_PX / 2; // 90
+
 export const PANEL_ZONES: readonly PanelZone[] = [
-  { id: 'panel-enemy', x: 540, y: 390, width: 1000, height: 300, label: 'Enemigo' },
-  { id: 'panel-minions', x: 540, y: 620, width: 1000, height: 220, label: 'Secuaces' },
-  { id: 'panel-scenario', x: 540, y: 960, width: 1000, height: 280, label: 'Escenario' },
-  { id: 'panel-allies', x: 540, y: 1300, width: 1000, height: 220, label: 'Aliados' },
-  { id: 'panel-nucleos', x: 540, y: 1480, width: 1000, height: 300, label: 'Núcleos' },
-  { id: 'panel-hand', x: 540, y: 1600, width: 1040, height: 200, label: 'Mano' },
-  { id: 'panel-leader', x: 540, y: 1790, width: 1000, height: 300, label: 'Líder' },
+  { id: 'panel-enemy', x: 540, y: PANEL_CENTER_ENEMY_Y, width: 1000, height: ENEMY_HALF_HEIGHT * 2, label: 'Enemigo' },
+  { id: 'panel-minions', x: 540, y: MINIONS_ROW_Y, width: 1000, height: MINIONS_HALF_HEIGHT * 2, label: 'Secuaces' },
+  {
+    id: 'panel-scenario',
+    x: 540,
+    y: SCENARIO_POSITION.y,
+    width: 1000,
+    height: SCENARIO_HALF_HEIGHT * 2,
+    label: 'Escenario',
+  },
+  { id: 'panel-allies', x: 540, y: ALLIES_ROW_Y, width: 1000, height: ALLIES_HALF_HEIGHT * 2, label: 'Aliados' },
+  {
+    id: 'panel-nucleos',
+    x: 540,
+    y: NUCLEO_TABLE_ROW_Y,
+    width: 1000,
+    height: NUCLEOS_HALF_HEIGHT * 2,
+    label: 'Núcleos',
+  },
+  { id: 'panel-hand', x: 540, y: HAND_ROW_POSITION.y, width: 1040, height: HAND_HALF_HEIGHT * 2, label: 'Mano' },
+  {
+    id: 'panel-leader',
+    x: 540,
+    y: PANEL_CENTER_LEADER_Y,
+    width: 1000,
+    height: LEADER_HALF_HEIGHT * 2,
+    label: 'Líder',
+  },
 ];

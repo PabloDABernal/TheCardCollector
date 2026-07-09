@@ -3,12 +3,15 @@ import type { CombatStateSnapshot } from '@collector/domain-combat';
 import type { AbilityViewData } from '@collector/combat-scene';
 import { isAnyLeaderAbilityActivatable } from '@collector/combat-scene';
 import {
+  COLOR_CARD_BG,
+  COLOR_CARD_BORDER,
   COLOR_MODAL_BORDER,
   COLOR_MODAL_PANEL,
   COLOR_TEXT_DISABLED,
   COLOR_TEXT_PRIMARY,
   FONT_FAMILY,
   PANEL_BORDER_WIDTH_PX,
+  RADIUS_CARD,
   SPACING,
 } from '../ui/design-tokens';
 
@@ -114,8 +117,30 @@ export function CombatHud({ snapshot, bridge, onEndTurn, leaderName, leaderAbili
   const canFreeDraw = freeStepAvailable && !handFull && !deckEmpty;
   const canFreeGenerate = freeStepAvailable && !energyAtMax;
 
-  const enabledStyle = { color: COLOR_TEXT_PRIMARY };
-  const disabledStyle = { color: COLOR_TEXT_DISABLED };
+  // FIX Reviewer post-E4.4 (commit `f912c92`) — antes solo fijaba `color`, dejando los 5 `<button>`
+  // con el chrome por defecto del navegador (queja original: "no es usable"). Reutiliza el mismo
+  // patrón de `SelectionCard.tsx` (`background`/`border`/`borderRadius`/`padding` de
+  // `design-tokens.ts`) para que los botones del HUD compartan lenguaje visual con el resto de
+  // paneles, en vez de limitarse al ejemplo literal de la spec §4.3 (que tampoco lo mostraba).
+  const buttonBaseStyle = {
+    borderRadius: RADIUS_CARD,
+    padding: `${SPACING.xs}px ${SPACING.sm}px`,
+    fontFamily: FONT_FAMILY,
+    cursor: 'pointer',
+  } as const;
+  const enabledStyle = {
+    ...buttonBaseStyle,
+    color: COLOR_TEXT_PRIMARY,
+    background: COLOR_CARD_BG,
+    border: `1px solid ${COLOR_CARD_BORDER}`,
+  };
+  const disabledStyle = {
+    ...buttonBaseStyle,
+    color: COLOR_TEXT_DISABLED,
+    background: COLOR_CARD_BG,
+    border: `1px solid ${COLOR_MODAL_BORDER}`,
+    cursor: 'default',
+  };
 
   return (
     <div
@@ -198,7 +223,14 @@ export function CombatHud({ snapshot, bridge, onEndTurn, leaderName, leaderAbili
         </button>
       </div>
 
-      <button onClick={onEndTurn} disabled={snapshot.status !== 'IN_PROGRESS'} style={{ marginTop: SPACING.sm }}>
+      <button
+        onClick={onEndTurn}
+        disabled={snapshot.status !== 'IN_PROGRESS'}
+        style={{
+          ...(snapshot.status === 'IN_PROGRESS' ? enabledStyle : disabledStyle),
+          marginTop: SPACING.sm,
+        }}
+      >
         Fin de turno
       </button>
     </div>
