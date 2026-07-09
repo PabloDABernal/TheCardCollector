@@ -3,6 +3,7 @@ import type { AbilityDefinition } from './ability';
 import type { PhaseDefinition } from './phase';
 import type { DramaturgiaCardDefinition } from './dramaturgia-card';
 import type { AlternativeVictoryCondition } from './victory-condition'; // NUEVO H1.8+H1.18
+import type { MinionDefinition } from './minion'; // NUEVO §3.10.4
 
 /** Espejo estructural de `EnemyAbilityBranch`/`EnemyAbilityTier`/`EnemyAbilityAiProfile`
  *  (domain/combat/types/enemy-ai.ts) — ver spec §0.2. Mismas invariantes de contenido que
@@ -50,5 +51,9 @@ export interface EnemyDefinition {
    *  por defecto (decisions.md, "Condiciones de victoria/derrota alternativas por
    *  Enemigo/Escenario"). Ausente/vacío = solo las condiciones por defecto del motor. */
   readonly alternativeVictoryConditions?: readonly AlternativeVictoryCondition[];
+  /** NUEVO §3.10.4. Secuaces que este Enemigo puede invocar (vía `SUMMON_MINION`,
+   *  disparado hoy únicamente desde `DramaturgiaCardDefinition.summonEffect`). Ausente/
+   *  vacío = este Enemigo no invoca Secuaces — combate sin Secuaces, igual que hoy. */
+  readonly minions?: readonly MinionDefinition[];
   readonly universeSkin?: string;
 }

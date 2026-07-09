@@ -44,6 +44,9 @@ export const JUICE_CONFIG: JuiceConfig = {
   ],
   DAMAGE_REDIRECT_SET: [],
   MINION_SUMMONED: [{ recipeId: 'cardFlip', mode: 'parallel' }],
+  // NUEVO §3.10.3 — intento de invocación ignorado por tope de mesa (no hay Secuaz que
+  // animar, mismo criterio que NUCLEO_DIE_ADD_SKIPPED).
+  MINION_SUMMON_SKIPPED: [],
   MINION_ACTION_RESOLVED: [],
   MINION_ACTION_SKIPPED: [],
   // NUEVO §3.9 — daño a un Secuaz por ataque directo del jugador (spec §3.9.6, misma receta que

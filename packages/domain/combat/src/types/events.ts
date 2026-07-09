@@ -201,6 +201,15 @@ export type CombatEvent =
       readonly isDefensor: boolean;
     }
   | {
+      /** NUEVO §3.10.3. Intento de `SUMMON_MINION` ignorado — `minionsInPlay.length` ya
+       *  está en `maxMinionsInPlay`. No es un `CombatCommandError` (caso de juego válido,
+       *  mismo patrón que `NUCLEO_DIE_ADD_SKIPPED`). */
+      readonly type: 'MINION_SUMMON_SKIPPED';
+      readonly minionDefinitionId: MinionDefinitionId;
+      readonly sourceId: string;
+      readonly reason: 'TABLE_AT_MAX';
+    }
+  | {
       /**
        * NUEVO H1.16. Emitido cuando `RESOLVE_MINION_ACTION` ejecuta la acción de un
        * Secuaz — mismo payload semántico que `ABILITY_ACTIVATED` + `LEADER_DAMAGED`/

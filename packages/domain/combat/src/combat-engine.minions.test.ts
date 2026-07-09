@@ -43,8 +43,12 @@ function minionDefinitions(
 }
 
 /** NUEVO H1.16 (rediseño) — carta de Dramaturgia completa con `minionBehavior`
- *  explícito, sustituye la vieja selección aleatoria del motor. */
-function dramaturgiaCard(behaviorKind?: 'ALL' | 'RANDOM_ONE' | 'HIGHEST_PLANO_ATTACK' | { specific: MinionDefinitionId }): DramaturgiaCardDefinition {
+ *  explícito, sustituye la vieja selección aleatoria del motor. NUEVO §3.10.1 —
+ *  `summonEffect` opcional, independiente de `minionBehavior`. */
+function dramaturgiaCard(
+  behaviorKind?: 'ALL' | 'RANDOM_ONE' | 'HIGHEST_PLANO_ATTACK' | { specific: MinionDefinitionId },
+  summonMinionDefinitionId?: MinionDefinitionId
+): DramaturgiaCardDefinition {
   const criterion =
     behaviorKind === undefined
       ? undefined
@@ -52,10 +56,14 @@ function dramaturgiaCard(behaviorKind?: 'ALL' | 'RANDOM_ONE' | 'HIGHEST_PLANO_AT
         ? ({ kind: behaviorKind } as const)
         : ({ kind: 'SPECIFIC_DEFINITION' as const, minionDefinitionId: behaviorKind.specific });
   return {
-    id: createId<'DramaturgiaCardId'>('DramaturgiaCardId', `dramacard-${JSON.stringify(behaviorKind)}`),
+    id: createId<'DramaturgiaCardId'>(
+      'DramaturgiaCardId',
+      `dramacard-${JSON.stringify(behaviorKind)}-${summonMinionDefinitionId ?? 'none'}`
+    ),
     name: 'Carta de prueba',
     icon: 'ATTACK',
     ...(criterion !== undefined ? { minionBehavior: { criterion } } : {}),
+    ...(summonMinionDefinitionId !== undefined ? { summonEffect: { minionDefinitionId: summonMinionDefinitionId } } : {}),
   };
 }
 
@@ -390,5 +398,126 @@ describe('CombatEngine — H1.16 (rediseño): selección de Secuaces dictada por
 
     const third = engine.dispatch({ type: 'RESOLVE_MINION_ACTION' });
     expect(isOk(third)).toBe(true);
+  });
+});
+
+describe('CombatEngine — §3.10: SUMMON_MINION disparado automáticamente por DramaturgiaCardDefinition.summonEffect', () => {
+  const enemyAiProfiles = new Map([
+    [ENEMY_SPECIAL_A, { branch: 'ATTACK' as const, tier: 'FIRMA' as const }],
+    [ENEMY_SPECIAL_B, { branch: 'ATTACK' as const, tier: 'BASICA' as const }],
+    [ENEMY_PLOT_FILLER, { branch: 'PLOT' as const, tier: 'BASICA' as const }],
+  ]);
+
+  it('carta con summonEffect: el turno automático de Enemigo añade 1 MinionInPlay nuevo (MINION_SUMMONED) antes de RESOLVE_MINION_ACTION del mismo turno', () => {
+    const engine = buildEngine({
+      initialTurnOwner: 'ENEMY',
+      enemyAbilityAiProfiles: enemyAiProfiles,
+      dramaturgiaDeck: [dramaturgiaCard(undefined, MINION_PLANO)],
+    });
+
+    engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
+    const result = engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY: dispara IA + summonEffect
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      const summoned = result.value.filter((e) => e.type === 'MINION_SUMMONED');
+      expect(summoned).toHaveLength(1);
+      const summonedEvent = summoned[0] as Extract<CombatEvent, { type: 'MINION_SUMMONED' }>;
+      expect(summonedEvent.minionDefinitionId).toBe(MINION_PLANO);
+
+      // El evento MINION_SUMMONED ocurre ANTES que cualquier MINION_ACTION_RESOLVED/
+      // MINION_ACTION_SKIPPED de RESOLVE_MINION_ACTION del mismo turno (paso 2.5 antes
+      // del paso 4, ver spec §3.10.2).
+      const summonIndex = result.value.indexOf(summonedEvent);
+      const minionActionIndex = result.value.findIndex(
+        (e) => e.type === 'MINION_ACTION_RESOLVED' || e.type === 'MINION_ACTION_SKIPPED'
+      );
+      expect(minionActionIndex).toBeGreaterThan(summonIndex);
+    }
+    expect(engine.getSnapshot().minionsInPlay).toHaveLength(1);
+  });
+
+  it('el Secuaz recién invocado por summonEffect NO es seleccionado por un minionBehavior: { kind: "ALL" } de la MISMA carta (mesa previa vacía → MINION_ACTION_SKIPPED, no un ataque del recién llegado)', () => {
+    const engine = buildEngine({
+      initialTurnOwner: 'ENEMY',
+      enemyAbilityAiProfiles: enemyAiProfiles,
+      dramaturgiaDeck: [dramaturgiaCard('ALL', MINION_PLANO)],
+    });
+
+    engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
+    const result = engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.some((e) => e.type === 'MINION_SUMMONED')).toBe(true);
+      expect(result.value.some((e) => e.type === 'MINION_ACTION_RESOLVED')).toBe(false);
+      const skipped = result.value.find((e) => e.type === 'MINION_ACTION_SKIPPED') as Extract<
+        CombatEvent,
+        { type: 'MINION_ACTION_SKIPPED' }
+      >;
+      expect(skipped).toBeDefined();
+      expect(skipped.reason).toBe('NOT_SPECIFIED_BY_DRAMATURGIA');
+    }
+    // El Secuaz SÍ quedó en mesa — solo no actuó este turno.
+    expect(engine.getSnapshot().minionsInPlay).toHaveLength(1);
+  });
+
+  it('tope maxMinionsInPlay alcanzado: summonEffect emite MINION_SUMMON_SKIPPED y minionsInPlay.length no cambia', () => {
+    const engine = buildEngine({
+      initialTurnOwner: 'ENEMY',
+      enemyAbilityAiProfiles: enemyAiProfiles,
+      dramaturgiaDeck: [dramaturgiaCard(undefined, MINION_PLANO)],
+      maxMinionsInPlay: 1,
+    });
+    summonMinion(engine, MINION_PLANO); // ya al tope (1) antes de que la IA intente invocar otro
+
+    engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
+    const result = engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.some((e) => e.type === 'MINION_SUMMONED')).toBe(false);
+      const skipped = result.value.find((e) => e.type === 'MINION_SUMMON_SKIPPED') as Extract<
+        CombatEvent,
+        { type: 'MINION_SUMMON_SKIPPED' }
+      >;
+      expect(skipped).toBeDefined();
+      expect(skipped.reason).toBe('TABLE_AT_MAX');
+      expect(skipped.minionDefinitionId).toBe(MINION_PLANO);
+    }
+    expect(engine.getSnapshot().minionsInPlay).toHaveLength(1);
+  });
+
+  it('carta sin summonEffect no invoca ningún Secuaz nuevo (comportamiento preexistente preservado)', () => {
+    const engine = buildEngine({
+      initialTurnOwner: 'ENEMY',
+      enemyAbilityAiProfiles: enemyAiProfiles,
+      dramaturgiaDeck: [dramaturgiaCard('ALL')],
+    });
+    summonMinion(engine, MINION_PLANO);
+
+    engine.dispatch({ type: 'END_TURN' }); // ENEMY -> LEADER
+    const result = engine.dispatch({ type: 'END_TURN' }); // LEADER -> ENEMY
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.some((e) => e.type === 'MINION_SUMMONED')).toBe(false);
+      expect(result.value.some((e) => e.type === 'MINION_SUMMON_SKIPPED')).toBe(false);
+    }
+    expect(engine.getSnapshot().minionsInPlay).toHaveLength(1); // solo el summonado manualmente antes del turno
+  });
+
+  it('SUMMON_MINION directo respeta el tope maxMinionsInPlay (default DEFAULT_MAX_MINIONS_IN_PLAY=3) fuera del flujo automático', () => {
+    const engine = buildEngine({ initialTurnOwner: 'ENEMY' });
+    summonMinion(engine, MINION_PLANO);
+    summonMinion(engine, MINION_PLANO);
+    summonMinion(engine, MINION_PLANO);
+    expect(engine.getSnapshot().minionsInPlay).toHaveLength(3);
+
+    const result = engine.dispatch({ type: 'SUMMON_MINION', minionDefinitionId: MINION_PLANO, sourceId: 'enemy' });
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value).toHaveLength(1);
+      const event = result.value[0] as Extract<CombatEvent, { type: 'MINION_SUMMON_SKIPPED' }>;
+      expect(event.type).toBe('MINION_SUMMON_SKIPPED');
+      expect(event.reason).toBe('TABLE_AT_MAX');
+    }
+    expect(engine.getSnapshot().minionsInPlay).toHaveLength(3);
   });
 });

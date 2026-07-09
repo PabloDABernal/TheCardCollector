@@ -7,6 +7,12 @@ import type { AbilityId, CardInstanceId } from '@collector/domain-shared';
  */
 export type MinionDefinitionId = string;
 
+/** NUEVO §3.10.3. Tope duro de Secuaces simultáneos en mesa — valor de diseño sugerido
+ *  para el contenido de juguete actual (2×2×2), sin balanceo formal todavía (mismo
+ *  estatus que `DEFAULT_NUCLEO_TABLE_MAX_DICE`, "a confirmar en balanceo"). Configurable
+ *  vía `CombatEngineConfig.maxMinionsInPlay`. */
+export const DEFAULT_MAX_MINIONS_IN_PLAY = 3;
+
 /**
  * GDD §3.8: "efecto pasivo definido por el enemigo y/o el escenario (acumulable entre
  * ambas fuentes, sin tope)". Magnitud FIJA, igual que un efecto PLOT (H1.6) — un pasivo

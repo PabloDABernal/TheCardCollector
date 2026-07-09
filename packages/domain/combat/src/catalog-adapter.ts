@@ -13,6 +13,7 @@ import type { ContratiempoCardDefinition } from './types/contratiempo';
 import type { EnemyAbilityAiProfile } from './types/enemy-ai';
 import type { DramaturgiaCardDefinition } from '@collector/domain-catalog';
 import type { AlternativeVictoryCondition } from './types/victory-condition';
+import type { MinionDefinition, MinionDefinitionId } from './types/minion'; // NUEVO §3.10.4
 
 /**
  * H1.19 §2.1 — ver spec para el contrato completo. `packages/cli` (H1.19) es hoy el
@@ -86,6 +87,13 @@ export function buildCombatEngineConfig(params: BuildCombatEngineConfigParams): 
     ...(scenario.alternativeVictoryConditions ?? []),
   ];
 
+  // NUEVO §3.10.4 — mismo merge Enemigo+Escenario que alternativeVictoryConditions.
+  // `domain/catalog`'s MinionDefinition es un mirror estructural EXACTO del de
+  // `domain/combat` — asignación directa (cast estructural, sin conversión de campos).
+  const minionDefinitions = new Map<MinionDefinitionId, MinionDefinition>(
+    [...(enemy.minions ?? []), ...(scenario.minions ?? [])].map((m) => [m.id, m as MinionDefinition])
+  );
+
   return {
     randomSource,
     initialTurnOwner: params.initialTurnOwner ?? 'LEADER',
@@ -102,7 +110,7 @@ export function buildCombatEngineConfig(params: BuildCombatEngineConfigParams): 
     enemyMaxHealth: enemy.maxHealth,
     leaderMaxHealth: leader.maxHealth,
     scenarioPlotDefeatThreshold: Math.max(...scenario.plotThresholds.map((t) => t.atLeast)),
-    minionDefinitions: new Map(),
+    minionDefinitions,
     leaderDeckCardIds,
     alternativeVictoryConditions,
   };

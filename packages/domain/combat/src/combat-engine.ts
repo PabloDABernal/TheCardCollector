@@ -36,6 +36,7 @@ import type {
 } from './types/contratiempo'; // NUEVO H1.14
 import type { AllyCardDefinition, AllyInPlay } from './types/ally'; // NUEVO H1.15
 import type { MinionDefinition, MinionDefinitionId, MinionInPlay } from './types/minion'; // NUEVO H1.16
+import { DEFAULT_MAX_MINIONS_IN_PLAY } from './types/minion'; // NUEVO §3.10.3
 import {
   poolHasValidNucleo,
   decideEnemyNucleoToSpend,
@@ -112,6 +113,14 @@ export class CombatEngine {
   private minionsInPlay: MinionInPlay[];
   private minionActionResolvedThisEnemyTurn: boolean;
   private minionInstanceIdCounter: number;
+  // NUEVO §3.10.3 — tope duro de Secuaces simultáneos en mesa.
+  private readonly maxMinionsInPlay: number;
+  // NUEVO §3.10.2 — instanceId de Secuaces invocados por `summonEffect` DURANTE el turno
+  // de Enemigo en curso; `handleResolveMinionAction` los excluye de `minionBehavior` de
+  // la MISMA carta que los invocó (spec §3.10.2: "un Secuaz recién invocado no puede ser
+  // seleccionado por el minionBehavior de su propia carta de aparición"). Reseteado en el
+  // mismo punto que `minionActionResolvedThisEnemyTurn`.
+  private minionInstanceIdsSummonedThisEnemyTurn: Set<CardInstanceId>;
 
   // NUEVO H3.6 — ver spec §2.
   private leaderHand: CardId[];
@@ -200,6 +209,8 @@ export class CombatEngine {
     this.minionsInPlay = [];
     this.minionActionResolvedThisEnemyTurn = false;
     this.minionInstanceIdCounter = 0;
+    this.maxMinionsInPlay = config.maxMinionsInPlay ?? DEFAULT_MAX_MINIONS_IN_PLAY; // NUEVO §3.10.3
+    this.minionInstanceIdsSummonedThisEnemyTurn = new Set(); // NUEVO §3.10.2
 
     // NUEVO H3.6 — ver spec §2.8/§2.9. Baraja el mazo de robo del Líder y reparte la
     // mano inicial (5, o menos si el mazo tiene menos de 5). Sin evento (constructor).
@@ -1408,6 +1419,9 @@ export class CombatEngine {
 
     // NUEVO H1.16 — reset simétrico al de arriba (ver spec §0.3).
     this.minionActionResolvedThisEnemyTurn = false;
+    // NUEVO §3.10.2 — reset simétrico: cada turno de Enemigo entrante arranca sin
+    // Secuaces "recién invocados este turno" excluidos.
+    this.minionInstanceIdsSummonedThisEnemyTurn = new Set();
 
     // NUEVO H3.6 — el paso previo gratuito es EXCLUSIVO del turno del Líder, se resetea
     // únicamente cuando el turno entrante es 'LEADER' (nunca para 'ENEMY').
@@ -1762,6 +1776,20 @@ export class CombatEngine {
       return err({ code: 'NOT_YOUR_TURN', expected: 'ENEMY', actual: this.turnOwner });
     }
 
+    // NUEVO §3.10.3 — tope duro de Secuaces simultáneos en mesa. No-op silencioso, sin
+    // CombatCommandError: caso de juego válido, mismo patrón que ADD_EXTRA_NUCLEO_DIE/
+    // NUCLEO_DIE_ADD_SKIPPED.
+    if (this.minionsInPlay.length >= this.maxMinionsInPlay) {
+      const skipped: CombatEvent = {
+        type: 'MINION_SUMMON_SKIPPED',
+        minionDefinitionId: command.minionDefinitionId,
+        sourceId: command.sourceId,
+        reason: 'TABLE_AT_MAX',
+      };
+      this.eventBus.emit(skipped);
+      return ok([skipped]);
+    }
+
     // Mutación — sin coste de acción/Núcleo/Energía (ver spec §0.3).
     const instanceId = this.nextMinionInstanceId();
     const minion: MinionInPlay = {
@@ -1777,6 +1805,13 @@ export class CombatEngine {
       ...(def.specialActionAbilityId !== undefined ? { specialActionAbilityId: def.specialActionAbilityId } : {}),
     };
     this.minionsInPlay = [...this.minionsInPlay, minion];
+    // NUEVO §3.10.2 — registra este Secuaz como "invocado en este turno de Enemigo" para
+    // que `handleResolveMinionAction` lo excluya de un `minionBehavior` que opere en el
+    // mismo dispatch (ver spec §3.10.2, un Secuaz recién invocado no actúa el turno en
+    // que aparece).
+    if (this.turnOwner === 'ENEMY') {
+      this.minionInstanceIdsSummonedThisEnemyTurn.add(instanceId);
+    }
 
     const event: CombatEvent = {
       type: 'MINION_SUMMONED',
@@ -1816,7 +1851,12 @@ export class CombatEngine {
     }
 
     const behavior = this.currentEnemyDramaturgiaCard?.minionBehavior;
-    const actors = selectActingMinions(behavior, this.minionsInPlay, this.randomSource);
+    // NUEVO §3.10.2 — excluye Secuaces invocados por `summonEffect` DURANTE este mismo
+    // turno de Enemigo (ver `minionInstanceIdsSummonedThisEnemyTurn`).
+    const eligibleMinions = this.minionsInPlay.filter(
+      (m) => !this.minionInstanceIdsSummonedThisEnemyTurn.has(m.instanceId)
+    );
+    const actors = selectActingMinions(behavior, eligibleMinions, this.randomSource);
 
     if (actors.length === 0) {
       // NUEVO H1.16 (rediseño) — la carta de Dramaturgia de este turno no menciona
@@ -2210,6 +2250,27 @@ export class CombatEngine {
     if (abilityResult.ok) events.push(...abilityResult.value);
 
     if (this.combatStatus !== 'IN_PROGRESS') return; // NUEVO H1.18 — parada de cascada (§0.6)
+
+    // NUEVO §3.10.2 — paso (2.5): dispara SUMMON_MINION si la carta robada este turno lo
+    // declara. `this.currentEnemyDramaturgiaCard` ya está poblada por drawDramaturgiaCard
+    // de arriba (mismo campo que consume RESOLVE_MINION_ACTION más abajo). El Secuaz
+    // recién invocado aquí NO participa en el minionBehavior de esta misma carta, porque
+    // este paso ocurre ANTES de RESOLVE_MINION_ACTION (que lee minionsInPlay en ese
+    // instante).
+    const summonEffect = this.currentEnemyDramaturgiaCard?.summonEffect;
+    if (summonEffect) {
+      const summonResult = this.handleSummonMinion({
+        type: 'SUMMON_MINION',
+        minionDefinitionId: summonEffect.minionDefinitionId,
+        sourceId: 'dramaturgia:' + this.currentEnemyDramaturgiaCard!.id,
+      });
+      // handleSummonMinion puede devolver err() en 2 casos no invariantes de contenido:
+      // MINION_DEFINITION_UNKNOWN (bug de contenido real) y MINION_TABLE_AT_MAX de
+      // §3.10.3 (caso de juego válido, no-op silencioso, no llega aquí como err() — ver
+      // handleSummonMinion). NO se asume ok() incondicional, a diferencia del bloque de
+      // arriba.
+      if (summonResult.ok) events.push(...summonResult.value);
+    }
 
     if (this.minionsInPlay.length > 0) {
       const minionResult = this.handleResolveMinionAction({ type: 'RESOLVE_MINION_ACTION' });

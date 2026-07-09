@@ -91,6 +91,11 @@ export interface CombatEngineConfig {
    */
   readonly minionDefinitions?: ReadonlyMap<MinionDefinitionId, MinionDefinition>;
 
+  /** NUEVO §3.10.3. Tope duro de `minionsInPlay.length`. Default
+   *  `DEFAULT_MAX_MINIONS_IN_PLAY` (3). Exceder el tope es no-op silencioso —
+   *  `SUMMON_MINION` emite `MINION_SUMMON_SKIPPED` en vez de mutar `minionsInPlay`. */
+  readonly maxMinionsInPlay?: number;
+
   /**
    * NUEVO H1.17. Fases del Enemigo activo (GDD §3.4, `EnemyDefinition.phases`,
    * `domain-catalog`, H1.8/H1.10 — reutilizado tal cual, ver spec H1.17 §0.1). Default

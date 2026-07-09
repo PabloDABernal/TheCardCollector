@@ -6,6 +6,7 @@ export * from './types/leader';
 export * from './types/enemy';
 export * from './types/dramaturgia-card';
 export * from './types/minion-behavior'; // NUEVO — H1.16 (rediseño)
+export * from './types/minion'; // NUEVO — §3.10.4
 export * from './types/victory-condition'; // NUEVO — H1.8+H1.18
 export * from './types/scenario';
 export * from './types/evolution-template';
