@@ -49,14 +49,18 @@
  * `clientHeight` de este contenedor (ya descontados header/footer), no los del viewport completo.
  * `position: relative` — mismo "containing block" que `CombatBoardOverlay` necesita para su
  * `position: absolute` sincronizado por `usePhaserViewportTransform` (que mide el `<canvas>` real
- * relativo a `#phaser-mount`, hijo directo de esta fila). `min-height: 0` es necesario en flex
- * children para que puedan encogerse por debajo de su contenido intrínseco (si no, un flex item por
- * defecto no encoge más allá del tamaño de su contenido, rompiendo el reparto de alto real entre las
- * 3 filas). */
+ * relativo a `#phaser-mount`, hijo directo de esta fila). Antes tenía `min-height: 0` (necesario en
+ * flex children para que puedan encogerse por debajo de su contenido intrínseco — si no, un flex item
+ * por defecto no encoge más allá del tamaño de su contenido, rompiendo el reparto de alto real entre
+ * las 3 filas). FIX QA (Reviewer, opcional/bajo) — `min-height: 0` seguía permitiendo que, en una
+ * ventana MUY baja (ej. 1400×500), el header+footer se comieran TODO el alto disponible y dejaran el
+ * canvas comprimido a un tamaño impracticable. `240px` es una red de seguridad mínima, NO una
+ * solución completa a viewports extremos (con header/footer muy altos y una ventana aún más baja, el
+ * layout puede seguir desbordando — eso es un caso fuera de alcance de este fix). */
 .combat-screen-canvas-area {
   position: relative;
   flex: 1;
-  min-height: 0;
+  min-height: 240px;
   overflow: hidden;
 }
 

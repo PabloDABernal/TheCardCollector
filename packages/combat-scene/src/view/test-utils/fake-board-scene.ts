@@ -19,6 +19,7 @@ export interface FakeRectangle {
   destroyed: boolean;
   setName(name: string): FakeRectangle;
   setPosition(x: number, y: number): FakeRectangle;
+  setX(x: number): FakeRectangle;
   setAlpha(alpha: number): FakeRectangle;
   setInteractive(): FakeRectangle;
   setData(key: string, value: unknown): FakeRectangle;
@@ -84,16 +85,31 @@ export interface CreateFakeBoardSceneOptions {
   readonly autoComplete?: boolean;
 }
 
+export interface RecordedFakeDelayedCall {
+  readonly delayMs: number;
+  readonly callback: () => void;
+  cancelled: boolean;
+}
+
 export interface FakeBoardScene {
   readonly scene: Phaser.Scene;
   readonly rectangles: FakeRectangle[];
   readonly texts: FakeText[];
   readonly graphicsObjects: FakeGraphics[];
   readonly recordedTweens: RecordedFakeTween[];
+  /** FIX QA (bug del closure de `die-rejection-view.ts`) — todo `scene.time.delayedCall` registrado,
+   *  en orden de creación. Solo se puebla/ejecuta manualmente cuando `autoComplete` es `false`
+   *  (mismo criterio que `recordedTweens`/`completeTween`); con `autoComplete: true` (default,
+   *  comportamiento histórico) el callback se invoca de inmediato y no queda pendiente. */
+  readonly recordedDelayedCalls: RecordedFakeDelayedCall[];
   /** H2.12 — dispara manualmente el `onComplete` (y aplica las propiedades finales) de la tween en
    *  la posición `index` (orden de creación). No-op si `autoComplete` es `true` (ya se resolvió al
    *  crearla) o si el tween ya fue completado/matado. */
   completeTween(index: number): void;
+  /** Ejecuta manualmente el callback del `delayedCall` en la posición `index`. No-op si ya fue
+   *  cancelado (vía el `.remove()` del objeto devuelto por `time.delayedCall`) o si `autoComplete`
+   *  es `true` (ya se ejecutó al crearse). */
+  runDelayedCall(index: number): void;
 }
 
 function createFakeRectangle(
@@ -125,6 +141,10 @@ function createFakeRectangle(
     setPosition(newX: number, newY: number) {
       rect.x = newX;
       rect.y = newY;
+      return rect;
+    },
+    setX(newX: number) {
+      rect.x = newX;
       return rect;
     },
     setAlpha(alpha: number) {
@@ -266,8 +286,15 @@ export function createFakeBoardScene(options: CreateFakeBoardSceneOptions = {}):
   const texts: FakeText[] = [];
   const graphicsObjects: FakeGraphics[] = [];
   const recordedTweens: RecordedFakeTween[] = [];
+  const recordedDelayedCalls: RecordedFakeDelayedCall[] = [];
   const tweenEntries: FakeTweenEntry[] = [];
   const byName = new Map<string, FakeRectangle | FakeText>();
+
+  function runDelayedCall(index: number): void {
+    const entry = recordedDelayedCalls[index];
+    if (!entry || entry.cancelled) return;
+    entry.callback();
+  }
 
   function registerByName(name: string, obj: FakeRectangle | FakeText): void {
     byName.set(name, obj);
@@ -368,15 +395,36 @@ export function createFakeBoardScene(options: CreateFakeBoardSceneOptions = {}):
         });
       },
     },
+    // FIX QA (bug del closure de `die-rejection-view.ts`) — con `autoComplete: true` (default,
+    // comportamiento histórico) el callback se invoca de inmediato, síncrono. Con `autoComplete:
+    // false` queda pendiente en `recordedDelayedCalls` hasta `runDelayedCall(index)`, y el objeto
+    // devuelto expone `remove()` (mismo contrato que `Phaser.Time.TimerEvent.remove()`) para que
+    // `die-rejection-view.ts` pueda cancelarlo — necesario para el test del bug de doble-tap rápido.
     time: {
-      delayedCall(_delayMs: number, callback: () => void): unknown {
-        callback();
-        return {};
+      delayedCall(delayMs: number, callback: () => void): { remove(): void } {
+        const entry: RecordedFakeDelayedCall = { delayMs, callback, cancelled: false };
+        const index = recordedDelayedCalls.push(entry) - 1;
+
+        if (autoComplete) {
+          callback();
+        }
+
+        return {
+          remove(): void {
+            recordedDelayedCalls[index]!.cancelled = true;
+          },
+        };
       },
     },
     children: {
       getByName(name: string): FakeRectangle | FakeText | null {
         return byName.get(name) ?? null;
+      },
+      // FIX QA (bug del closure de `die-rejection-view.ts`) — `findByTargetId` (mismo helper que
+      // `targeting-highlight-view.ts`) resuelve dados vía `scene.children.list.find(...)`, no
+      // `getByName`. Lista viva de todos los game objects creados hasta el momento de la lectura.
+      get list(): Array<FakeRectangle | FakeText | FakeGraphics> {
+        return [...rectangles, ...texts, ...graphicsObjects];
       },
     },
   };
@@ -387,6 +435,8 @@ export function createFakeBoardScene(options: CreateFakeBoardSceneOptions = {}):
     texts,
     graphicsObjects,
     recordedTweens,
+    recordedDelayedCalls,
     completeTween: resolveTween,
+    runDelayedCall,
   };
 }
