@@ -3,7 +3,7 @@ import type { AbilityId, CardId } from '@collector/domain-shared';
 import type { CombatBridge, Unsubscribe } from '@collector/combat-bridge';
 import { createEffectsDirector, JUICE_CONFIG, createRecipeRegistry } from '../juice';
 import { createInputAdapter, type InputAdapter } from '../input';
-import { createBoardView, createTargetingHighlightView, type BoardViewContext } from '../view';
+import { createBoardView, createTargetingHighlightView, createDieRejectionView, type BoardViewContext } from '../view';
 import { createGestureCommandTranslator, type TargetingSignal } from '../interaction';
 import { createWebAudioSoundManager } from '../audio';
 
@@ -156,6 +156,11 @@ export class CombatScene extends Phaser.Scene {
     // `view/*`.
     const targetingHighlightView = createTargetingHighlightView(this, this.targetingSignal);
 
+    // FIX QA (Bug 3) — mismo criterio que `targetingHighlightView` arriba: se suscribe directo al
+    // `rejectionSignal` del traductor (evento transitorio, ver `interaction/rejection-signal.ts`) para
+    // reproducir un shake/flash rojo sobre el dado concreto que el jugador tocó sin poder gastarlo.
+    const dieRejectionView = createDieRejectionView(this, translator.rejectionSignal);
+
     // `SHUTDOWN` (no `DESTROY`, spec §2.4): cubre tanto el cierre del `Phaser.Game` completo como el
     // reinicio de esta escena (`scene.start()` de nuevo) sin destruir el `Game` — caso relevante para H2.9
     // (modal de resultado que reinicia `CombatScene` con un nuevo `CombatBridge`). Usar solo `DESTROY`
@@ -167,6 +172,7 @@ export class CombatScene extends Phaser.Scene {
       unsubscribeBoard();
       unsubscribeTranslator(); // NUEVO H2.9
       targetingHighlightView.destroy(); // NUEVO H4 §5.4
+      dieRejectionView.destroy(); // FIX QA (Bug 3)
     });
   }
 

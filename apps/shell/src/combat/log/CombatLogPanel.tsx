@@ -37,8 +37,16 @@ export function CombatLogPanel({ entries }: CombatLogPanelProps): JSX.Element {
     }
   }, [expanded, entries.length]);
 
+  // FIX QA (Bug 1, layout de combate en viewports anchos/bajos) — este panel ya NO vive dentro de un
+  // wrapper `position: absolute` superpuesto a la altura completa del canvas (`CombatScreen.tsx`
+  // ahora lo porta a `.combat-screen-footer`, una fila real del flex column que reserva su propio
+  // alto). Colapsado (caso normal, "peek" de ~36px), se queda en flujo normal (`position: relative`)
+  // para que esa fila realmente ocupe espacio y el canvas de Phaser se reescale dejándole hueco.
+  // Expandido (bottom-sheet con el histórico completo, gesto explícito del jugador), pasa a
+  // `position: fixed` para overlay temporal sobre TODO — eso sigue siendo intencional (el jugador
+  // abrió el panel a propósito), no una regresión de este fix.
   return (
-    <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 6 }}>
+    <div style={expanded ? { position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 6 } : { position: 'relative' }}>
       {expanded && (
         <div
           ref={listRef}

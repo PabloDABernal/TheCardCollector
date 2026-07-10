@@ -281,6 +281,74 @@ describe('createGestureCommandTranslator (H2.9 spec §4-§6.1, migrado a nucleoT
     });
   });
 
+  describe('FIX QA (Bug 3) — tap sobre un dado ya gastado durante AWAITING_NUCLEO_FOR_*: rechaza, no cancela', () => {
+    it('AWAITING_NUCLEO_FOR_CARD: TAP en dado SPENT no cancela la selección, no dispatch, emite rejectionSignal con ese dieId', () => {
+      const spentId = String(mockNucleoInstanceId('n1'));
+      const snapshot = createMockSnapshot({
+        nucleoTable: [mockDie('n1', 'AGRESION', 3, { status: 'SPENT' }), mockDie('n2', 'DEFENSA', 1)],
+      });
+      const { bridge, dispatch } = createFakeBridge(snapshot);
+      const translator = createGestureCommandTranslator(bridge, createMockContext());
+
+      const rejections: string[] = [];
+      translator.rejectionSignal.subscribe((event) => rejections.push(event.dieId));
+
+      translator.handleCardTap(REQUIRES_NUCLEO_CARD_A_ID);
+      expect(translator.targetingSignal.getState().kind).toBe('AWAITING_NUCLEO_FOR_CARD');
+
+      translator.handleGesture({ kind: 'TAP', targetId: spentId, point: { x: 0, y: 0 } });
+
+      expect(dispatch).not.toHaveBeenCalled();
+      // La selección sigue viva (banner de prompt visible) — a diferencia de un TAP en vacío/rol.
+      expect(translator.targetingSignal.getState().kind).toBe('AWAITING_NUCLEO_FOR_CARD');
+      expect(rejections).toEqual([spentId]);
+
+      // El dado AVAILABLE restante sigue resolviendo la selección con normalidad tras el rechazo.
+      translator.handleGesture({ kind: 'TAP', targetId: String(mockNucleoInstanceId('n2')), point: { x: 0, y: 0 } });
+      expect(dispatch).toHaveBeenCalledTimes(1);
+    });
+
+    it('AWAITING_NUCLEO_FOR_ABILITY: TAP en dado SPENT no cancela la selección, no dispatch, emite rejectionSignal', () => {
+      const spentId = String(mockNucleoInstanceId('n1'));
+      const snapshot = createMockSnapshot({
+        nucleoTable: [
+          mockDie('n1', 'AGRESION', 3, { status: 'SPENT' }),
+          mockDie('n2', 'AGRESION', 2),
+          mockDie('n3', 'AGRESION', 4),
+        ],
+      });
+      const { bridge, dispatch } = createFakeBridge(snapshot);
+      const translator = createGestureCommandTranslator(bridge, createMockContext([
+        { abilityId: ABILITY_ID, name: 'Guardia Firme', baseCooldown: 2, coreCost: { kind: 'COLOR', colors: ['AGRESION'] }, effectKind: 'NONE' },
+      ]));
+
+      const rejections: string[] = [];
+      translator.rejectionSignal.subscribe((event) => rejections.push(event.dieId));
+
+      translator.handleAbilityTap(ABILITY_ID);
+      expect(translator.targetingSignal.getState().kind).toBe('AWAITING_NUCLEO_FOR_ABILITY');
+
+      translator.handleGesture({ kind: 'TAP', targetId: spentId, point: { x: 0, y: 0 } });
+
+      expect(dispatch).not.toHaveBeenCalled();
+      expect(translator.targetingSignal.getState().kind).toBe('AWAITING_NUCLEO_FOR_ABILITY');
+      expect(rejections).toEqual([spentId]);
+    });
+
+    it('TAP en vacío (fuera de cualquier dado) durante AWAITING_NUCLEO_FOR_CARD sigue cancelando (comportamiento previo intacto)', () => {
+      const snapshot = createMockSnapshot({ nucleoTable: [mockDie('n1', 'AGRESION', 3)] });
+      const { bridge, dispatch } = createFakeBridge(snapshot);
+      const translator = createGestureCommandTranslator(bridge, createMockContext());
+
+      translator.handleCardTap(REQUIRES_NUCLEO_CARD_A_ID);
+      translator.handleGesture({ kind: 'TAP', targetId: null, point: { x: 0, y: 0 } });
+
+      expect(translator.targetingSignal.getState()).toEqual({ kind: 'NONE' });
+      translator.handleGesture({ kind: 'TAP', targetId: String(mockNucleoInstanceId('n1')), point: { x: 0, y: 0 } });
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+  });
+
   it('cero dispatch de SET_DAMAGE_REDIRECT/SUMMON_MINION/RESOLVE_MINION_ACTION en toda la suite (H2.9 spec §0.3/§8)', () => {
     const snapshot = createMockSnapshot({ nucleoTable: [mockDie('n1', 'AGRESION', 3)] });
     const { bridge, dispatch } = createFakeBridge(snapshot);

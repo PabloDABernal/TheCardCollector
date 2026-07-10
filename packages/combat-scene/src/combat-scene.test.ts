@@ -55,9 +55,14 @@ const createBoardViewMock = vi.fn(() => ({ render: boardViewRenderMock }));
 // `targeting-highlight-view.test.ts` (si existiera) ejercitaría en detalle.
 const targetingHighlightDestroyMock = vi.fn();
 const createTargetingHighlightViewMock = vi.fn(() => ({ destroy: targetingHighlightDestroyMock }));
+// FIX QA (Bug 3) — `create()` también construye `createDieRejectionView(this, translator.rejectionSignal)`,
+// mockeada aquí con la misma superficie mínima (`destroy()`) que `createTargetingHighlightViewMock`.
+const dieRejectionDestroyMock = vi.fn();
+const createDieRejectionViewMock = vi.fn(() => ({ destroy: dieRejectionDestroyMock }));
 vi.mock('./view', () => ({
   createBoardView: (...args: unknown[]) => createBoardViewMock(...(args as [])),
   createTargetingHighlightView: (...args: unknown[]) => createTargetingHighlightViewMock(...(args as [])),
+  createDieRejectionView: (...args: unknown[]) => createDieRejectionViewMock(...(args as [])),
 }));
 
 // H2.9 spec §4.1 (extendida H4 §5.2/§6.1) — mockea `./interaction` (análogo al mock de
@@ -71,12 +76,16 @@ const translatorHandleCardTapMock = vi.fn();
 const translatorHandleAbilityTapMock = vi.fn();
 const translatorCancelPendingMock = vi.fn();
 const fakeTargetingSignal = { getState: vi.fn(() => ({ kind: 'NONE' })), subscribe: vi.fn(() => vi.fn()) };
+// FIX QA (Bug 3) — `translator.rejectionSignal`, mismo shape mínimo que `fakeTargetingSignal`
+// (solo `subscribe` hace falta, `create()` nunca llama `getState()` sobre este canal).
+const fakeRejectionSignal = { subscribe: vi.fn(() => vi.fn()) };
 const createGestureCommandTranslatorMock = vi.fn(() => ({
   handleGesture: translatorHandleGestureMock,
   handleCardTap: translatorHandleCardTapMock,
   handleAbilityTap: translatorHandleAbilityTapMock,
   cancelPending: translatorCancelPendingMock,
   targetingSignal: fakeTargetingSignal,
+  rejectionSignal: fakeRejectionSignal,
 }));
 vi.mock('./interaction', () => ({
   createGestureCommandTranslator: (...args: unknown[]) => createGestureCommandTranslatorMock(...(args as [])),
@@ -132,6 +141,7 @@ describe('CombatScene — init/create/shutdown (H2.6/H2.8)', () => {
       handleAbilityTap: translatorHandleAbilityTapMock,
       cancelPending: translatorCancelPendingMock,
       targetingSignal: fakeTargetingSignal,
+      rejectionSignal: fakeRejectionSignal,
     }));
     translatorHandleGestureMock.mockClear();
     translatorHandleCardTapMock.mockClear();
@@ -140,6 +150,9 @@ describe('CombatScene — init/create/shutdown (H2.6/H2.8)', () => {
     createTargetingHighlightViewMock.mockClear();
     createTargetingHighlightViewMock.mockImplementation(() => ({ destroy: targetingHighlightDestroyMock }));
     targetingHighlightDestroyMock.mockClear();
+    createDieRejectionViewMock.mockClear();
+    createDieRejectionViewMock.mockImplementation(() => ({ destroy: dieRejectionDestroyMock }));
+    dieRejectionDestroyMock.mockClear();
   });
 
   it('init(data) guarda el CombatBridge/boardContext inyectados sin dispatch ni side-effects', () => {
@@ -309,6 +322,22 @@ describe('CombatScene — init/create/shutdown (H2.6/H2.8)', () => {
     fireShutdown();
 
     expect(targetingHighlightDestroyMock).toHaveBeenCalledTimes(1);
+  });
+
+  // FIX QA (Bug 3) — mismo patrón que el test anterior, para `dieRejectionView.destroy()`.
+  it('shutdown invoca dieRejectionView.destroy() y createDieRejectionView() recibe translator.rejectionSignal', () => {
+    const scene = new CombatScene();
+    const { fireShutdown } = createFakeCombatSceneSurface(scene);
+    const bridge = createFakeBridge();
+    scene.init({ bridge, boardContext: fakeBoardContext });
+    scene.create();
+
+    expect(createDieRejectionViewMock).toHaveBeenCalledTimes(1);
+    expect(createDieRejectionViewMock).toHaveBeenCalledWith(scene, fakeRejectionSignal);
+
+    fireShutdown();
+
+    expect(dieRejectionDestroyMock).toHaveBeenCalledTimes(1);
   });
 
   it('getTargetingSignal()/getGestureCommandTranslator() exponen la superficie del translator tras create() (H4 spec §5.3/§6.1)', () => {

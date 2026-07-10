@@ -9,6 +9,12 @@ export { createGestureCommandTranslator } from './gesture-command-translator';
 // siga siendo un detalle interno de `gesture-command-translator.ts`.
 export type { TargetingSignal, TargetingPrompt } from './targeting-signal';
 
+// FIX QA (Bug 3) — `RejectionSignal` es un detalle interno de `CombatScene` (conecta
+// `gesture-command-translator.ts` con `view/die-rejection-view.ts`, ambos dentro de este paquete):
+// a diferencia de `TargetingSignal`, `apps/shell` nunca lo necesita, así que NO se reexporta desde
+// el barrel público (`src/index.ts`) — mismo criterio que el resto de este barrel interno.
+export type { RejectionSignal, DieRejectionEvent } from './rejection-signal';
+
 // `isAnyLeaderAbilityActivatable`/`findValidDiceForAbility` SÍ se reexportan desde el barrel
 // público (`src/index.ts`) — FIX Reviewer post-H3: `apps/shell` (`CombatHud.tsx`) los necesita
 // para alinear su indicador de disponibilidad con la validación real de esta misma máquina de

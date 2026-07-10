@@ -16,6 +16,9 @@ export type { NucleoTableView } from './nucleo-table-view';
 export { createNucleoTable } from './nucleo-table-view';
 export type { TargetingHighlightView } from './targeting-highlight-view';
 export { createTargetingHighlightView } from './targeting-highlight-view';
+// FIX QA (Bug 3) — feedback visual (shake/flash rojo) de rechazo puntual de un dado gastado.
+export type { DieRejectionView } from './die-rejection-view';
+export { createDieRejectionView } from './die-rejection-view';
 export { createBoard } from './board';
 export type { PanelZone } from './board-layout';
 export {

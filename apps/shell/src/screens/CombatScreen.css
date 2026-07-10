@@ -7,9 +7,25 @@
  * resto de la app (`RunStartScreen` usa el mismo `COLOR_PAGE_BACKGROUND`) para que la transición
  * entre pantallas se sienta parte del mismo objeto, no de dos apps distintas. En desktop (donde
  * `Phaser.Scale.FIT` con el viewport virtual 9:16 deja franjas laterales), este degradado es lo que
- * se ve en esas franjas — deliberado, ver `docs/specs/H4_diseno_real_ui.md` §0.2. */
+ * se ve en esas franjas — deliberado, ver `docs/specs/H4_diseno_real_ui.md` §0.2.
+ *
+ * FIX QA (Bug 1/Bug 2, viewports anchos y bajos, ej. 1400×900) — `.combat-screen-root` pasa de
+ * "contenedor único a tamaño completo con overlays position:absolute encima de TODO" a un layout
+ * `flex column` de 3 filas reales: `.combat-screen-header` (CombatHud, altura real de su contenido),
+ * `.combat-screen-canvas-area` (fila central `flex: 1`, aloja `#phaser-mount` — a ESTE contenedor,
+ * ya reducido, es al que `Phaser.Scale.FIT` mide su `clientWidth`/`clientHeight`, nunca al viewport
+ * completo) y `.combat-screen-footer` (CombatLogPanel colapsado, altura real ~38px). Antes, el
+ * header/footer eran capas `position: absolute` SUPERPUESTAS a la altura completa del canvas — en
+ * ventanas anchas y bajas donde el canvas escalado por altura casi llena la ventana, esas capas
+ * fijas tapaban zonas del canvas que el jugador podía ver y tocar (icono de habilidad del Líder bajo
+ * el footer del log, tile del Enemigo bajo el header) sin dejarle ningún hueco real. Con `flex`, el
+ * header/footer RESERVAN su propio espacio real y el canvas se reescala/reposiciona dentro de lo que
+ * sobra — mismo patrón que `usePhaserViewportTransform` ya asume (mide el `<canvas>` real relativo a
+ * `#phaser-mount`, que ahora es más pequeño que el viewport completo en vez de coincidir con él). */
 .combat-screen-root {
   position: relative;
+  display: flex;
+  flex-direction: column;
   width: 100vw;
   height: 100dvh; /* dvh en vez de vh: evita el salto de tamaño al aparecer/ocultarse la barra de
                      direcciones del navegador móvil (Safari/Chrome Android) — 100vh se queda corto o
@@ -19,9 +35,45 @@
   background: radial-gradient(ellipse at 50% 20%, var(--binder) 0%, var(--ink) 65%, #0c0c11 100%);
 }
 
+/* Fila superior — aloja `CombatHud` + `TargetingPromptBanner` en flujo normal (portados vía
+ * `createPortal` desde `CombatHudOverlay`, ver CombatScreen.tsx). Altura real de su contenido, nunca
+ * `position: absolute`; `flex-shrink: 0` evita que el flex column la comprima si el canvas necesitara
+ * más alto del que sobra. */
+.combat-screen-header {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 4;
+}
+
+/* Fila central — ÚNICO ancestro real de `#phaser-mount`: `Phaser.Scale.FIT` mide el `clientWidth`/
+ * `clientHeight` de este contenedor (ya descontados header/footer), no los del viewport completo.
+ * `position: relative` — mismo "containing block" que `CombatBoardOverlay` necesita para su
+ * `position: absolute` sincronizado por `usePhaserViewportTransform` (que mide el `<canvas>` real
+ * relativo a `#phaser-mount`, hijo directo de esta fila). `min-height: 0` es necesario en flex
+ * children para que puedan encogerse por debajo de su contenido intrínseco (si no, un flex item por
+ * defecto no encoge más allá del tamaño de su contenido, rompiendo el reparto de alto real entre las
+ * 3 filas). */
+.combat-screen-canvas-area {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 #phaser-mount {
   width: 100%;
   height: 100%;
+}
+
+/* Fila inferior — aloja `CombatLogPanel` colapsado (portado igual que el header) en flujo normal,
+ * reservando su altura real (~38px) en vez de superponerse al canvas. Cuando el panel se expande a
+ * bottom-sheet, `CombatLogPanel` cambia internamente a `position: fixed` (ver log.tsx) para overlay
+ * temporal explícito iniciado por el jugador — eso sigue siendo intencional, no una regresión de este
+ * fix. */
+.combat-screen-footer {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 6;
 }
 
 /* H4 spec §0.3 — el propio canvas gana una sombra real (profundidad, sistema de diseño §1.4) para

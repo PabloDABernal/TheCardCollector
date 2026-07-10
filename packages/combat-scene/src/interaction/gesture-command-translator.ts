@@ -7,6 +7,7 @@ import { cardTileName } from '../view';
 import { FOCUS_ID_ENEMY } from '../juice';
 import { findValidDiceForAbility } from './ability-activation';
 import { createTargetingSignal, type TargetingPrompt, type TargetingSignal } from './targeting-signal';
+import { createRejectionSignal, type RejectionSignal } from './rejection-signal';
 
 /**
  * H2.9 spec §4 (extendida por H3 §5.4/§6, H4 §5/§6.1) — traducción `PointerGesture → CombatCommand`,
@@ -43,6 +44,12 @@ export interface GestureCommandTranslator {
   /** NUEVO H4 §5.2 — canal de lectura del estado de targeting vigente, expuesto por `CombatScene`
    *  tras `READY` para que `apps/shell` pueda pintar el `TargetingPromptBanner`/highlight. */
   readonly targetingSignal: TargetingSignal;
+  /** FIX QA (Bug 3, "Elige un Núcleo") — canal de lectura de rechazo puntual de un dado, expuesto por
+   *  `CombatScene` para conectar `view/die-rejection-view.ts` (shake/flash rojo sobre el dado
+   *  concreto que el jugador tocó sin poder gastarlo). Puramente interno a Phaser — nunca cruza a
+   *  `apps/shell` (a diferencia de `targetingSignal`), por eso no se expone vía
+   *  `GestureCommandTranslatorHandle`. */
+  readonly rejectionSignal: RejectionSignal;
 }
 
 /**
@@ -83,6 +90,8 @@ export function createGestureCommandTranslator(
   }
 
   const { signal: targetingSignal, setState: setTargetingState } = createTargetingSignal();
+  // FIX QA (Bug 3) — ver rejection-signal.ts.
+  const { signal: rejectionSignal, emit: emitDieRejection } = createRejectionSignal();
 
   let pending: PendingSelection = null;
 
@@ -272,7 +281,8 @@ export function createGestureCommandTranslator(
 
     if (pending?.stage === 'AWAITING_NUCLEO_FOR_CARD') {
       // Resolución contra el snapshot ACTUAL, no cacheado (spec §4.5 punto 5).
-      const die = bridge.getSnapshot().nucleoTable.find((d) => d.id === targetId && d.status === 'AVAILABLE');
+      const table = bridge.getSnapshot().nucleoTable;
+      const die = table.find((d) => d.id === targetId && d.status === 'AVAILABLE');
       if (die) {
         const { cardId, target } = pending;
         setPending(null);
@@ -285,17 +295,36 @@ export function createGestureCommandTranslator(
         });
         return;
       }
+      // FIX QA (Bug 3) — el `targetId` SÍ es un dado real de mesa (existe en `table`), solo que ya
+      // está gastado (visualmente casi idéntico a uno disponible, solo cambia el alpha, spec
+      // `ALPHA_SPENT` en `nucleo-table-view.ts`). Antes esto caía al mismo `setPending(null)` de
+      // abajo y cancelaba TODA la selección (objetivo + carta) sin ningún mensaje. Ahora se queda en
+      // el mismo `pending` (el banner de prompt sigue visible, el objetivo ya elegido no se pierde) y
+      // solo se rechaza visualmente ESE dado — ver `rejection-signal.ts`/`view/die-rejection-view.ts`.
+      const spentDie = table.find((d) => d.id === targetId);
+      if (spentDie) {
+        emitDieRejection(spentDie.id);
+        return;
+      }
       setPending(null);
       return;
     }
 
     if (pending?.stage === 'AWAITING_NUCLEO_FOR_ABILITY') {
-      const die = bridge.getSnapshot().nucleoTable.find((d) => d.id === targetId && d.status === 'AVAILABLE');
+      const table = bridge.getSnapshot().nucleoTable;
+      const die = table.find((d) => d.id === targetId && d.status === 'AVAILABLE');
       const ability = leaderAbilitiesById.get(pending.abilityId);
       if (die && ability) {
         const { target } = pending; // NUEVO H4.x
         setPending(null);
         dispatchAbility(ability, die.id, target);
+        return;
+      }
+      // FIX QA (Bug 3) — mismo criterio que en `AWAITING_NUCLEO_FOR_CARD` arriba: un dado real pero
+      // gastado rechaza en vez de cancelar toda la selección de habilidad.
+      const spentDie = table.find((d) => d.id === targetId);
+      if (spentDie) {
+        emitDieRejection(spentDie.id);
         return;
       }
       setPending(null);
@@ -344,5 +373,6 @@ export function createGestureCommandTranslator(
     },
 
     targetingSignal,
+    rejectionSignal, // FIX QA (Bug 3)
   };
 }

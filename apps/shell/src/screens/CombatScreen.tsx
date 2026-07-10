@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import Phaser from 'phaser';
 import { CombatScene, COMBAT_SCENE_VIEWPORT } from '@collector/combat-scene';
@@ -59,6 +60,18 @@ export function CombatScreen(): JSX.Element {
   const scenarioId = scenarioOption.scenarioId;
 
   const mountRef = useRef<HTMLDivElement>(null);
+  // FIX QA (Bug 1/Bug 2) — el header/footer reales viven SIEMPRE en la misma posición del árbol
+  // (filas del flex column de `.combat-screen-root`, ver CombatScreen.css), para que `#phaser-mount`
+  // (hermano en la fila central) nunca se desmonte/remonte al aparecer/desaparecer `bridge`. El
+  // contenido de esas filas (`CombatHud`/`TargetingPromptBanner`/`CombatLogPanel`) sigue viviendo
+  // dentro de `CombatHudOverlay` (única instancia que llama a los hooks que exigen `bridge` no nulo,
+  // `useCombatSnapshot`/`useTargetingPrompt`/`useCombatLog`) y se proyecta a estas filas vía
+  // `createPortal` — evita duplicar esos hooks en 3 componentes separados solo por posición visual.
+  // `useState` (no `useRef`) porque un `ref` callback debe disparar un re-render para que
+  // `CombatHudOverlay` reciba el nodo DOM real una vez montado (no está disponible todavía en el
+  // primer render de `CombatScreen`).
+  const [headerEl, setHeaderEl] = useState<HTMLDivElement | null>(null);
+  const [footerEl, setFooterEl] = useState<HTMLDivElement | null>(null);
   const [bridge, setBridge] = useState<CombatBridge | null>(null);
   // FIX Reviewer post-H3 (commit `cce72a3`) — `CombatHud` necesita las `leaderAbilities` del
   // `boardContext` (mismo dato ya resuelto por `buildCombatSetup`) para calcular disponibilidad de
@@ -121,21 +134,32 @@ export function CombatScreen(): JSX.Element {
 
   return (
     <div className="combat-screen-root">
-      <div ref={mountRef} id="phaser-mount" />
-      {!bridge && <p>Cargando combate…</p>}
-      {bridge && boardContext && (
-        <CombatHudOverlay
-          bridge={bridge}
-          leaderName={leaderName}
-          enemyName={enemyOption.label}
-          scenarioName={scenarioOption.label}
-          leaderAbilities={leaderAbilities}
-          boardContext={boardContext}
-          transform={transform}
-          targetingSignal={targetingSignal}
-          gestureHandle={gestureHandle}
-        />
-      )}
+      {/* FIX QA (Bug 1/Bug 2) — 3 filas reales de flex column (CombatScreen.css): header/footer
+          reservan su propio alto SIEMPRE (aunque vacíos mientras `bridge`/`boardContext` no existen
+          todavía), y `.combat-screen-canvas-area` (fila central, `flex: 1`) es el único ancestro real
+          de `#phaser-mount` — `Phaser.Scale.FIT` mide su tamaño YA descontado el header/footer, en vez
+          del viewport completo. */}
+      <div className="combat-screen-header" ref={setHeaderEl} />
+      <div className="combat-screen-canvas-area">
+        <div ref={mountRef} id="phaser-mount" />
+        {!bridge && <p>Cargando combate…</p>}
+        {bridge && boardContext && (
+          <CombatHudOverlay
+            bridge={bridge}
+            leaderName={leaderName}
+            enemyName={enemyOption.label}
+            scenarioName={scenarioOption.label}
+            leaderAbilities={leaderAbilities}
+            boardContext={boardContext}
+            transform={transform}
+            targetingSignal={targetingSignal}
+            gestureHandle={gestureHandle}
+            headerContainer={headerEl}
+            footerContainer={footerEl}
+          />
+        )}
+      </div>
+      <div className="combat-screen-footer" ref={setFooterEl} />
     </div>
   );
 }
@@ -160,6 +184,8 @@ function CombatHudOverlay({
   transform,
   targetingSignal,
   gestureHandle,
+  headerContainer,
+  footerContainer,
 }: {
   readonly bridge: CombatBridge;
   readonly leaderName: string;
@@ -170,6 +196,14 @@ function CombatHudOverlay({
   readonly transform: ReturnType<typeof usePhaserViewportTransform>;
   readonly targetingSignal: TargetingSignal | null;
   readonly gestureHandle: GestureCommandTranslatorHandle | null;
+  /** FIX QA (Bug 1/Bug 2) — nodos DOM reales de `.combat-screen-header`/`.combat-screen-footer`
+   *  (filas del flex column de `CombatScreen.css`, siempre presentes en el árbol). `CombatHud`/
+   *  `TargetingPromptBanner`/`CombatLogPanel` se proyectan ahí vía `createPortal` en vez de vivir
+   *  como capas `position: absolute` superpuestas al canvas — así reservan espacio real. `null`
+   *  únicamente durante el primer render de `CombatScreen` (antes de que el `ref` callback del
+   *  contenedor se dispare) — no es un caso de error. */
+  readonly headerContainer: HTMLDivElement | null;
+  readonly footerContainer: HTMLDivElement | null;
 }): JSX.Element {
   const snapshot = useCombatSnapshot(bridge);
   // NUEVO H4 spec §5.2/§5.3 — banner "Elige un objetivo"/"Elige un Núcleo", montado justo debajo de
@@ -179,24 +213,27 @@ function CombatHudOverlay({
   const logEntries = useCombatLog(bridge, boardContext);
   return (
     <>
-      {/* H4 spec §5.3 — envoltorio `position: absolute` compartido por `CombatHud` (franja fija) y
-          `TargetingPromptBanner` (banner justo debajo): al ser ambos hijos de flujo normal DENTRO de
-          este wrapper (en vez de cada uno `position: absolute` independiente), el banner cae
-          automáticamente bajo `CombatHud` sin necesidad de medir su altura variable
-          (`ResizeObserver`) — el propio flujo del navegador resuelve el offset. */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 4 }}>
-        <CombatHud
-          snapshot={snapshot}
-          bridge={bridge}
-          onEndTurn={() => bridge.dispatch({ type: 'END_TURN' })}
-          leaderName={leaderName}
-          leaderAbilities={leaderAbilities}
-        />
-        <TargetingPromptBanner
-          prompt={targetingPrompt}
-          onCancel={() => gestureHandle?.cancelPending()}
-        />
-      </div>
+      {/* H4 spec §5.3 — `CombatHud` (franja de cabecera) + `TargetingPromptBanner` (banner justo
+          debajo) siguen siendo hermanos de flujo normal, pero ahora dentro de `.combat-screen-header`
+          (fila real del flex column, FIX QA Bug 1/Bug 2) en vez de un wrapper `position: absolute`
+          superpuesto al canvas. */}
+      {headerContainer &&
+        createPortal(
+          <>
+            <CombatHud
+              snapshot={snapshot}
+              bridge={bridge}
+              onEndTurn={() => bridge.dispatch({ type: 'END_TURN' })}
+              leaderName={leaderName}
+              leaderAbilities={leaderAbilities}
+            />
+            <TargetingPromptBanner
+              prompt={targetingPrompt}
+              onCancel={() => gestureHandle?.cancelPending()}
+            />
+          </>,
+          headerContainer,
+        )}
       <CombatBoardOverlay
         snapshot={snapshot}
         ctx={boardContext}
@@ -207,7 +244,7 @@ function CombatHudOverlay({
         scenarioName={scenarioName}
         targetingPrompt={targetingPrompt}
       />
-      <CombatLogPanel entries={logEntries} />
+      {footerContainer && createPortal(<CombatLogPanel entries={logEntries} />, footerContainer)}
       <TurnStartModal snapshot={snapshot} bridge={bridge} />
       {snapshot.status !== 'IN_PROGRESS' && <CombatResultModal snapshot={snapshot} />}
     </>
