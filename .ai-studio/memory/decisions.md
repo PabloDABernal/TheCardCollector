@@ -210,3 +210,26 @@ Resuelve el vacío de diseño detectado por Architect al especificar H1.16 (nuev
 - **Por qué:** `HIGHEST_LIFE` da al Enemigo una IA que protege a su Secuaz más "tanque" concentrando amenaza en él (o, según el texto de la carta, lo usa como ariete); `LOWEST_LIFE` permite el patrón inverso — rematar al que ya está debilitado, una decisión de IA con personalidad reconocible sin añadir complejidad al motor: es la misma comparación numérica que `HIGHEST_PLANO_ATTACK` ya requería, solo que sobre otro campo del Secuaz.
 
 **Resumen de las 4 decisiones:** (1) targeting explícito de Secuaz por el jugador, sin bloqueo automático — solo Defensor fuerza prioridad; (2) HP como campo fijo en `CardDefinition` del Secuaz, igual que Aliados; (3) muerte = salida inmediata de mesa sin trigger por defecto, reutilizando Arrollar para el exceso, con puerta abierta a efectos "al morir" como dato futuro; (4) vocabulario de Dramaturgia confirmado + `HIGHEST_LIFE`/`LOWEST_LIFE` añadidos.
+
+## 2026-07-10 — Proporción de interacción con Núcleo en cartas de Evento del contenido de juguete (Director Creativo + Game Designer)
+
+Responde al feedback del Director Creativo: "las cartas deberían usar Energía y rara vez Núcleos; solo Núcleos las que son permanentes (Aliado/Equipo/Artefacto), las cartas de Evento no deberían de normal."
+
+### 1. La regla base NO cambia — se confirma tal cual ya estaba cerrada
+- Jugar una carta de la mano (cualquier tipo) paga **Energía** (decisión 2026-07-05, "Cierre de dudas del motor de combate").
+- Activar la **habilidad** de algo que ya está en mesa (Líder, Aliado, Enemigo, y por extensión cualquier objeto permanente) paga **Núcleo**, no Energía salvo excepción explícita (misma decisión).
+- El Director describe la regla correctamente. No hace falta rediseñarla; el problema, si existe, está en el contenido de prueba, no en el motor de reglas.
+
+### 2. Diagnóstico del contenido de juguete actual
+Revisado `common-cards.json`, `mago-base-cards.json`, `soldado-base-cards.json`:
+- Por Líder (10 cartas propias, de las cuales 5 son de tipo EVENTO), **1 carta de Evento** lleva la keyword `UMBRAL`/`NEUTRO` explícita como pago alternativo con Núcleo: `card-mago-base-03` "Vórtice" y, en el mazo de Soldado, `card-soldado-base-01` "Estocada". Sumada la carta común compartida por todos los mazos `card-common-02` "Puñetazo Directo" (EVENTO, `NEUTRO`), cada Líder termina viendo **2 de sus ~11 cartas de Evento disponibles** interactuando con Núcleo — dentro de una minoría razonable, no es el problema principal.
+- **El problema real está en las cartas `ATAQUE_POR_X`** (`card-mago-base-02` "Descarga Arcana", `card-soldado-base-02` "Golpe Certero"): su `ruleText` dice literalmente *"escalando con el valor del dado usado"*, describiendo una interacción de Núcleo (leer el valor de un dado) **sin llevar la keyword `UMBRAL`/`NEUTRO`** y sin coste de Núcleo declarado en `cost`. Esto es una inconsistencia de datos, no una decisión de diseño: el texto sugiere que la carta lee un dado de Núcleo aunque su coste declarado es solo Energía. Es probablemente esta redacción ambigua — más que el conteo real de cartas con Umbral — la que dio al Director la impresión de "las cartas usan núcleos todo el rato".
+
+### 3. Criterio para el contenido de prueba (vinculante de aquí en adelante)
+- **De las ~10 cartas propias de un Líder, entre 1 y 2 cartas de Evento** pueden llevar `UMBRAL`/`NEUTRO` como excepción de pago alternativo con Núcleo. El resto de cartas de Evento deben tener coste puramente de Energía, sin ningún campo ni texto que mencione dados/Núcleo.
+- Cartas compartidas del pool común (`common-cards.json`) cuentan hacia esa cuota de cada Líder que las incluya en su mazo — no son "gratis" fuera del cupo.
+- Aliado/Equipo/Artefacto y cualquier otra carta que represente un objeto permanente en mesa siguen fuera de esta cuota: su **habilidad activable una vez en mesa** puede y debe pagarse con Núcleo por norma, sin contarla como excepción de Evento.
+- Ninguna keyword de Evento debe describir en su `ruleText` una lectura de "valor del dado" a menos que lleve explícitamente `UMBRAL`/`NEUTRO` en `keywords` y cuente hacia la cuota — la keyword `ATAQUE_POR_X` necesita o bien perder esa redacción (escalar con otra cosa, ej. nivel de la carta) o ganar el tag `UMBRAL` explícito y contar hacia la cuota de 1-2.
+
+### 4. Traslado a Coordinator
+Se traslada a Coordinator (no se toca el JSON aquí) la lista concreta de ajustes sugeridos, ver resumen de esta sesión.
