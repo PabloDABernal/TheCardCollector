@@ -55,6 +55,7 @@ describe('CARD_ICON_GLYPH', () => {
       EQUIPO: '🛡️',
       ALIADO: '🤝',
       CONTRATIEMPO: '⏪',
+      SECUAZ: '👹', // NUEVO H4.x — CardTile size="board" (MinionRow)
     });
   });
 });

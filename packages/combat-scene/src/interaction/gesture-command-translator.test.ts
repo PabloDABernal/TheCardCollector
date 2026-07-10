@@ -306,7 +306,7 @@ describe('createGestureCommandTranslator (H2.9 spec §4-§6.1, migrado a nucleoT
 
   describe('NUEVO H3.1/§5.4 (migrado a handleAbilityTap H4 §6.1) — tap en icono de habilidad del Líder', () => {
     function abilityContext(coreCost: AbilityViewData['coreCost']): BoardViewContext {
-      const ability: AbilityViewData = { abilityId: ABILITY_ID, name: 'Golpe', baseCooldown: 2, coreCost };
+      const ability: AbilityViewData = { abilityId: ABILITY_ID, name: 'Golpe', baseCooldown: 2, coreCost, effectKind: 'NONE' };
       return createMockContext([ability]);
     }
 

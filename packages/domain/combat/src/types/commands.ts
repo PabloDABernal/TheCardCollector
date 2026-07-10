@@ -23,6 +23,15 @@ export type CombatCommand =
       readonly sourceId: string;
       readonly side: CombatSide;
       readonly nucleoInstanceId: NucleoInstanceId;
+      /**
+       * NUEVO H4.x — objetivo explícito del ataque. OBLIGATORIO en runtime (no se puede
+       * forzar por tipos, mismo criterio que `PLAY_CARD.target`) si y solo si
+       * `abilityEffects[abilityId]?.kind === 'ATTACK' && side === 'LEADER'`. Irrelevante/
+       * ignorado en cualquier otro caso (incluida una ATTACK activada por ENEMY, que
+       * sigue resolviendo el objetivo con `resolveDamageTarget()` sin cambios). Ver spec
+       * H4_targeting_habilidades_y_ficha_personaje.md §1.2.a.
+       */
+      readonly target?: AttackTarget;
     }
   | { readonly type: 'END_TURN' }
   | {

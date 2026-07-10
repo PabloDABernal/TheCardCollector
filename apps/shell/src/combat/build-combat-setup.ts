@@ -79,6 +79,7 @@ export async function buildCombatSetup(params: BuildCombatSetupParams = {}): Pro
     baseCooldown: ability.baseCooldown,
     coreCost: ability.coreCost, // NUEVO H3 (spec §5.4)
     ...(ability.ruleText !== undefined ? { ruleText: ability.ruleText } : {}), // NUEVO H4 spec §3.2 Gap B
+    effectKind: ability.effect?.kind ?? 'NONE', // NUEVO H4.x
   }));
   const enemyAbilities: AbilityViewData[] = enemy.abilities.map((ability) => ({
     abilityId: ability.id,
@@ -86,6 +87,7 @@ export async function buildCombatSetup(params: BuildCombatSetupParams = {}): Pro
     baseCooldown: ability.baseCooldown,
     coreCost: ability.coreCost, // NUEVO H3 (spec §5.4)
     ...(ability.ruleText !== undefined ? { ruleText: ability.ruleText } : {}), // NUEVO H4 spec §3.2 Gap B
+    effectKind: ability.effect?.kind ?? 'NONE', // NUEVO H4.x
   }));
 
   // NUEVO H4 spec §3.3 — todo el `dramaturgiaDeck` del Enemigo activo, resuelto una vez, para que

@@ -35,6 +35,12 @@ export {
   LEADER_ABILITIES_ROW_Y,
   ENEMY_ABILITIES_ROW_Y,
   ABILITY_ICON_SEPARATION_PX,
+  // NUEVO H4.x — `MinionRow.tsx`/`AllyRow.tsx` (apps/shell) reutilizan estas coordenadas, mismo
+  // criterio de no duplicar posición (sustituye a `minions-view.ts`/`allies-view.ts`, eliminados).
+  MINIONS_ROW_Y,
+  ALLIES_ROW_Y,
+  MINIONS_ROW_X_ORIGIN,
+  ALLIES_ROW_X_ORIGIN,
 } from './view';
 // FIX Reviewer post-H3 (commit `cce72a3`) — `isAnyLeaderAbilityActivatable` SÍ se reexporta
 // (excepción puntual a "sin detalles internos" de arriba): `apps/shell` (`CombatHud.tsx`) lo

@@ -340,9 +340,9 @@ export class CombatEngine {
    *  1. Toda clave de `abilityEffects` DEBE existir en `abilityCoreCosts` (que ya
    *     garantiza, por `validateAbilityCooldownsConfig`, que también existe en
    *     `abilityCooldowns`).
-   *  2. Toda entrada `kind: 'ATTACK'` DEBE pertenecer a una habilidad cuyo
-   *     `abilityCooldowns[...].side` sea `'ENEMY'` — ver spec §0.5 (el Líder nunca es
-   *     origen de un efecto ATTACK en esta historia; no existe `enemyHealth`).
+   *  2. MODIFICADO H4.x — ya NO se exige que `kind: 'ATTACK'` pertenezca a una habilidad
+   *     `side: 'ENEMY'`: una habilidad ATTACK del LEADER ahora es válida y golpea al
+   *     Enemigo/Secuaz (ver spec H4_targeting_habilidades_y_ficha_personaje.md §1).
    *  3. Ningún `amount` de `ADD`/`MULTIPLY` (en `ATTACK.formula` o `PLOT.amount`) puede
    *     ser negativo — "modificadores negativos" son una capa futura fuera de alcance
    *     (GDD §12, ver `types/umbral.ts`), y un `amount` negativo rompería el invariante
@@ -358,12 +358,10 @@ export class CombatEngine {
         );
       }
       if (effect.kind === 'ATTACK') {
-        const def = this.abilityCooldowns.get(abilityId) as AbilityCooldownDefinition;
-        if (def.side !== 'ENEMY') {
-          throw new Error(
-            `CombatEngine: abilityEffects["${String(abilityId)}"] es de tipo ATTACK pero su dueño (abilityCooldowns.side) es "${def.side}" — H1.6 solo modela daño Enemigo→Líder (GDD §3.7), ver spec H1.6 §0.5`
-          );
-        }
+        // MODIFICADO H4.x — se retira la restricción `def.side !== 'ENEMY'`: una
+        // habilidad ATTACK ahora es válida con cualquier `side` (ver spec
+        // H4_targeting_habilidades_y_ficha_personaje.md §1.2.d.1). `abilityCooldowns`
+        // sigue garantizando (validateAbilityCooldownsConfig) que la clave existe.
         this.validateUmbralFormulaNonNegative(`abilityEffects["${String(abilityId)}"]`, effect.formula.baseFormula);
         if (effect.formula.bonusFormula) {
           this.validateUmbralFormulaNonNegative(`abilityEffects["${String(abilityId)}"]`, effect.formula.bonusFormula);
@@ -753,19 +751,129 @@ export class CombatEngine {
    * `arrollar: true` (GDD §2.8: "sin Arrollar por defecto [...] el exceso se pierde").
    * Muta `this.leaderShield`/`this.leaderDamage`.
    */
+  /**
+   * MODIFICADO H4.x — bifurca por `side`: `side === 'LEADER'` golpea al Enemigo/Secuaz
+   * (nunca al propio Líder/Aliado, fix del bug de motor descrito en la spec §1.1) vía
+   * `applyAttackToEnemySide`; `side === 'ENEMY'` mantiene el comportamiento EXISTENTE
+   * sin cambios (Aliado en Berserker/redirección, o si no, el propio Líder). Deja de
+   * retornar un único `CombatEvent` — puja directamente sobre `events` (el camino
+   * LEADER→MINION puede emitir 2 eventos: MINION_DAMAGED + MINION_DEFEATED).
+   */
   private applyAttackEffect(
     source: AbilityActionSource,
     effectDef: Extract<AbilityEffectDefinition, { kind: 'ATTACK' }>,
-    nucleo: NucleoInstance
-  ): CombatEvent {
+    nucleo: NucleoInstance,
+    target: AttackTarget | undefined,
+    events: CombatEvent[]
+  ): void {
     const resolution = resolveAbilityUmbral(effectDef.formula, nucleo.value);
     const rawAmount = resolution.baseResolvedValue;
 
-    const target = this.resolveDamageTarget(); // NUEVO H1.15
-    if (target) {
-      return this.applyAttackEffectToAlly(source, effectDef, nucleo, rawAmount, target);
+    if (source.side === 'LEADER') {
+      // NUEVO H4.x — Líder/Aliado ataca al Enemigo/Secuaz, nunca a sí mismo.
+      this.applyAttackToEnemySide(
+        source.abilityId !== undefined ? { abilityId: source.abilityId } : {},
+        source.sourceId,
+        nucleo,
+        rawAmount,
+        target as AttackTarget,
+        effectDef.arrollar === true,
+        events,
+        { bonusActivated: resolution.bonusActivated, ...(resolution.bonusResolvedValue !== undefined ? { bonusResolvedValue: resolution.bonusResolvedValue } : {}) }
+      );
+      return;
     }
-    return this.applyAttackEffectToLeader(source, effectDef, nucleo, rawAmount);
+
+    // Comportamiento EXISTENTE, SIN CAMBIOS: Enemigo ataca a Líder/Aliado.
+    const allyTarget = this.resolveDamageTarget(); // NUEVO H1.15
+    const event = allyTarget
+      ? this.applyAttackEffectToAlly(source, effectDef, nucleo, rawAmount, allyTarget)
+      : this.applyAttackEffectToLeader(source, effectDef, nucleo, rawAmount);
+    events.push(event);
+    this.eventBus.emit(event);
+  }
+
+  /**
+   * NUEVO H4.x — extraído de `applyPlayableCardEffect` (rama `ATTACK_ENEMY`) por
+   * REUTILIZACIÓN: único punto de "Líder/Aliado ataca a Enemigo directo o a un Secuaz
+   * concreto ya validado". Usado tanto por `PLAY_CARD` (`origin: { cardId }`) como por
+   * `ACTIVATE_ABILITY` con una habilidad ATTACK del LEADER (`origin: { abilityId }`).
+   * Ver spec H4_targeting_habilidades_y_ficha_personaje.md §1.2.d.3.
+   */
+  private applyAttackToEnemySide(
+    origin: { readonly cardId?: CardId; readonly abilityId?: AbilityId },
+    sourceId: string,
+    nucleo: NucleoInstance,
+    rawAmount: number,
+    target: AttackTarget,
+    arrollar: boolean,
+    events: CombatEvent[],
+    /** Metadatos de bonus Umbral del `ENEMY_DAMAGED` — irrelevante para el camino MINION.
+     *  Cada caller pasa lo que ya resolvió con `resolveAbilityUmbral` sobre su propia
+     *  fórmula (distinta entre `PLAY_CARD`/`ACTIVATE_ABILITY`). */
+    bonusResolution: { readonly bonusActivated: boolean; readonly bonusResolvedValue?: number } = {
+      bonusActivated: false,
+    }
+  ): void {
+    if (target.kind === 'MINION') {
+      const minion = this.minionsInPlay.find((m) => m.instanceId === target.minionInstanceId) as MinionInPlay;
+      const lifeBefore = minion.life;
+      const lifeAfter = Math.max(0, lifeBefore - rawAmount);
+      const excess = Math.max(0, rawAmount - lifeBefore);
+      const died = lifeAfter <= 0;
+      const appliedDamageToEnemy = died && arrollar ? excess : 0;
+
+      this.minionsInPlay = died
+        ? this.minionsInPlay.filter((m) => m.instanceId !== minion.instanceId)
+        : this.minionsInPlay.map((m) => (m.instanceId === minion.instanceId ? { ...m, life: lifeAfter } : m));
+      this.enemyDamage += appliedDamageToEnemy;
+
+      const dmgEvent: CombatEvent = {
+        type: 'MINION_DAMAGED',
+        ...origin,
+        sourceId,
+        nucleoSpent: nucleo,
+        minionInstanceId: minion.instanceId,
+        rawAmount,
+        lifeBefore,
+        lifeAfter,
+        died,
+        excess,
+        appliedDamageToEnemy,
+        enemyDamageAfter: this.enemyDamage,
+      };
+      events.push(dmgEvent);
+      this.eventBus.emit(dmgEvent);
+
+      if (died) {
+        const defeatedEvent: CombatEvent = {
+          type: 'MINION_DEFEATED',
+          instanceId: minion.instanceId,
+          definitionId: minion.definitionId,
+          cause: 'PLAYER_ATTACK',
+        };
+        events.push(defeatedEvent);
+        this.eventBus.emit(defeatedEvent);
+      }
+      return;
+    }
+
+    // target.kind === 'ENEMY'
+    this.enemyDamage += rawAmount;
+    const dmgEvent: CombatEvent = {
+      type: 'ENEMY_DAMAGED',
+      ...origin,
+      sourceId,
+      nucleoSpent: nucleo,
+      rawAmount,
+      bonusActivated: bonusResolution.bonusActivated,
+      ...(bonusResolution.bonusResolvedValue !== undefined
+        ? { bonusResolvedValue: bonusResolution.bonusResolvedValue }
+        : {}),
+      enemyDamageAfter: this.enemyDamage,
+    };
+    events.push(dmgEvent);
+    this.eventBus.emit(dmgEvent);
   }
 
   /** H1.6 sin cambios de comportamiento — solo renombrada/extraída para separar la rama
@@ -1068,7 +1176,8 @@ export class CombatEngine {
     abilityId: AbilityId,
     sourceId: string,
     side: CombatSide,
-    nucleo: NucleoInstance
+    nucleo: NucleoInstance,
+    target?: AttackTarget // NUEVO H4.x — solo relevante si effectDef.kind === 'ATTACK' && side === 'LEADER'
   ): {
     events: CombatEvent[];
     effectLogEntry?: UndoableEnemyActionLogEntry['effect'];
@@ -1099,29 +1208,37 @@ export class CombatEngine {
       if (effectDef.kind === 'ATTACK') {
         const leaderDamageBefore = this.leaderDamage;
         const leaderShieldBefore = this.leaderShield;
-        const effectEvent = this.applyAttackEffect({ abilityId, sourceId, side }, effectDef, nucleo);
-        events.push(effectEvent);
-        this.eventBus.emit(effectEvent);
+        const eventsBeforeAttack = events.length;
+        // MODIFICADO H4.x — `applyAttackEffect` deja de retornar 1 evento; puja
+        // directamente sobre `events` (el camino LEADER→MINION puede añadir 2).
+        this.applyAttackEffect({ abilityId, sourceId, side }, effectDef, nucleo, target, events);
 
-        if (effectEvent.type === 'ALLY_DAMAGED') {
-          effectLogEntry = {
-            kind: 'ATTACK',
-            target: 'ALLY',
-            allyInstanceId: effectEvent.allyInstanceId,
-            allyLifeBefore: effectEvent.allyLifeBefore,
-            allyLifeAfter: effectEvent.allyLifeAfter,
-            leaderDamageBefore,
-            leaderDamageAfter: this.leaderDamage,
-          };
-        } else {
-          effectLogEntry = {
-            kind: 'ATTACK',
-            target: 'LEADER',
-            leaderDamageBefore,
-            leaderDamageAfter: this.leaderDamage,
-            leaderShieldBefore,
-            leaderShieldAfter: this.leaderShield,
-          };
+        // NUEVO H4.x — `effectLogEntry` solo tiene sentido para `side === 'ENEMY'`
+        // (alimenta `currentEnemyTurnLog`, señal de acción DEL Enemigo, no de daño AL
+        // Enemigo — ver spec §1.2.d.5). Para `side === 'LEADER'` queda `undefined`,
+        // intencionalmente: ese camino nunca alimenta `currentEnemyTurnLog`.
+        if (side === 'ENEMY') {
+          const effectEvent = events[eventsBeforeAttack] as CombatEvent;
+          if (effectEvent.type === 'ALLY_DAMAGED') {
+            effectLogEntry = {
+              kind: 'ATTACK',
+              target: 'ALLY',
+              allyInstanceId: effectEvent.allyInstanceId,
+              allyLifeBefore: effectEvent.allyLifeBefore,
+              allyLifeAfter: effectEvent.allyLifeAfter,
+              leaderDamageBefore,
+              leaderDamageAfter: this.leaderDamage,
+            };
+          } else if (effectEvent.type === 'LEADER_DAMAGED') {
+            effectLogEntry = {
+              kind: 'ATTACK',
+              target: 'LEADER',
+              leaderDamageBefore,
+              leaderDamageAfter: this.leaderDamage,
+              leaderShieldBefore,
+              leaderShieldAfter: this.leaderShield,
+            };
+          }
         }
       } else {
         const scenarioPlotBefore = this.scenarioPlot;
@@ -1319,6 +1436,44 @@ export class CombatEngine {
       });
     }
 
+    // NUEVO H4.x — targeting explícito, solo si esta activación es un ATTACK del LÍDER
+    // (fix §1.1 del bug de motor). Mismo bloque de validación que `handlePlayCard` ya
+    // tiene para `ATTACK_ENEMY` — va DESPUÉS de validar Núcleo/color y ANTES de mutar.
+    const effectDef = this.abilityEffects.get(command.abilityId);
+    let resolvedAbilityTarget: AttackTarget | undefined;
+    if (effectDef?.kind === 'ATTACK' && command.side === 'LEADER') {
+      if (!command.target) {
+        return err({ code: 'ABILITY_TARGET_REQUIRED', abilityId: command.abilityId });
+      }
+
+      const liveDefensores = this.minionsInPlay.filter((m) => m.isDefensor);
+      if (liveDefensores.length > 0) {
+        const targetsAllowedDefensor =
+          command.target.kind === 'MINION' &&
+          liveDefensores.some(
+            (m) => m.instanceId === (command.target as Extract<AttackTarget, { kind: 'MINION' }>).minionInstanceId
+          );
+        if (!targetsAllowedDefensor) {
+          return err({
+            code: 'MUST_TARGET_DEFENSOR',
+            abilityId: command.abilityId,
+            defensorInstanceIds: liveDefensores.map((m) => m.instanceId),
+          });
+        }
+      }
+
+      if (command.target.kind === 'MINION') {
+        const minion = this.minionsInPlay.find(
+          (m) => m.instanceId === (command.target as Extract<AttackTarget, { kind: 'MINION' }>).minionInstanceId
+        );
+        if (!minion) {
+          return err({ code: 'ATTACK_TARGET_NOT_FOUND', minionInstanceId: command.target.minionInstanceId });
+        }
+      }
+
+      resolvedAbilityTarget = command.target;
+    }
+
     // Solo a partir de aquí se muta estado — ninguna validación previa debe tener
     // efectos secundarios.
 
@@ -1334,7 +1489,8 @@ export class CombatEngine {
       command.abilityId,
       command.sourceId,
       command.side,
-      nucleo
+      nucleo,
+      resolvedAbilityTarget // NUEVO H4.x
     );
 
     // NUEVO H1.14
@@ -2123,69 +2279,19 @@ export class CombatEngine {
       const resolution = resolveAbilityUmbral(effect.formula, (nucleo as NucleoInstance).value);
       const rawAmount = resolution.baseResolvedValue;
 
-      if (resolvedTarget?.kind === 'MINION') {
-        // NUEVO §3.9.3 — camino Secuaz.
-        const minion = this.minionsInPlay.find((m) => m.instanceId === resolvedTarget.minionInstanceId) as MinionInPlay;
-        const lifeBefore = minion.life;
-        const lifeAfter = Math.max(0, lifeBefore - rawAmount);
-        const excess = Math.max(0, rawAmount - lifeBefore);
-        const died = lifeAfter <= 0;
-        const appliedDamageToEnemy = died && effect.arrollar === true ? excess : 0;
-
-        if (died) {
-          // decisions.md punto 3: "sale de mesa de inmediato".
-          this.minionsInPlay = this.minionsInPlay.filter((m) => m.instanceId !== minion.instanceId);
-        } else {
-          this.minionsInPlay = this.minionsInPlay.map((m) =>
-            m.instanceId === minion.instanceId ? { ...m, life: lifeAfter } : m
-          );
-        }
-        this.enemyDamage += appliedDamageToEnemy;
-
-        const dmgEvent: CombatEvent = {
-          type: 'MINION_DAMAGED',
-          cardId: command.cardId,
-          sourceId: command.sourceId,
-          nucleoSpent: nucleo as NucleoInstance,
-          minionInstanceId: minion.instanceId,
-          rawAmount,
-          lifeBefore,
-          lifeAfter,
-          died,
-          excess,
-          appliedDamageToEnemy,
-          enemyDamageAfter: this.enemyDamage,
-        };
-        events.push(dmgEvent);
-        this.eventBus.emit(dmgEvent);
-
-        if (died) {
-          const defeatedEvent: CombatEvent = {
-            type: 'MINION_DEFEATED',
-            instanceId: minion.instanceId,
-            definitionId: minion.definitionId,
-            cause: 'PLAYER_ATTACK',
-          };
-          events.push(defeatedEvent);
-          this.eventBus.emit(defeatedEvent);
-        }
-        return;
-      }
-
-      // Camino EXISTENTE (target ENEMY), sin cambios de comportamiento.
-      this.enemyDamage += rawAmount;
-      const dmgEvent: CombatEvent = {
-        type: 'ENEMY_DAMAGED',
-        cardId: command.cardId,
-        sourceId: command.sourceId,
-        nucleoSpent: nucleo as NucleoInstance,
+      // MODIFICADO H4.x — delegado en `applyAttackToEnemySide` (extraído, reutilizado
+      // también por `ACTIVATE_ABILITY`/side LEADER). Mismo comportamiento observable,
+      // cero cambio de eventos emitidos para este camino.
+      this.applyAttackToEnemySide(
+        { cardId: command.cardId },
+        command.sourceId,
+        nucleo as NucleoInstance,
         rawAmount,
-        bonusActivated: resolution.bonusActivated,
-        ...(resolution.bonusResolvedValue !== undefined ? { bonusResolvedValue: resolution.bonusResolvedValue } : {}),
-        enemyDamageAfter: this.enemyDamage,
-      };
-      events.push(dmgEvent);
-      this.eventBus.emit(dmgEvent);
+        resolvedTarget as AttackTarget,
+        effect.arrollar === true,
+        events,
+        { bonusActivated: resolution.bonusActivated, ...(resolution.bonusResolvedValue !== undefined ? { bonusResolvedValue: resolution.bonusResolvedValue } : {}) }
+      );
     } else if (effect.kind === 'ADD_NUCLEO_DIE') {
       // NUEVO H3.4 — `PLAY_CARD` sigue teniendo éxito completo aunque el efecto de
       // añadir dado se ignore por tope (decisions.md).

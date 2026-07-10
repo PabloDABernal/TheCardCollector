@@ -75,13 +75,17 @@ describe('createCombatBridge (H2.3) — pub/sub en aislamiento contra CombatEngi
     const snapshot = bridge.getSnapshot();
     const nucleo = snapshot.nucleoTable[0]!;
 
-    // CD1 del Líder soldado-base ("Guardia Firme") acepta cualquier Núcleo (coreCost ANY).
+    // CD1 del Líder soldado-base ("Guardia Firme") acepta cualquier Núcleo (coreCost
+    // ANY). MODIFICADO H4.x — "Guardia Firme" es ahora una habilidad ATTACK real (fix
+    // del bug de motor, ver spec H4_targeting_habilidades_y_ficha_personaje.md §1.3);
+    // requiere `target` explícito.
     const result = bridge.dispatch({
       type: 'ACTIVATE_ABILITY',
       abilityId: createId<'AbilityId'>('AbilityId', 'ability-soldado-base-guardia-firme'),
       sourceId: 'leader',
       side: 'LEADER',
       nucleoInstanceId: nucleo.id as NucleoInstanceId,
+      target: { kind: 'ENEMY' },
     });
 
     expect(result.ok).toBe(true);
@@ -115,6 +119,7 @@ describe('createCombatBridge (H2.3) — pub/sub en aislamiento contra CombatEngi
       sourceId: 'leader',
       side: 'LEADER',
       nucleoInstanceId: nucleo.id as NucleoInstanceId,
+      target: { kind: 'ENEMY' },
     });
 
     expect(result.ok).toBe(true);
@@ -138,6 +143,7 @@ describe('createCombatBridge (H2.3) — pub/sub en aislamiento contra CombatEngi
       sourceId: 'leader',
       side: 'LEADER',
       nucleoInstanceId: nucleo.id as NucleoInstanceId,
+      target: { kind: 'ENEMY' },
     });
 
     expect(bridge.getSnapshot()).toEqual(engine.getSnapshot());

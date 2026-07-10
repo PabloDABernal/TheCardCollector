@@ -117,10 +117,21 @@ export type CombatCommandError =
     }
   | {
       /** NUEVO §3.9.3. Hay ≥1 Secuaz Defensor vivo y el `target` elegido no es uno de
-       *  ellos. */
+       *  ellos. MODIFICADO H4.x — `cardId` pasa a opcional y se añade `abilityId`
+       *  opcional (exactamente uno presente según el origen: `PLAY_CARD` sigue
+       *  construyendo `cardId`; `ACTIVATE_ABILITY` construye `abilityId`), mismo criterio
+       *  de campos opcionales-alternativos ya usado en `LEADER_DAMAGED.abilityId`/
+       *  `ALLY_DAMAGED.abilityId` (H1.16). */
       readonly code: 'MUST_TARGET_DEFENSOR';
-      readonly cardId: CardId;
+      readonly cardId?: CardId;
+      readonly abilityId?: AbilityId;
       readonly defensorInstanceIds: readonly CardInstanceId[];
+    }
+  | {
+      /** NUEVO H4.x. `ACTIVATE_ABILITY` con `abilityEffects[abilityId].kind === 'ATTACK'`,
+       *  `side === 'LEADER'`, sin `target`. Análogo a `PLAY_CARD_TARGET_REQUIRED`. */
+      readonly code: 'ABILITY_TARGET_REQUIRED';
+      readonly abilityId: AbilityId;
     };
 
 /**

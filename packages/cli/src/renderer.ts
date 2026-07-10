@@ -174,8 +174,26 @@ export function renderEvent(event: CombatEvent, nameLookup: NameLookup): string 
       return `» LEADER_LEVELED_UP: nivel ${event.levelAfter} (disparado por ${event.triggeredBy})`;
     case 'CARD_PLAYED':
       return `» CARD_PLAYED: ${nameLookup.cardName(event.cardId)}`;
-    case 'ENEMY_DAMAGED':
-      return `» ENEMY_DAMAGED: ${nameLookup.cardName(event.cardId)} inflige ${event.rawAmount} de daño al Enemigo (${event.enemyDamageAfter})`;
+    case 'ENEMY_DAMAGED': {
+      // MODIFICADO H4.x — origen puede ser carta (cardId) o habilidad (abilityId).
+      const origin =
+        event.cardId !== undefined
+          ? nameLookup.cardName(event.cardId)
+          : event.abilityId !== undefined
+            ? nameLookup.abilityName(event.abilityId)
+            : 'desconocido';
+      return `» ENEMY_DAMAGED: ${origin} inflige ${event.rawAmount} de daño al Enemigo (${event.enemyDamageAfter})`;
+    }
+    case 'MINION_DAMAGED': {
+      // NUEVO H4.x — antes caía en el `default` genérico.
+      const origin =
+        event.cardId !== undefined
+          ? nameLookup.cardName(event.cardId)
+          : event.abilityId !== undefined
+            ? nameLookup.abilityName(event.abilityId)
+            : 'desconocido';
+      return `» MINION_DAMAGED: ${origin} inflige ${event.rawAmount} de daño a Secuaz ${event.minionInstanceId} (${event.lifeAfter} vida restante${event.died ? ', MUERTO' : ''})`;
+    }
     case 'LEADER_SHIELD_GAINED':
       return `» LEADER_SHIELD_GAINED: +${event.rawAmount} Escudo (${event.leaderShieldAfter}/${LEADER_SHIELD_MAX})`;
     case 'DRAMATURGIA_CARD_DRAWN':

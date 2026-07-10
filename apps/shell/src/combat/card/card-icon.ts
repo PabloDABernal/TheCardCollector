@@ -7,7 +7,9 @@ import type { KeywordId } from '@collector/domain-catalog';
  * fija `CardType = 'EQUIPO'|'ALIADO'|'EVENTO'|'CONTRATIEMPO'`). Ataque/Trama son sub-clasificaciones
  * de EVENTO derivadas de sus keywords (§1 spec, nota de justificación).
  */
-export type CardIconKind = 'ATAQUE' | 'TRAMA' | 'EQUIPO' | 'ALIADO' | 'CONTRATIEMPO';
+/** NUEVO H4.x — `SECUAZ` se añade para `CardTile size="board"` (`MinionRow`, un Secuaz enemigo en
+ *  mesa nunca es una carta jugable de la mano, así que no participa en `cardIconFor`). */
+export type CardIconKind = 'ATAQUE' | 'TRAMA' | 'EQUIPO' | 'ALIADO' | 'CONTRATIEMPO' | 'SECUAZ';
 
 const ATTACK_KEYWORDS: readonly KeywordId[] = ['ATAQUE', 'ATAQUE_MAS_X', 'ATAQUE_POR_X'];
 const PLOT_KEYWORDS: readonly KeywordId[] = ['TRAMA_X'];
@@ -40,4 +42,5 @@ export const CARD_ICON_GLYPH: Record<CardIconKind, string> = {
   EQUIPO: '🛡️',
   ALIADO: '🤝',
   CONTRATIEMPO: '⏪',
+  SECUAZ: '👹',
 };

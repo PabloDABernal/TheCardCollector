@@ -21,9 +21,12 @@ export interface LevelUpOption {
  * GDD §3.1/§4.1. `baseAbilities` es una tupla de EXACTAMENTE 4 (plantilla CD1/2/3/4,
  * GDD §3.1) — se tipa como tupla para que el propio compilador exija longitud 4; el
  * `parseLeaderDefinition` (§3.3) valida además que sus `baseCooldown` sean exactamente
- * {1,2,3,4} (uno de cada) y que la de CD1 sea `coreCost.kind === 'ANY'` y sin
- * `effect.kind === 'ATTACK'` (GDD §2.5: "CD1 siempre ⚫, y siempre puro"; ver spec §3.3
- * para la justificación completa de por qué también se prohíbe ATTACK en las otras 3).
+ * {1,2,3,4} (uno de cada) y que la de CD1 sea `coreCost.kind === 'ANY'`. MODIFICADO
+ * H4.x — ya NO se prohíbe `effect.kind === 'ATTACK'` en ninguna `baseAbility` (era una
+ * limitación de motor, no una regla de diseño, ver spec
+ * H4_targeting_habilidades_y_ficha_personaje.md §1.2.e); la única regla real de GDD
+ * §2.5 ("CD1 siempre puro") es que, SI la habilidad de CD1 tiene `effect.kind ===
+ * 'ATTACK'`, su `formula.baseFormula.kind` debe ser `'VALUE'` (sin +X/×X/Umbral).
  */
 export interface LeaderDefinition {
   readonly id: LeaderId;

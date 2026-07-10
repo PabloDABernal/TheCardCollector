@@ -30,6 +30,12 @@ export interface GestureCommandTranslator {
   handleCardTap(cardId: CardId): void;
   /** NUEVO H4 §6.1 — invocado directo desde `AbilityTile.onClick` (React/DOM). */
   handleAbilityTap(abilityId: AbilityId): void;
+  /** NUEVO H4.x — invocado directo desde `CardTile.onClick` (React/DOM) cuando el tile
+   *  representa un Secuaz en mesa (`MinionRow`, size 'board') — Secuaz dejó de ser un
+   *  sprite de Phaser (piece 2), así que un tap sobre él debe seguir resolviendo como
+   *  tap de targeting mediante el mismo camino que `handleKnownTargetId` ya usa para
+   *  Phaser (rol/dado). Delega en la lógica ya existente, `targetId = minionInstanceId`. */
+  handleMinionTap(minionInstanceId: string): void;
   /** NUEVO H4 §5.3 — cancela cualquier selección de targeting pendiente (equivalente a lo que ya
    *  ocurre cuando `handleGesture` recibe un `targetId === null`), expuesto para el botón "Cancelar"
    *  del `TargetingPromptBanner` (React), que no tiene forma de despachar un `PointerGesture` real. */
@@ -46,8 +52,18 @@ export interface GestureCommandTranslator {
  */
 type PendingSelection =
   | { readonly stage: 'AWAITING_ATTACK_TARGET'; readonly cardId: CardId }
+  /** NUEVO H4.x — análogo a `AWAITING_ATTACK_TARGET`, para una habilidad ATTACK del
+   *  Líder en vez de una carta. Ver spec
+   *  H4_targeting_habilidades_y_ficha_personaje.md §1.4. */
+  | { readonly stage: 'AWAITING_ATTACK_TARGET_FOR_ABILITY'; readonly abilityId: AbilityId }
   | { readonly stage: 'AWAITING_NUCLEO_FOR_CARD'; readonly cardId: CardId; readonly target: AttackTarget }
-  | { readonly stage: 'AWAITING_NUCLEO_FOR_ABILITY'; readonly abilityId: AbilityId }
+  | {
+      readonly stage: 'AWAITING_NUCLEO_FOR_ABILITY';
+      readonly abilityId: AbilityId;
+      /** NUEVO H4.x — presente si esta activación viene de una habilidad ATTACK (ya
+       *  resuelto el objetivo); ausente para PLOT/sin efecto. */
+      readonly target?: AttackTarget;
+    }
   | null;
 
 export function createGestureCommandTranslator(
@@ -90,6 +106,15 @@ export function createGestureCommandTranslator(
       return { kind: 'AWAITING_ATTACK_TARGET', cardName, validTargetIds };
     }
 
+    if (selection.stage === 'AWAITING_ATTACK_TARGET_FOR_ABILITY') {
+      const abilityName = leaderAbilitiesById.get(selection.abilityId)?.name ?? '';
+      const validTargetIds = [
+        FOCUS_ID_ENEMY,
+        ...bridge.getSnapshot().minionsInPlay.map((m) => m.instanceId as string),
+      ];
+      return { kind: 'AWAITING_ATTACK_TARGET_FOR_ABILITY', abilityName, validTargetIds };
+    }
+
     if (selection.stage === 'AWAITING_NUCLEO_FOR_CARD') {
       const cardName = cardsById.get(selection.cardId)?.name ?? '';
       const validDieIds = bridge
@@ -108,13 +133,14 @@ export function createGestureCommandTranslator(
     return { kind: 'AWAITING_NUCLEO_FOR_ABILITY', abilityName, validDieIds };
   }
 
-  function dispatchAbility(ability: AbilityViewData, nucleoInstanceId: NucleoInstanceId): void {
+  function dispatchAbility(ability: AbilityViewData, nucleoInstanceId: NucleoInstanceId, target?: AttackTarget): void {
     bridge.dispatch({
       type: 'ACTIVATE_ABILITY',
       abilityId: ability.abilityId,
       sourceId: 'leader',
       side: 'LEADER',
       nucleoInstanceId,
+      ...(target ? { target } : {}), // NUEVO H4.x
     });
   }
 
@@ -125,6 +151,29 @@ export function createGestureCommandTranslator(
    *  auto-selección, dispatch inmediato (spec §5.4: "si solo hay un dado válido, se puede
    *  auto-seleccionar sin pedir el gesto extra"). 2+ válidos → espera un TAP en un dado concreto. */
   function handleAbilityTapInternal(ability: AbilityViewData): void {
+    // NUEVO H4.x — una habilidad ATTACK (siempre del Líder aquí, la única interactiva
+    // vía tap, §0.3 punto 4) exige targeting explícito ANTES de pedir Núcleo, mismo
+    // criterio que `handleAttackCardTap` para cartas (§3.9.2/§5.4). Sin Secuaces en
+    // mesa, el objetivo se resuelve trivialmente al Enemigo sin pedir el gesto extra.
+    if (ability.effectKind === 'ATTACK') {
+      const snapshot = bridge.getSnapshot();
+      if (snapshot.minionsInPlay.length === 0) {
+        startNucleoSelectionForAbility(ability, { kind: 'ENEMY' });
+        return;
+      }
+      setPending({ stage: 'AWAITING_ATTACK_TARGET_FOR_ABILITY', abilityId: ability.abilityId });
+      return;
+    }
+
+    // Camino EXISTENTE sin cambios — habilidades PLOT/sin efecto van directo a
+    // selección de Núcleo.
+    startNucleoSelectionForAbility(ability, undefined);
+  }
+
+  /** NUEVO H4.x — extraído de `handleAbilityTapInternal` (lógica de auto-selección/
+   *  espera-de-dado, sin cambio de comportamiento), parametrizado con el `target` ya
+   *  resuelto (o `undefined` para habilidades no-ATTACK). */
+  function startNucleoSelectionForAbility(ability: AbilityViewData, target: AttackTarget | undefined): void {
     const snapshot = bridge.getSnapshot();
     const validDice = findValidDiceForAbility(snapshot.nucleoTable, ability.coreCost);
 
@@ -134,10 +183,10 @@ export function createGestureCommandTranslator(
     }
     if (validDice.length === 1) {
       setPending(null);
-      dispatchAbility(ability, validDice[0]!.id);
+      dispatchAbility(ability, validDice[0]!.id, target);
       return;
     }
-    setPending({ stage: 'AWAITING_NUCLEO_FOR_ABILITY', abilityId: ability.abilityId });
+    setPending({ stage: 'AWAITING_NUCLEO_FOR_ABILITY', abilityId: ability.abilityId, ...(target ? { target } : {}) });
   }
 
   /** NUEVO §3.9.2/§5.4 — tap en una carta con efecto de Ataque (`requiresNucleoInstance`, spec
@@ -205,6 +254,22 @@ export function createGestureCommandTranslator(
       return;
     }
 
+    if (pending?.stage === 'AWAITING_ATTACK_TARGET_FOR_ABILITY') {
+      // NUEVO H4.x — simétrico a AWAITING_ATTACK_TARGET (cartas): resuelve el tap
+      // (rol Enemigo/Secuaz) y transiciona a AWAITING_NUCLEO_FOR_ABILITY con el
+      // target ya fijado.
+      const target = resolveAttackTarget(targetId);
+      if (target) {
+        const ability = leaderAbilitiesById.get(pending.abilityId);
+        if (ability) {
+          startNucleoSelectionForAbility(ability, target);
+          return;
+        }
+      }
+      setPending(null);
+      return;
+    }
+
     if (pending?.stage === 'AWAITING_NUCLEO_FOR_CARD') {
       // Resolución contra el snapshot ACTUAL, no cacheado (spec §4.5 punto 5).
       const die = bridge.getSnapshot().nucleoTable.find((d) => d.id === targetId && d.status === 'AVAILABLE');
@@ -228,8 +293,9 @@ export function createGestureCommandTranslator(
       const die = bridge.getSnapshot().nucleoTable.find((d) => d.id === targetId && d.status === 'AVAILABLE');
       const ability = leaderAbilitiesById.get(pending.abilityId);
       if (die && ability) {
+        const { target } = pending; // NUEVO H4.x
         setPending(null);
-        dispatchAbility(ability, die.id);
+        dispatchAbility(ability, die.id, target);
         return;
       }
       setPending(null);
@@ -266,6 +332,11 @@ export function createGestureCommandTranslator(
       const ability = leaderAbilitiesById.get(abilityId);
       if (!ability) return; // defensivo — solo habilidades del Líder son interactivas (§0.3 punto 4)
       handleAbilityTapInternal(ability);
+    },
+
+    handleMinionTap(minionInstanceId: string): void {
+      // NUEVO H4.x — mismo camino que un tap de Phaser sobre un Secuaz en mesa.
+      handleKnownTargetId(minionInstanceId);
     },
 
     cancelPending(): void {

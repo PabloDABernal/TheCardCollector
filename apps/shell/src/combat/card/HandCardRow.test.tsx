@@ -94,6 +94,7 @@ function createFakeGestureHandle(): GestureCommandTranslatorHandle {
   return {
     handleCardTap: vi.fn(),
     handleAbilityTap: vi.fn(),
+    handleMinionTap: vi.fn(),
     cancelPending: vi.fn(),
   };
 }

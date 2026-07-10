@@ -102,6 +102,13 @@ export const NUCLEO_POOL_ROW_Y = NUCLEO_TABLE_ROW_Y;
 const NUCLEO_CONTENT_BOTTOM_Y = NUCLEO_TABLE_ROW_Y + NUCLEO_TILE_HALF_PX; // 1388 (solo dado FIXED base)
 
 export const TILE_SEPARATION_PX = 140;
+// NUEVO H4.x — exportadas (antes privadas a minions-view.ts/allies-view.ts, eliminados ese mismo
+// spec §2.2) para que `MinionRow.tsx`/`AllyRow.tsx` (apps/shell, HTML) posicionen sus tiles en las
+// mismas coordenadas de viewport virtual que Phaser ya usaba, y para que `board-anchors-view.ts`
+// (anclas invisibles de juice, ver ese archivo) siga anclando `hitImpact`/`floatingNumber` al mismo
+// punto en pantalla que el tile HTML real ocupa.
+export const MINIONS_ROW_X_ORIGIN = 200;
+export const ALLIES_ROW_X_ORIGIN = 200;
 /** NUEVO H3 (capa visual) — separación vertical entre un dado FIXED y sus dados EXTRA apilados del
  *  mismo color (spec H3 §5.2, "agrupación visual por color"). */
 export const NUCLEO_EXTRA_DIE_STACK_OFFSET_PX = 70;

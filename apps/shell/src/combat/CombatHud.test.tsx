@@ -54,6 +54,7 @@ const leaderAbilities: readonly AbilityViewData[] = [
     name: 'Habilidad CONTROL',
     baseCooldown: 2,
     coreCost: { kind: 'COLOR', colors: ['CONTROL'] },
+    effectKind: 'NONE',
   },
 ];
 

@@ -205,6 +205,7 @@ function CombatHudOverlay({
         leaderName={leaderName}
         enemyName={enemyName}
         scenarioName={scenarioName}
+        targetingPrompt={targetingPrompt}
       />
       <CombatLogPanel entries={logEntries} />
       <TurnStartModal snapshot={snapshot} bridge={bridge} />

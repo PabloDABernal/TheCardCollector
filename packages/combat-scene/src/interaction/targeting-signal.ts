@@ -9,6 +9,10 @@
 export type TargetingPrompt =
   | { readonly kind: 'NONE' }
   | { readonly kind: 'AWAITING_ATTACK_TARGET'; readonly cardName: string; readonly validTargetIds: readonly string[] }
+  /** NUEVO H4.x — análogo a `AWAITING_ATTACK_TARGET`, pero el origen es una habilidad
+   *  ATTACK del Líder (`ACTIVATE_ABILITY`), no una carta (`PLAY_CARD`). Ver spec
+   *  H4_targeting_habilidades_y_ficha_personaje.md §1.4. */
+  | { readonly kind: 'AWAITING_ATTACK_TARGET_FOR_ABILITY'; readonly abilityName: string; readonly validTargetIds: readonly string[] }
   | { readonly kind: 'AWAITING_NUCLEO_FOR_CARD'; readonly cardName: string; readonly validDieIds: readonly string[] }
   | { readonly kind: 'AWAITING_NUCLEO_FOR_ABILITY'; readonly abilityName: string; readonly validDieIds: readonly string[] };
 

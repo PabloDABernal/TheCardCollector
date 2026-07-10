@@ -91,6 +91,7 @@ async function buildHarnessCombatSetup(): Promise<DefaultCombatSetup> {
     baseCooldown: ability.baseCooldown,
     coreCost: ability.coreCost, // NUEVO H3 (spec §5.4)
     ...(ability.ruleText !== undefined ? { ruleText: ability.ruleText } : {}), // NUEVO H4 spec §3.2 Gap B
+    effectKind: ability.effect?.kind ?? 'NONE', // NUEVO H4.x
   }));
   const enemyAbilities: AbilityViewData[] = enemy.abilities.map((ability) => ({
     abilityId: ability.id,
@@ -98,6 +99,7 @@ async function buildHarnessCombatSetup(): Promise<DefaultCombatSetup> {
     baseCooldown: ability.baseCooldown,
     coreCost: ability.coreCost, // NUEVO H3 (spec §5.4)
     ...(ability.ruleText !== undefined ? { ruleText: ability.ruleText } : {}), // NUEVO H4 spec §3.2 Gap B
+    effectKind: ability.effect?.kind ?? 'NONE', // NUEVO H4.x
   }));
 
   const enemyDramaturgiaDeck: DramaturgiaCardViewData[] = enemy.dramaturgiaDeck.map((card) => ({

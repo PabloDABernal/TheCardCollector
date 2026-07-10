@@ -44,6 +44,8 @@ export function promptLabelFor(prompt: Exclude<TargetingPrompt, { kind: 'NONE' }
   switch (prompt.kind) {
     case 'AWAITING_ATTACK_TARGET':
       return `Elige un objetivo para «${prompt.cardName}»`;
+    case 'AWAITING_ATTACK_TARGET_FOR_ABILITY':
+      return `Elige un objetivo para «${prompt.abilityName}»`;
     case 'AWAITING_NUCLEO_FOR_CARD':
       return `Elige un Núcleo para «${prompt.cardName}»`;
     case 'AWAITING_NUCLEO_FOR_ABILITY':

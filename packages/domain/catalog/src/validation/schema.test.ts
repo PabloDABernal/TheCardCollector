@@ -309,7 +309,12 @@ describe('parseLeaderDefinition', () => {
     expect(() => parseLeaderDefinition(raw, 'leaders[0]')).toThrow();
   });
 
-  it('CD1 con effect.kind ATTACK → lanza', () => {
+  // MODIFICADO H4.x — la restricción "ninguna baseAbility del Líder puede tener
+  // effect.kind ATTACK" se retira (era consecuencia de una limitación de motor ya
+  // corregida, ver spec H4_targeting_habilidades_y_ficha_personaje.md §1.2.e). La única
+  // regla real es GDD §2.5 ("CD1 siempre puro"): CD1 con ATTACK exige formula VALUE.
+
+  it('CD1 con effect.kind ATTACK y formula VALUE → ok', () => {
     const raw = leaderRaw({
       baseAbilities: [
         leaderAbilityRaw('a1', 1, { effect: { kind: 'ATTACK', formula: { baseFormula: { kind: 'VALUE' } } } }),
@@ -318,19 +323,45 @@ describe('parseLeaderDefinition', () => {
         leaderAbilityRaw('a4', 4),
       ],
     });
-    expect(() => parseLeaderDefinition(raw, 'leaders[0]')).toThrow();
+    expect(() => parseLeaderDefinition(raw, 'leaders[0]')).not.toThrow();
   });
 
-  it('una habilidad CD2 (no CD1) con effect.kind ATTACK → también lanza', () => {
+  it('CD1 con effect.kind ATTACK y formula ADD (no puro) → lanza', () => {
     const raw = leaderRaw({
       baseAbilities: [
-        leaderAbilityRaw('a1', 1),
-        leaderAbilityRaw('a2', 2, { effect: { kind: 'ATTACK', formula: { baseFormula: { kind: 'VALUE' } } } }),
+        leaderAbilityRaw('a1', 1, {
+          effect: { kind: 'ATTACK', formula: { baseFormula: { kind: 'ADD', amount: 1 } } },
+        }),
+        leaderAbilityRaw('a2', 2),
         leaderAbilityRaw('a3', 3),
         leaderAbilityRaw('a4', 4),
       ],
     });
     expect(() => parseLeaderDefinition(raw, 'leaders[0]')).toThrow();
+  });
+
+  it('una habilidad CD2 (no CD1) con effect.kind ATTACK → ok (sin restricción de pureza)', () => {
+    const raw = leaderRaw({
+      baseAbilities: [
+        leaderAbilityRaw('a1', 1),
+        leaderAbilityRaw('a2', 2, { effect: { kind: 'ATTACK', formula: { baseFormula: { kind: 'ADD', amount: 1 } } } }),
+        leaderAbilityRaw('a3', 3),
+        leaderAbilityRaw('a4', 4),
+      ],
+    });
+    expect(() => parseLeaderDefinition(raw, 'leaders[0]')).not.toThrow();
+  });
+
+  it('habilidades CD3/CD4 con effect.kind ATTACK → ok', () => {
+    const raw = leaderRaw({
+      baseAbilities: [
+        leaderAbilityRaw('a1', 1),
+        leaderAbilityRaw('a2', 2),
+        leaderAbilityRaw('a3', 3, { effect: { kind: 'ATTACK', formula: { baseFormula: { kind: 'VALUE' } } } }),
+        leaderAbilityRaw('a4', 4, { effect: { kind: 'ATTACK', formula: { baseFormula: { kind: 'MULTIPLY', amount: 2 } } } }),
+      ],
+    });
+    expect(() => parseLeaderDefinition(raw, 'leaders[0]')).not.toThrow();
   });
 });
 

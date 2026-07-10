@@ -255,18 +255,21 @@ export function parseLeaderDefinition(raw: unknown, context: string): LeaderDefi
     fail(context, 'baseAbilities debe tener exactamente un CD1, un CD2, un CD3 y un CD4 (GDD §3.1)');
   }
 
-  for (const [i, ability] of baseAbilities.entries()) {
-    if (ability.effect?.kind === 'ATTACK') {
-      fail(
-        `${context}.baseAbilities[${i}]`,
-        'ninguna baseAbility del Líder puede tener effect.kind ATTACK (GDD §2.5; H1.6 exige side ENEMY para ATTACK)'
-      );
-    }
-  }
-
   const cd1Ability = baseAbilities.find((a) => a.baseCooldown === CATALOG_ABILITY_BASE_COOLDOWN_MIN);
   if (!cd1Ability || cd1Ability.coreCost.kind !== 'ANY') {
     fail(context, 'la habilidad con baseCooldown 1 (CD1) debe tener coreCost.kind ANY (GDD §2.5, "CD1 siempre ⚫")');
+  }
+
+  // MODIFICADO H4.x — se retira la restricción "ninguna baseAbility del Líder puede
+  // tener effect.kind ATTACK": era consecuencia derivada de una limitación de motor ya
+  // corregida (ver spec H4_targeting_habilidades_y_ficha_personaje.md §1.2.e), no una
+  // regla de diseño propia. La única regla de diseño real es GDD §2.5 ("CD1 siempre
+  // puro, sin +X/×X/Umbral"): si CD1 tiene effect ATTACK, su fórmula debe ser VALUE.
+  if (cd1Ability?.effect?.kind === 'ATTACK' && cd1Ability.effect.formula.baseFormula.kind !== 'VALUE') {
+    fail(
+      `${context}.baseAbilities`,
+      'la habilidad CD1 con effect ATTACK debe usar formula.baseFormula.kind VALUE (GDD §2.5, "CD1 siempre puro, sin +X/×X")'
+    );
   }
 
   if (!isStringArray(raw.cardPoolIds)) fail(context, 'campo "cardPoolIds" ausente o no es un array de strings');

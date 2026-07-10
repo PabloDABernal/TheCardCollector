@@ -40,6 +40,12 @@ export interface AbilityViewData {
   readonly coreCost: CoreCostRequirement;
   /** NUEVO H4 spec §3.2 Gap B — texto de regla libre, = `AbilityDefinition.ruleText`. */
   readonly ruleText?: string;
+  /** NUEVO H4.x — `true` si `effect.kind === 'ATTACK'` (ability-effect.ts). Solo
+   *  relevante para abilities del Líder (`side LEADER`) — determina si activarla
+   *  dispara el flujo de targeting (`AWAITING_ATTACK_TARGET_FOR_ABILITY`) antes de
+   *  pedir Núcleo, mismo criterio que `HandCardViewData.requiresNucleoInstance`. Ver
+   *  spec H4_targeting_habilidades_y_ficha_personaje.md §1.4. */
+  readonly effectKind: 'ATTACK' | 'PLOT' | 'NONE';
 }
 
 /** NUEVO H4 spec §3.3 — dato mínimo de una carta de Dramaturgia del Enemigo activo, resuelto una vez

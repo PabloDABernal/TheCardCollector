@@ -232,9 +232,14 @@ export type CombatEvent =
     }
   | {
       /** NUEVO §3.9.3. Un ataque del jugador (`PLAY_CARD`, `ATTACK_ENEMY`) golpea a un
-       *  Secuaz en vez de al Enemigo — mismo patrón que `ALLY_DAMAGED`/`ENEMY_DAMAGED`. */
+       *  Secuaz en vez de al Enemigo — mismo patrón que `ALLY_DAMAGED`/`ENEMY_DAMAGED`.
+       *  MODIFICADO H4.x — `cardId` pasa a opcional y se añade `abilityId` opcional:
+       *  ausente el primero/presente el segundo si el origen es `ACTIVATE_ABILITY`
+       *  (habilidad ATTACK del Líder), ver spec
+       *  H4_targeting_habilidades_y_ficha_personaje.md §1.2.d.4. */
       readonly type: 'MINION_DAMAGED';
-      readonly cardId: CardId;
+      readonly cardId?: CardId;
+      readonly abilityId?: AbilityId;
       readonly sourceId: string;
       readonly nucleoSpent: NucleoInstance;
       readonly minionInstanceId: CardInstanceId;
@@ -309,9 +314,13 @@ export type CombatEvent =
     }
   | {
       /** NUEVO H1.18. Análogo a LEADER_DAMAGED/ALLY_DAMAGED pero en la dirección
-       *  Líder→Enemigo (§0.1/§0.2: siempre objetivo directo, nunca Secuaz). */
+       *  Líder→Enemigo (§0.1/§0.2: siempre objetivo directo, nunca Secuaz).
+       *  MODIFICADO H4.x — `cardId` pasa a opcional y se añade `abilityId` opcional,
+       *  mismo criterio que `MINION_DAMAGED` arriba (origen `PLAY_CARD` vs
+       *  `ACTIVATE_ABILITY`). */
       readonly type: 'ENEMY_DAMAGED';
-      readonly cardId: CardId;
+      readonly cardId?: CardId;
+      readonly abilityId?: AbilityId;
       readonly sourceId: string;
       readonly nucleoSpent: NucleoInstance;
       readonly rawAmount: number;

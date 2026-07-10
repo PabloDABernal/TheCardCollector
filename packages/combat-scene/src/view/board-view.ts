@@ -3,8 +3,7 @@ import type { CombatStateSnapshot } from '@collector/domain-combat';
 import type { BoardViewContext } from './board-view-context';
 import { createBoard } from './board';
 import { createLeaderRoleView, createEnemyRoleView, createScenarioRoleView } from './role-view';
-import { createAlliesView } from './allies-view';
-import { createMinionsView } from './minions-view';
+import { createBoardAnchorsView } from './board-anchors-view';
 import { createNucleoTable } from './nucleo-table-view';
 
 export interface BoardView {
@@ -27,8 +26,11 @@ export function createBoardView(scene: Phaser.Scene, ctx: BoardViewContext): Boa
   const leaderRoleView = createLeaderRoleView(scene);
   const enemyRoleView = createEnemyRoleView(scene);
   const scenarioRoleView = createScenarioRoleView(scene);
-  const alliesView = createAlliesView(scene);
-  const minionsView = createMinionsView(scene);
+  // NUEVO H4.x — sustituye a `alliesView`/`minionsView` (Phaser, ELIMINADOS): el visual real de
+  // Aliado/Secuaz ahora vive en `MinionRow.tsx`/`AllyRow.tsx` (HTML, `apps/shell`); esta ancla solo
+  // mantiene un game object invisible nombrado por `instanceId` para que la juice de impacto siga
+  // animando en el punto correcto de pantalla (ver `board-anchors-view.ts`).
+  const boardAnchorsView = createBoardAnchorsView(scene);
   const nucleoTableView = createNucleoTable(scene, []);
 
   return {
@@ -36,8 +38,7 @@ export function createBoardView(scene: Phaser.Scene, ctx: BoardViewContext): Boa
       leaderRoleView.update(snapshot, ctx);
       enemyRoleView.update(snapshot, ctx);
       scenarioRoleView.update(snapshot, ctx);
-      alliesView.syncFromSnapshot(snapshot);
-      minionsView.syncFromSnapshot(snapshot);
+      boardAnchorsView.syncFromSnapshot(snapshot);
       nucleoTableView.syncFromSnapshot(snapshot);
     },
   };

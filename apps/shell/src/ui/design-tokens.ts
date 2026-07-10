@@ -92,4 +92,5 @@ export const CARD_TYPE_COLORS: Record<CardIconKind, string> = {
   EQUIPO: '#4c7a8c', // acero azulado
   ALIADO: '#5c8c5a', // verde apagado, distinto de --success
   CONTRATIEMPO: '#8c7a4c', // ocre
+  SECUAZ: '#7a3f3f', // rojo apagado — distinto de ATAQUE/--danger, lee como "hostil en mesa"
 };

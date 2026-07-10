@@ -8,10 +8,10 @@ export { createLeaderRoleView, createEnemyRoleView, createScenarioRoleView } fro
 // `sourceId` estable de comando). `abilityIconGroupName` RETIRADA junto a la juice recipe
 // `cooldownReady` que era su único consumidor (fix Reviewer, ver `../juice/recipes/index.ts`).
 export { cardTileName } from './tile-names';
-export type { AlliesView } from './allies-view';
-export { createAlliesView } from './allies-view';
-export type { MinionsView } from './minions-view';
-export { createMinionsView } from './minions-view';
+// NUEVO H4.x — `allies-view.ts`/`minions-view.ts` (Phaser) ELIMINADOS (spec
+// H4_targeting_habilidades_y_ficha_personaje.md §2.2): el visual real migró a
+// `MinionRow.tsx`/`AllyRow.tsx` (HTML, `apps/shell`). `board-anchors-view.ts` sustituye su única
+// responsabilidad restante (anclas de juice) — no se reexporta desde aquí, es interno a `board-view.ts`.
 export type { NucleoTableView } from './nucleo-table-view';
 export { createNucleoTable } from './nucleo-table-view';
 export type { TargetingHighlightView } from './targeting-highlight-view';
@@ -26,6 +26,8 @@ export {
   NUCLEO_TABLE_ROW_Y,
   ALLIES_ROW_Y,
   MINIONS_ROW_Y,
+  ALLIES_ROW_X_ORIGIN,
+  MINIONS_ROW_X_ORIGIN,
   TILE_SEPARATION_PX,
   LEADER_ABILITIES_ROW_Y,
   ENEMY_ABILITIES_ROW_Y,

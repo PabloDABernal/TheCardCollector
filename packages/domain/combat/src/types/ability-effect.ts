@@ -17,12 +17,14 @@ export const LEADER_SHIELD_MAX = 5;
  * `CombatEngineConfig.abilityEffects` (§2.2), igual patrón que `abilityCoreCosts`
  * (H1.3) y `abilityCooldowns` (H1.4) — `CatalogLoader` (H1.8) no existe todavía.
  *
- * - `ATTACK` — Ataque del Enemigo (GDD §3.4, icono ⚔️). Daño = `resolveAbilityUmbral`
- *   (H1.5) aplicado a `formula` con el valor del Núcleo gastado (GDD §12: "Ataque"/
- *   "Ataque +X"/"Ataque ×X" están alimentadas por Núcleo). Restringido a habilidades
- *   cuyo `AbilityCooldownDefinition.side` sea `'ENEMY'` — ver spec §0.5 (el Líder
- *   nunca es origen de un efecto ATTACK en esta historia; el motor lo valida y lanza
- *   si no se cumple).
+ * - `ATTACK` — Ataque (GDD §3.4, icono ⚔️). Daño = `resolveAbilityUmbral` (H1.5)
+ *   aplicado a `formula` con el valor del Núcleo gastado (GDD §12: "Ataque"/"Ataque
+ *   +X"/"Ataque ×X" están alimentadas por Núcleo). MODIFICADO H4.x — ya NO está
+ *   restringido a habilidades cuyo `AbilityCooldownDefinition.side` sea `'ENEMY'`: una
+ *   habilidad `ATTACK` del `LEADER` golpea al Enemigo/Secuaz (vía `AttackTarget`, mismo
+ *   flujo de targeting que `PLAY_CARD`/`ATTACK_ENEMY`), nunca al propio Líder/Aliado —
+ *   ver spec H4_targeting_habilidades_y_ficha_personaje.md §1. Una `ATTACK` del `ENEMY`
+ *   sigue golpeando Líder/Aliado sin cambios (`resolveDamageTarget()`).
  *   `arrollar`: si NO había ningún escudo activo en el momento del golpe
  *   (`leaderShield === 0`), el daño pasa completo sin necesidad de esta keyword — no
  *   hay nada que "arrollar". Si SÍ había escudo y no bastó para absorberlo todo, el

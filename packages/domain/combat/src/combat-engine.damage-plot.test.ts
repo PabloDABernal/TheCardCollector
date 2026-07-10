@@ -331,14 +331,17 @@ describe('CombatEngine — H1.6: validación de configuración (fallos rápidos 
     })).toThrow();
   });
 
-  it('lanza si una habilidad ATTACK pertenece a side LEADER (H1.6 solo modela daño Enemigo→Líder, ver spec §0.5)', () => {
-    const LEADER_ATTACK: AbilityId = createId<'AbilityId'>('AbilityId', 'leader-attack-not-supported');
+  // MODIFICADO H4.x — ya NO lanza: una habilidad ATTACK del LEADER es válida (el motor
+  // ahora la resuelve golpeando al Enemigo/Secuaz vía AttackTarget, ver spec
+  // H4_targeting_habilidades_y_ficha_personaje.md §1.2.d.1).
+  it('NO lanza si una habilidad ATTACK pertenece a side LEADER (H4.x — ya no está restringido a ENEMY)', () => {
+    const LEADER_ATTACK: AbilityId = createId<'AbilityId'>('AbilityId', 'leader-attack-supported');
     expect(() => new CombatEngine({ leaderMaxHealth: 100, enemyMaxHealth: 100, scenarioPlotDefeatThreshold: 999, leaderDeckCardIds: [],
       randomSource: new SeededRandomSource(1),
       abilityCoreCosts: costs([LEADER_ATTACK]),
       abilityCooldowns: cooldowns([[LEADER_ATTACK, { side: 'LEADER', baseCooldown: 1 }]]),
       abilityEffects: effects([[LEADER_ATTACK, { kind: 'ATTACK', formula: { baseFormula: { kind: 'VALUE' } } }]]),
-    })).toThrow();
+    })).not.toThrow();
   });
 
   it('lanza si initialLeaderShield es negativo', () => {

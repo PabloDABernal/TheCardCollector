@@ -17,7 +17,11 @@ import {
 import { CARD_ICON_GLYPH, type CardIconKind } from './card-icon';
 import { keywordLabel } from './keyword-label';
 
-export type CardTileSize = 'hand' | 'featured';
+/** NUEVO H4.x — `'board'` (96×140px) es el tamaño de `MinionRow`/`AllyRow` (Aliado/Secuaz ya en
+ *  mesa, sustituye a `minions-view.ts`/`allies-view.ts` de Phaser). Más pequeño que `'hand'`
+ *  (132×196) — encaja más tiles en la fila de mesa sin competir visualmente con la mano, donde el
+ *  jugador toma decisiones activas. */
+export type CardTileSize = 'hand' | 'featured' | 'board';
 
 export interface CardTileData {
   readonly id: string; // CardId o DramaturgiaCardId — solo se usa como React key/data-id, opaco aquí
@@ -26,6 +30,10 @@ export interface CardTileData {
   readonly cost: { readonly kind: 'ENERGY'; readonly amount: number } | null; // null = sin coste visible (Dramaturgia)
   readonly ruleText?: string;
   readonly keywords: readonly { readonly keyword: string; readonly amount?: number }[];
+  /** NUEVO H4.x — solo relevante para `size: 'board'` (Aliado/Secuaz en mesa, `card.cost` siempre
+   *  `null` para estas entidades). Sustituye visualmente al badge de coste (esquina superior
+   *  derecha) por un indicador de vida (`♥ current/max`). */
+  readonly boardLife?: { readonly current: number; readonly max: number };
 }
 
 export interface CardTileProps {
@@ -54,6 +62,7 @@ export function CardTile({
   onAnimationEnd,
 }: CardTileProps): JSX.Element {
   const isHand = size === 'hand';
+  const isBoard = size === 'board'; // NUEVO H4.x
 
   return (
     <div
@@ -62,8 +71,8 @@ export function CardTile({
       onClick={onTap}
       onAnimationEnd={onAnimationEnd}
       style={{
-        width: isHand ? 132 : 224,
-        height: isHand ? 196 : 332,
+        width: isHand ? 132 : isBoard ? 96 : 224,
+        height: isHand ? 196 : isBoard ? 140 : 332,
         display: 'flex',
         flexDirection: 'column',
         background: COLOR_BINDER,
@@ -71,7 +80,7 @@ export function CardTile({
         borderRadius: RADIUS_PANEL,
         boxShadow: selected ? `0 0 0 3px rgba(212, 162, 76, 0.25), ${SHADOW_PANEL}` : SHADOW_PANEL,
         opacity: affordable ? 1 : 0.4,
-        padding: isHand ? SPACING.xs : SPACING.sm,
+        padding: isHand || isBoard ? SPACING.xs : SPACING.sm,
         gap: SPACING.xs,
         pointerEvents: onTap ? 'auto' : 'none',
         cursor: onTap ? 'pointer' : 'default',
@@ -80,30 +89,52 @@ export function CardTile({
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <span style={{ fontSize: isHand ? 16 : 22 }}>{CARD_ICON_GLYPH[card.icon]}</span>
-        {card.cost && (
+        <span style={{ fontSize: isHand || isBoard ? 16 : 22 }}>{CARD_ICON_GLYPH[card.icon]}</span>
+        {/* NUEVO H4.x — badge de vida sustituye al de coste para tiles 'board' (Aliado/Secuaz en
+            mesa, `card.cost` siempre null). Mismo contenedor visual, contenido condicional — nunca
+            compiten por layout porque `card.boardLife`/`card.cost` no coexisten. */}
+        {card.boardLife ? (
           <span
             style={{
               ...TYPE.dataMd,
-              minWidth: 22,
-              height: 22,
-              borderRadius: '50%',
+              fontSize: 11,
+              padding: '1px 5px',
+              borderRadius: RADIUS_CHIP,
               background: COLOR_INK,
-              color: COLOR_FOIL,
+              color: COLOR_TEXT_PRIMARY,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
               border: `1px solid ${COLOR_RULE}`,
             }}
           >
-            {card.cost.amount}
+            ♥ {card.boardLife.current}/{card.boardLife.max}
           </span>
+        ) : (
+          card.cost && (
+            <span
+              style={{
+                ...TYPE.dataMd,
+                minWidth: 22,
+                height: 22,
+                borderRadius: '50%',
+                background: COLOR_INK,
+                color: COLOR_FOIL,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: `1px solid ${COLOR_RULE}`,
+              }}
+            >
+              {card.cost.amount}
+            </span>
+          )
         )}
       </div>
 
       <span
         style={{
-          ...(isHand ? TYPE.bodyMd : TYPE.displaySm),
+          ...(isHand || isBoard ? TYPE.bodyMd : TYPE.displaySm),
+          fontSize: isBoard ? 12 : undefined,
           fontWeight: 700,
           color: COLOR_TEXT_PRIMARY,
           overflow: 'hidden',

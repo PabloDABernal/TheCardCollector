@@ -14,6 +14,10 @@ import { createWebAudioSoundManager } from '../audio';
 export interface GestureCommandTranslatorHandle {
   handleCardTap(cardId: CardId): void;
   handleAbilityTap(abilityId: AbilityId): void;
+  /** NUEVO H4.x — tap sobre un `CardTile` de Secuaz en mesa (`MinionRow`, size 'board'), necesario
+   *  para que el Secuaz siga siendo tocable como objetivo de targeting tras su migración a HTML
+   *  (ver spec H4_targeting_habilidades_y_ficha_personaje.md §2.4). */
+  handleMinionTap(minionInstanceId: string): void;
   cancelPending(): void;
 }
 
@@ -139,6 +143,7 @@ export class CombatScene extends Phaser.Scene {
     this.translatorHandle = {
       handleCardTap: (cardId) => translator.handleCardTap(cardId),
       handleAbilityTap: (abilityId) => translator.handleAbilityTap(abilityId),
+      handleMinionTap: (minionInstanceId) => translator.handleMinionTap(minionInstanceId),
       cancelPending: () => translator.cancelPending(),
     };
     const unsubscribeTranslator: Unsubscribe = this.inputAdapter.subscribe((gesture) => {

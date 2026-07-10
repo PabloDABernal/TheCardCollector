@@ -28,12 +28,19 @@ export interface AbilityTileProps {
   readonly ability: AbilityTileData;
   readonly interactive: boolean; // solo las del Líder reciben onTap real
   readonly onTap?: () => void;
+  /** NUEVO H4.x — `CharacterSheetPreview` (ficha ampliada, ya es "el nivel superior de long-press")
+   *  pasa `true` para que `ruleText` se muestre SIEMPRE en línea, debajo del nombre, en vez de tras
+   *  un long-press interno — no tiene sentido anidar un segundo long-press dentro del primero.
+   *  `false`/ausente (default) preserva el comportamiento existente (tooltip + popover). */
+  readonly forceShowRuleText?: boolean;
 }
 
 const TILE_SIZE = 60;
 const RING_RADIUS = 27;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
-const LONG_PRESS_MS = 400; // mismo umbral que InputAdapter/PointerGesture usa para LONG_PRESS
+// NUEVO H4.x — exportada (antes privada) para que `CombatBoardOverlay.tsx` reutilice el mismo
+// umbral al disparar `CharacterSheetPreview` por long-press, en vez de reintroducirlo.
+export const LONG_PRESS_MS = 400; // mismo umbral que InputAdapter/PointerGesture usa para LONG_PRESS
 
 function fillColorFor(coreCost: CoreCostRequirement): string {
   if (coreCost.kind === 'COLOR' && coreCost.colors.length > 0) {
@@ -48,7 +55,7 @@ function fillColorFor(coreCost: CoreCostRequirement): string {
  * de cooldown (SVG `<circle>` `stroke-dasharray`) + nombre debajo. Descripción sin ocupar espacio
  * permanente: `title` (tooltip nativo desktop) + long-press (400ms) que abre un popover CSS-only.
  */
-export function AbilityTile({ ability, interactive, onTap }: AbilityTileProps): JSX.Element {
+export function AbilityTile({ ability, interactive, onTap, forceShowRuleText = false }: AbilityTileProps): JSX.Element {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const ready = ability.remaining === 0;
   const progress = ability.baseCooldown <= 0 ? 1 : (ability.baseCooldown - ability.remaining) / ability.baseCooldown;
@@ -125,7 +132,13 @@ export function AbilityTile({ ability, interactive, onTap }: AbilityTileProps): 
         {ability.name}
       </span>
 
-      {popoverOpen && ability.ruleText && (
+      {forceShowRuleText && ability.ruleText && (
+        <p style={{ ...TYPE.bodySm, color: COLOR_TEXT_SECONDARY, margin: 0, textAlign: 'center', maxWidth: 140 }}>
+          {ability.ruleText}
+        </p>
+      )}
+
+      {!forceShowRuleText && popoverOpen && ability.ruleText && (
         <div
           onClick={() => setPopoverOpen(false)}
           style={{
