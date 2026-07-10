@@ -2,6 +2,29 @@
 
 ## Ideas
 
+## Bugs
+
+### B1: `card-mago-base-02` y `card-soldado-base-02` — ruleText menciona escala de dados sin Umbral/NEUTRO
+
+**Descripción:** Las cartas "Descarga Arcana" (`card-mago-base-02`) y "Golpe Certero" (`card-soldado-base-02`) tienen `ruleText` que promete "escalando con el valor del dado usado" (mecánica de Umbral), pero:
+- No llevan keyword `UMBRAL` ni `NEUTRO` en su array de keywords.
+- Su coste es `{ "energy": 2 }` (Energía pura), sin declarar coste de Núcleo (que sería requerido para usar la mecánica de Umbral).
+
+Esto crea inconsistencia: el texto promete un efecto que el sistema de costes no puede resolver mecánicamente. Según decisions.md 2026-07-10, cada Líder puede llevar máximo 1-2 cartas con Umbral/NEUTRO; el Mago ya tiene su cuota cubierta por "Vórtice" (`card-mago-base-03` con UMBRAL) y el Soldado por "Estocada" (`card-soldado-base-01` con UMBRAL). Por lo tanto, estas dos cartas deben pasar a ser Energía pura sin mención de dados en su resolución.
+
+**Criterio de aceptación:**
+- `card-mago-base-02` ("Descarga Arcana") ruleText reescrito sin mención de dados/Umbral. Sugerencia: "Ataque ×2 de energía pura."
+- `card-soldado-base-02` ("Golpe Certero") ruleText reescrito de forma similar. Sugerencia: "Ataque ×2 de energía pura."
+- Ambas cartas mantienen su coste `{ "energy": 2 }`.
+- NO se añaden keywords `UMBRAL` ni `NEUTRO` (permanecen como Energía pura).
+- Cambio aplicado en 6 archivos (2 pairs espejados en paquetes de datos + 2 en shell): `packages/data/cards/mago-base-cards.json`, `packages/data/cards/soldado-base-cards.json`, `packages/combat-scene/public/data/cards/mago-base-cards.json`, `packages/combat-scene/public/data/cards/soldado-base-cards.json`, `apps/shell/public/data/cards/mago-base-cards.json`, `apps/shell/public/data/cards/soldado-base-cards.json`.
+
+**Detectado por:** Game Designer (decisions.md 2026-07-10). Efecto: data integrity, coherencia entre texto de reglas y costes mecánicos del contenido de prueba.
+
+**Prioridad:** Alta (afecta coherencia de reglas y jugabilidad del contenido de juguete).
+
+---
+
 ## Épicas
 
 ### E1: Motor de combate base
