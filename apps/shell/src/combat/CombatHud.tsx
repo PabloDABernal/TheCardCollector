@@ -14,6 +14,7 @@ import {
 } from '../ui/design-tokens';
 import { freeStepAvailabilityFor } from './free-step-availability';
 import { chipStyle } from './chip-style';
+import { useIsCompactViewport } from './use-is-compact-viewport';
 
 export interface CombatHudProps {
   readonly snapshot: CombatStateSnapshot;
@@ -29,6 +30,16 @@ export interface CombatHudProps {
 
 const LEADER_ENERGY_MAX = 5; // GDD §2.2 / decisions.md — tope de Energía, mismo valor que el motor
 const LEADER_HAND_SIZE_MAX = 7; // decisions.md "Tope de mano: 7"
+
+/** H4 spec §3.2 — override de padding/fontSize aplicado DESPUÉS del spread de
+ *  `enabledStyle`/`disabledStyle` en cada chip (el que va después gana en `style={{...a, ...b}}`).
+ *  Referencia `var(--hud-chip-*)`, definidas con scope en `.combat-hud` (`CombatScreen.css`) y
+ *  redefinidas dentro del `@media (max-width: 480px)` — el navegador recalcula estos valores sin
+ *  que la especificidad del inline style entre en juego. */
+const compactChipOverride = {
+  padding: 'var(--hud-chip-padding-v) var(--hud-chip-padding-h)',
+  fontSize: 'var(--hud-chip-font-size)',
+};
 
 type ControlId = 'PLAY_CARD' | 'ACTIVATE_ABILITY' | 'GENERATE_ENERGY' | 'DRAW_CARD';
 
@@ -119,23 +130,35 @@ export function CombatHud({ snapshot, bridge, onEndTurn, leaderName, leaderAbili
   const enabledStyle = chipStyle(true);
   const disabledStyle = chipStyle(false);
 
+  // H4 spec §4 — solo gobierna qué TEXTO se renderiza; tamaños/paddings ya responden vía CSS var().
+  const isCompact = useIsCompactViewport();
+
   return (
     <div
       className="combat-hud"
       style={{
         background: COLOR_BINDER,
         borderBottom: `2px solid ${COLOR_RULE}`,
-        padding: SPACING.md,
+        padding: 'var(--hud-padding-v) var(--hud-padding-h)',
         display: 'flex',
         flexDirection: 'column',
-        gap: SPACING.sm,
+        gap: 'var(--hud-gap)',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span style={{ ...TYPE.displaySm, color: COLOR_TEXT_PRIMARY }}>{leaderName}</span>
-        <span style={{ ...TYPE.dataLg, color: COLOR_FOIL }}>
+        <span style={{ ...TYPE.displaySm, fontSize: 'var(--hud-title-size)', color: COLOR_TEXT_PRIMARY }}>
+          {leaderName}
+        </span>
+        <span style={{ ...TYPE.dataLg, fontSize: 'var(--hud-counter-size)', color: COLOR_FOIL }}>
           {snapshot.actions.actionsTaken}/{snapshot.actions.actionsAllowed}
-          <span style={{ ...TYPE.labelUpper, color: COLOR_TEXT_SECONDARY, marginLeft: SPACING.xs }}>
+          <span
+            style={{
+              ...TYPE.labelUpper,
+              fontSize: 'var(--hud-label-size)',
+              color: COLOR_TEXT_SECONDARY,
+              marginLeft: SPACING.xs,
+            }}
+          >
             Acciones
           </span>
         </span>
@@ -150,63 +173,65 @@ export function CombatHud({ snapshot, bridge, onEndTurn, leaderName, leaderAbili
         style={{
           display: 'flex',
           flexWrap: 'wrap',
-          gap: SPACING.sm,
+          gap: 'var(--hud-gap)',
           alignItems: 'center',
           border: `1px dashed ${COLOR_RULE}`,
           borderRadius: RADIUS_CHIP,
-          padding: SPACING.xs,
+          padding: 'var(--hud-padding-h)',
         }}
       >
-        <span style={{ ...TYPE.labelUpper, color: COLOR_TEXT_SECONDARY }}>Paso previo (gratis)</span>
+        <span style={{ ...TYPE.labelUpper, fontSize: 'var(--hud-label-size)', color: COLOR_TEXT_SECONDARY }}>
+          {isCompact ? 'Gratis' : 'Paso previo (gratis)'}
+        </span>
         <button
           disabled={!canFreeDraw}
           title={!canFreeDraw ? (handFull ? 'Mano al máximo' : deckEmpty ? 'Mazo vacío' : 'No es tu turno') : undefined}
-          style={canFreeDraw ? enabledStyle : disabledStyle}
+          style={{ ...(canFreeDraw ? enabledStyle : disabledStyle), ...compactChipOverride }}
           onClick={() => bridge.dispatch({ type: 'DRAW_OR_GENERATE', action: 'draw' })}
         >
-          Robar carta (gratis)
+          {isCompact ? 'Robar' : 'Robar carta (gratis)'}
         </button>
         <button
           disabled={!canFreeGenerate}
           title={!canFreeGenerate ? (energyAtMax ? `Energía al máximo (${LEADER_ENERGY_MAX}/${LEADER_ENERGY_MAX})` : 'No es tu turno') : undefined}
-          style={canFreeGenerate ? enabledStyle : disabledStyle}
+          style={{ ...(canFreeGenerate ? enabledStyle : disabledStyle), ...compactChipOverride }}
           onClick={() => bridge.dispatch({ type: 'DRAW_OR_GENERATE', action: 'generate' })}
         >
-          Generar energía (gratis)
+          {isCompact ? '+1 Energía' : 'Generar energía (gratis)'}
         </button>
       </div>
 
       {/* 2 acciones pagadas — 4 opciones, decisions.md "Estructura del turno del jugador". */}
-      <div className="combat-hud-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: SPACING.sm }}>
+      <div className="combat-hud-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--hud-gap)' }}>
         <span
           aria-disabled={!canPlayCard}
           title={disabledReasonFor('PLAY_CARD', snapshot, leaderAbilities) ?? undefined}
-          style={canPlayCard ? enabledStyle : disabledStyle}
+          style={{ ...(canPlayCard ? enabledStyle : disabledStyle), ...compactChipOverride }}
         >
-          Jugar Carta
+          {isCompact ? 'Carta' : 'Jugar Carta'}
         </span>
         <span
           aria-disabled={!canActivateAbility}
           title={disabledReasonFor('ACTIVATE_ABILITY', snapshot, leaderAbilities) ?? undefined}
-          style={canActivateAbility ? enabledStyle : disabledStyle}
+          style={{ ...(canActivateAbility ? enabledStyle : disabledStyle), ...compactChipOverride }}
         >
-          Activar Habilidad
+          {isCompact ? 'Habilidad' : 'Activar Habilidad'}
         </span>
         <button
           disabled={!canGenerateEnergyPaid}
           title={disabledReasonFor('GENERATE_ENERGY', snapshot, leaderAbilities) ?? undefined}
-          style={canGenerateEnergyPaid ? enabledStyle : disabledStyle}
+          style={{ ...(canGenerateEnergyPaid ? enabledStyle : disabledStyle), ...compactChipOverride }}
           onClick={() => bridge.dispatch({ type: 'GENERATE_ENERGY' })}
         >
-          Generar Energía
+          {isCompact ? 'Energía' : 'Generar Energía'}
         </button>
         <button
           disabled={!canDrawCardPaid}
           title={disabledReasonFor('DRAW_CARD', snapshot, leaderAbilities) ?? undefined}
-          style={canDrawCardPaid ? enabledStyle : disabledStyle}
+          style={{ ...(canDrawCardPaid ? enabledStyle : disabledStyle), ...compactChipOverride }}
           onClick={() => bridge.dispatch({ type: 'DRAW_CARD' })}
         >
-          Robar Carta
+          {isCompact ? 'Robar' : 'Robar Carta'}
         </button>
       </div>
 
@@ -215,6 +240,7 @@ export function CombatHud({ snapshot, bridge, onEndTurn, leaderName, leaderAbili
         disabled={snapshot.status !== 'IN_PROGRESS'}
         style={{
           ...(snapshot.status === 'IN_PROGRESS' ? enabledStyle : disabledStyle),
+          ...compactChipOverride,
           marginTop: SPACING.sm,
         }}
       >

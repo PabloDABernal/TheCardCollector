@@ -87,3 +87,33 @@
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--rule);
   border-radius: 4px; /* casi imperceptible, evita el canto 100% recto contra el fondo */
 }
+
+/* H4 — HUD compacto móvil. Variables consumidas por CombatHud.tsx vía var(...) en sus inline
+ * styles — ver spec H4_hud_compacto_movil.md §3. Valores por defecto = literales actuales
+ * (SPACING.md/sm/xs, TYPE.displaySm/bodyMd/labelUpper, TYPE.dataLg), sin cambio de comportamiento
+ * fuera del breakpoint compacto. */
+.combat-hud {
+  --hud-padding-v: 16px;       /* = SPACING.md */
+  --hud-padding-h: 16px;       /* = SPACING.md */
+  --hud-gap: 8px;              /* = SPACING.sm */
+  --hud-title-size: 20px;      /* = TYPE.displaySm.fontSize */
+  --hud-counter-size: 22px;    /* = TYPE.dataLg.fontSize */
+  --hud-label-size: 12px;      /* = TYPE.labelUpper.fontSize */
+  --hud-chip-padding-v: 4px;   /* = SPACING.xs, igual que chip-style.ts */
+  --hud-chip-padding-h: 8px;   /* = SPACING.sm, igual que chip-style.ts */
+  --hud-chip-font-size: 15px;  /* = TYPE.bodyMd.fontSize */
+}
+
+@media (max-width: 480px) {
+  .combat-hud {
+    --hud-padding-v: 4px;      /* SPACING.xs */
+    --hud-padding-h: 8px;      /* SPACING.sm */
+    --hud-gap: 4px;            /* SPACING.xs */
+    --hud-title-size: 15px;
+    --hud-counter-size: 16px;
+    --hud-label-size: 10px;
+    --hud-chip-padding-v: 2px;
+    --hud-chip-padding-h: 6px;
+    --hud-chip-font-size: 12px;
+  }
+}

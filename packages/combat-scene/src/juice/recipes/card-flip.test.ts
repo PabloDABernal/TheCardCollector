@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import { createId } from '@collector/domain-shared';
 import type { CardId, CardInstanceId, DramaturgiaCardId } from '@collector/domain-shared';
+import type { CombatEvent } from '@collector/combat-bridge';
 import { createFakeJuiceScene } from './test-utils/fake-juice-scene';
 import { cardFlip } from './card-flip';
 import type { JuiceTarget } from '../juice-recipe';
@@ -26,7 +27,60 @@ function allyEnteredPlayTarget(): JuiceTarget {
   };
 }
 
+function cardPlayedTarget(): JuiceTarget {
+  return {
+    event: { type: 'CARD_PLAYED', cardId: 'card-1' as CardId, sourceId: 'source-2', leaderEnergyAfter: 2 },
+    focusId: 'source-2',
+  };
+}
+
+function contratiempoPlayedTarget(): JuiceTarget {
+  const event: Extract<CombatEvent, { type: 'CONTRATIEMPO_PLAYED' }> = {
+    type: 'CONTRATIEMPO_PLAYED',
+    cardId: 'card-2' as CardId,
+    sourceId: 'source-3',
+    undoScope: 'DAMAGE_ONLY',
+    energySpent: 0,
+    leaderEnergyAfter: 2,
+    revertedEntries: [],
+    leaderDamageAfter: 0,
+    leaderShieldAfter: 0,
+    scenarioPlotAfter: 0,
+  };
+  return { event, focusId: 'source-3' };
+}
+
 describe('cardFlip', () => {
+  it.each([
+    ['CARD_PLAYED', cardPlayedTarget],
+    ['CONTRATIEMPO_PLAYED', contratiempoPlayedTarget],
+  ])(
+    'H4 spec §8 fix: %s trae focusId definido pero el placeholder SÍ debe destruirse al terminar el flip (evita el tile fantasma pegado al Líder)',
+    async (_label, buildTarget) => {
+      const fake = createFakeJuiceScene();
+      const target = buildTarget();
+
+      await cardFlip.play(fake.scene, target, {});
+
+      const placeholder = fake.scene.children.getByName(target.focusId as string) as unknown as {
+        destroyed: boolean;
+      };
+      expect(placeholder.destroyed).toBe(true);
+    },
+  );
+
+  it('ALLY_ENTERED_PLAY (persiste en mesa) sigue SIN destruirse tras el flip — regresión del fix §8', async () => {
+    const fake = createFakeJuiceScene();
+    const target = allyEnteredPlayTarget();
+
+    await cardFlip.play(fake.scene, target, {});
+
+    const placeholder = fake.scene.children.getByName(ALLY_INSTANCE_ID) as unknown as {
+      destroyed: boolean;
+    };
+    expect(placeholder.destroyed).toBe(false);
+  });
+
   it('registra un único tweens.chain con dos tramos scaleX (1→0 y 0→1)', async () => {
     const fake = createFakeJuiceScene();
     await cardFlip.play(fake.scene, allyEnteredPlayTarget(), {});

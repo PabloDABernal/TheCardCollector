@@ -32,7 +32,15 @@ export const cardFlip: JuiceRecipe = {
   id: 'cardFlip',
   play(scene, target) {
     const card = resolveOrCreateCardPlaceholder(scene, target.focusId);
-    const isEphemeral = target.focusId === undefined;
+    // FIX H4 spec §8 — una carta jugada desde la mano (`CARD_PLAYED`/`CONTRATIEMPO_PLAYED`) SIEMPRE
+    // trae `focusId` definido (`sourceId`), pero nunca tiene un slot visual persistente que la
+    // reutilice después (a diferencia de `ALLY_ENTERED_PLAY`/`MINION_SUMMONED`, que sí) — sin este
+    // caso, el placeholder gris quedaba huérfano permanentemente en `CARD_HAND_POSITION`, pegado al
+    // tile del Líder.
+    const isEphemeral =
+      target.focusId === undefined ||
+      target.event.type === 'CARD_PLAYED' ||
+      target.event.type === 'CONTRATIEMPO_PLAYED';
     const originalColor = card.fillColor;
 
     return new Promise<void>((resolve) => {
