@@ -7,6 +7,7 @@ import type { NucleoDie } from '@collector/domain-combat';
 import { createNucleoTable } from './nucleo-table-view';
 import { createFakeBoardScene } from './test-utils/fake-board-scene';
 import { createMockSnapshot, mockNucleoInstanceId } from './test-utils/mock-snapshot';
+import { NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR, NUCLEO_TILE_HALF_PX, CONTENT_BOXES_TOP_TO_BOTTOM } from './board-layout';
 
 function mockDie(id: string, color: NucleoDie['color'], value: number, overrides: Partial<NucleoDie> = {}): NucleoDie {
   return { id: mockNucleoInstanceId(id), color, value, kind: 'FIXED', status: 'AVAILABLE', ...overrides };
@@ -90,6 +91,44 @@ describe('createNucleoTable (H3, spec §5.2)', () => {
     // n1 no fue tocado/recreado.
     expect(rectangles.find((r) => r.getData('targetId') === n1Id && !r.destroyed)).toBe(n1RectBefore);
     expect(recordedTweens.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * FIX Reviewer (hallazgo tras commit `195ecca`) — el test "gap real >= CONTENT_GAP_PX" de
+   * `board-layout.test.ts` es tautológico para el peor caso de apilado EXTRA: por construcción,
+   * `HAND_ROW_POSITION.y` se define como `NUCLEO_CONTENT_BOTTOM_Y + CONTENT_GAP_PX +
+   * CARD_TILE_HALF_PX`, así que ese test SIEMPRE da exactamente `CONTENT_GAP_PX`, sin importar el
+   * valor real de `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR`/`NUCLEO_EXTRA_DIE_STACK_OFFSET_PX` — no
+   * puede detectar una divergencia entre la fórmula de apilado REAL (`positionFor`, este archivo) y
+   * la fórmula que `board-layout.ts` ASUME como peor caso (`NUCLEO_CONTENT_BOTTOM_Y`). Este test
+   * construye una mesa REAL (vía `createNucleoTable`, sin reimplementar la fórmula a mano) con
+   * `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR` dados EXTRA del mismo color apilados — el peor caso
+   * posible — y verifica que el bounding box REAL del último dado (el más bajo de la pila) cae
+   * dentro del borde inferior de contenido de `panel-nucleos` que `board-layout.ts` calcula. Si
+   * alguien cambia `NUCLEO_EXTRA_DIE_STACK_OFFSET_PX` o la lógica de `positionFor` sin actualizar
+   * `board-layout.ts` en consecuencia, este test debe fallar.
+   */
+  it('el peor caso de apilado EXTRA (NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR dados del mismo color) no invade panel-hand', () => {
+    const { scene, rectangles } = createFakeBoardScene();
+    const color: NucleoDie['color'] = 'AGRESION';
+    const fixed = mockDie('fixed', color, 1);
+    const extras = Array.from({ length: NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR }, (_, index) =>
+      mockDie(`extra-${index}`, color, 1, { kind: 'EXTRA' }),
+    );
+    const table = [fixed, ...extras];
+
+    createNucleoTable(scene, table);
+
+    const lastExtraId = String(mockNucleoInstanceId(`extra-${NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR - 1}`));
+    const lastRect = rectangles.find((rect) => rect.getData('targetId') === lastExtraId)!;
+    const nucleosContentBottomY = CONTENT_BOXES_TOP_TO_BOTTOM.find((entry) => entry.id === 'nucleos')!.box.bottom;
+
+    expect(lastRect).toBeDefined();
+    expect(
+      lastRect.y + NUCLEO_TILE_HALF_PX,
+      `bottom real (${lastRect.y + NUCLEO_TILE_HALF_PX}) del último dado EXTRA apilado supera el borde ` +
+        `inferior de contenido de panel-nucleos (${nucleosContentBottomY}) que board-layout.ts asume`,
+    ).toBeLessThanOrEqual(nucleosContentBottomY);
   });
 
   it('dos syncFromSnapshot consecutivos con la misma mesa: ningún tile destruido, mismas referencias', () => {

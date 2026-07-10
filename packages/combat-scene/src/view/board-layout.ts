@@ -112,6 +112,16 @@ export const NUCLEO_EXTRA_DIE_STACK_OFFSET_PX = 70;
 // `panel-nucleos`/el hueco hacia Mano deben soportar este peor caso siempre, no solo el caso con 0
 // dados EXTRA, para que el gap nunca pueda volverse negativo sin importar cuántas cartas/equipo
 // añadan dados EXTRA de Núcleo durante el combate.
+// FIX Reviewer (hallazgo doc. tras commit `195ecca`) — este layout es COMPILE-TIME (constantes
+// módulo-level, calculadas una sola vez al cargar el archivo) y por eso usa
+// `DEFAULT_NUCLEO_TABLE_MAX_DICE` (el valor por defecto de dominio), NO `CombatEngineConfig.tableMaxDice`
+// (que SÍ es configurable por instancia en runtime, ver `packages/domain-combat`). Hoy nadie
+// sobreescribe `tableMaxDice` en `apps/shell`, así que no hay bug activo. Pero si en el futuro se
+// configura una mesa con `tableMaxDice` mayor que el default, `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR`
+// (y por tanto `NUCLEO_CONTENT_BOTTOM_Y`/`HAND_ROW_POSITION`/`LEADER_POSITION` en cascada) quedarían
+// cortos para el peor caso real de esa mesa, sin que ningún test de este archivo lo detecte — el
+// layout no lee `tableMaxDice` de config en runtime porque es compile-time. Si se configura una mesa
+// custom con más dados que el default, este número debe revisarse a mano.
 export const NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR = DEFAULT_NUCLEO_TABLE_MAX_DICE - FIXED_NUCLEO_DICE_COUNT; // 10-5 = 5
 const NUCLEO_MAX_STACK_OFFSET_PX = NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR * NUCLEO_EXTRA_DIE_STACK_OFFSET_PX; // 5*70 = 350
 const NUCLEO_CONTENT_BOTTOM_Y = NUCLEO_TABLE_ROW_Y + NUCLEO_MAX_STACK_OFFSET_PX + NUCLEO_TILE_HALF_PX; // 1340+350+32 = 1722 (peor caso: pila EXTRA al máximo)
