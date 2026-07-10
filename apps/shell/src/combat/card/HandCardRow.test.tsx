@@ -13,9 +13,14 @@ import type { CombatStateSnapshot } from '@collector/domain-combat';
 // `HandCardRow.tsx` importa `HAND_ROW_POSITION`/`TILE_SEPARATION_PX` (valores reales, no solo tipos)
 // del barrel `@collector/combat-scene`, que también reexporta `CombatScene` y arrastra
 // `phaser`/`CanvasFeatures` — rompe bajo jsdom (mismo motivo documentado en `CombatHud.test.tsx`).
-// Se mockea con los mismos valores reales de `board-layout.ts` (x:540, y:1498, separación 140px).
+// Se mockea con los mismos valores reales de `board-layout.ts` (x:540, separación 140px). El `y`
+// mockeado aquí es arbitrario para este test (ningún caso comprueba coordenadas absolutas de
+// posición, solo comportamiento de render/interacción), así que NO se actualiza en cascada cada vez
+// que `HAND_ROW_POSITION.y` cambia en `board-layout.ts` por diseño — sigue en 1474 (valor histórico
+// pre-H4) por simplicidad, aunque el valor real tras el FIX de solape Núcleos↔Mano (peor caso de
+// apilado EXTRA, ver `board-layout.ts`) es ahora 1824.
 vi.mock('@collector/combat-scene', () => ({
-  HAND_ROW_POSITION: { x: 540, y: 1498 },
+  HAND_ROW_POSITION: { x: 540, y: 1474 },
   TILE_SEPARATION_PX: 140,
 }));
 

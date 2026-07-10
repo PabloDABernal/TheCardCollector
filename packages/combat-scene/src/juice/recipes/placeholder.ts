@@ -1,27 +1,21 @@
 import type Phaser from 'phaser';
+import { LEADER_POSITION, HAND_ROW_POSITION, ENEMY_POSITION, SCENARIO_POSITION } from '../../view/board-layout';
 
 /**
  * H2.5 spec §2 — posiciones fijas de referencia para los placeholders genéricos que las recetas
  * crean cuando todavía no existe (H2.6/H2.8) un game object real de tablero/carta/Núcleo. Viewport
  * virtual 1080×1920 (H2.6 §criterio ScaleManager) — sustituido por posiciones reales cuando H2.8
  * introduzca los sprites del tablero.
+ *
+ * H4 spec (`docs/specs/H4_layout_fuente_unica.md`) §2.2 — estas posiciones YA NO se definen aquí:
+ * se importan de `view/board-layout.ts`, que es la única fuente de verdad de la cadena de derivación
+ * de coordenadas de combate. La dirección de dependencia es board-layout → placeholder (nunca al
+ * revés), así que no hay ciclo de imports posible.
  */
-// FIX QA post-`6d14b52` — `leader.y` (antes 1700) y `CARD_HAND_POSITION.y` (antes 1600, abajo) se
-// recalcularon: el tile REAL del Líder (200×200, `view/role-view.ts`) invadía visualmente el panel
-// vecino "Mano" (`view/board-layout.ts` `PANEL_ZONES`/`panel-hand`) — con 1700, el borde superior del
-// tile (1700-100=1600) coincidía exactamente con el centro de la fila de Mano. Los valores son el
-// resultado de la misma derivación por bounding-box + `CONTENT_GAP_PX` que `view/board-layout.ts` usa
-// para `ALLIES_ROW_Y`/`NUCLEO_TABLE_ROW_Y` — no se deriva aquí en runtime porque este archivo es
-// importado POR `board-layout.ts`, no al revés (evita un ciclo de imports).
-// Ver comentario extenso en `view/board-layout.ts` junto a `LEADER_POSITION`/`HAND_ROW_POSITION`, y
-// la cobertura de `board-layout.test.ts` (bounding box de cada tile dentro de su panel).
-// FIX visual (feedback Director Creativo en móvil real) — recalculados a 1676/1474 (antes 1708/1498)
-// tras bajar `CONTENT_GAP_PX` de 20 a 12 en `view/board-layout.ts` (mismos huecos negros muertos que
-// motivaron ese cambio). Misma fórmula, GAP nuevo.
 export const PLACEHOLDER_POSITIONS: Record<string, { x: number; y: number }> = {
-  leader: { x: 540, y: 1676 },
-  enemy: { x: 540, y: 300 },
-  scenario: { x: 540, y: 960 },
+  leader: LEADER_POSITION,
+  enemy: ENEMY_POSITION,
+  scenario: SCENARIO_POSITION,
 };
 
 /** Posición por defecto cuando `focusId` no es uno de los 3 roles fijos (p.ej. un
@@ -29,10 +23,9 @@ export const PLACEHOLDER_POSITIONS: Record<string, { x: number; y: number }> = {
 export const DEFAULT_PLACEHOLDER_POSITION = { x: 540, y: 960 };
 
 /** Posición de "mano/mesa" genérica para placeholders de carta cuyo `focusId` no es uno de los 3
- *  roles fijos (spec §3.2 punto 1). FIX QA post-`6d14b52` — `y` antes 1600, ver comentario extenso
- *  junto a `PLACEHOLDER_POSITIONS.leader` arriba. FIX visual (feedback Director Creativo) — antes
- *  1498, recalculado a 1474 tras bajar `CONTENT_GAP_PX` de 20 a 12. */
-export const CARD_HAND_POSITION = { x: 540, y: 1474 };
+ *  roles fijos (spec §3.2 punto 1). Alias directo de `HAND_ROW_POSITION` (`view/board-layout.ts`) —
+ *  H4 spec §2.2, se mantiene el nombre para no romper los usos existentes en este archivo. */
+export const CARD_HAND_POSITION = HAND_ROW_POSITION;
 
 const GENERIC_PLACEHOLDER_SIZE = 96;
 const CARD_PLACEHOLDER_WIDTH = 120;

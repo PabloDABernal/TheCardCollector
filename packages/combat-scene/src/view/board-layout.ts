@@ -1,27 +1,20 @@
-import { PLACEHOLDER_POSITIONS, CARD_HAND_POSITION } from '../juice/recipes/placeholder';
+import { FIXED_NUCLEO_DICE_COUNT, DEFAULT_NUCLEO_TABLE_MAX_DICE } from '@collector/domain-combat';
 
 /**
- * H2.8 spec §3.1 — única fuente de verdad de coordenadas de rol. REUTILIZA exactamente
- * `PLACEHOLDER_POSITIONS` (H2.5) para que el sprite persistente de Líder/Enemigo/Escenario ocupe la
- * MISMA posición que `resolveOrCreatePlaceholder` ya asume al hacer fallback — cero desalineamiento
- * visual posible entre "el sprite real" y "donde el placeholder de emergencia aparecería si el sprite
- * faltara".
+ * H4 spec (`docs/specs/H4_layout_fuente_unica.md`) §2.1 — única fuente de verdad de coordenadas de
+ * combate. Todo lo que se deriva de un vecino (`HAND_ROW_POSITION`, `LEADER_POSITION`, `ALLIES_ROW_Y`,
+ * `NUCLEO_TABLE_ROW_Y`, ...) se calcula por fórmula en este mismo módulo — nunca se redeclara en otro
+ * archivo. `ENEMY_POSITION`/`SCENARIO_POSITION` son las únicas ANCLAS (no dependen de ninguna fila
+ * vecina por encima), así que permanecen como literales documentados aquí mismo.
  *
- * FIX QA post-`6d14b52` — el tile REAL del Líder (200×200, `role-view.ts`, `ROLE_TILE_HALF_PX` más
- * abajo) invadía visualmente el panel vecino "Mano" (`panel-hand`): con `LEADER_POSITION.y` = 1700,
- * su borde superior (1700 - 100 = 1600) caía justo en el CENTRO de la fila de Mano (`y` = 1600),
- * mezclándose con sus cartas. La corrección anterior (`f912c92`/`6d14b52`) solo verificaba que los
- * FONDOS de `PANEL_ZONES` no se solaparan entre sí — nunca comprobó que el sprite real cupiera dentro
- * de su panel. `LEADER_POSITION.y`/`HAND_ROW_POSITION.y` (`PLACEHOLDER_POSITIONS.leader`/
- * `CARD_HAND_POSITION`, `juice/recipes/placeholder.ts`) están ahora recalculados junto con
- * `ALLIES_ROW_Y`/`NUCLEO_TABLE_ROW_Y` (abajo) para que el BOUNDING BOX real de cada tile quepa dentro
- * de su panel con margen (`CONTENT_GAP_PX`, hoy 12px tras el FIX visual descrito más abajo) —
- * verificado por `board-layout.test.ts`.
+ * Dirección de dependencia: `juice/recipes/placeholder.ts` IMPORTA estas constantes (nunca al revés)
+ * — este archivo no importa nada de `placeholder.ts`, así que no hay ciclo posible. La importación de
+ * `@collector/domain-combat` (`FIXED_NUCLEO_DICE_COUNT`/`DEFAULT_NUCLEO_TABLE_MAX_DICE`, ver más abajo
+ * junto a `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR`) no crea ciclo — es un paquete de dominio, no de
+ * `combat-scene`.
  */
-export const LEADER_POSITION = PLACEHOLDER_POSITIONS.leader!; // {x:540, y:1676} — recalculado con CONTENT_GAP_PX=12, ver FIX visual abajo
-export const ENEMY_POSITION = PLACEHOLDER_POSITIONS.enemy!; // {x:540, y:300}
-export const SCENARIO_POSITION = PLACEHOLDER_POSITIONS.scenario!; // {x:540, y:960}
-export const HAND_ROW_POSITION = CARD_HAND_POSITION; // {x:540, y:1474} — recalculado con CONTENT_GAP_PX=12, ver FIX visual abajo
+export const ENEMY_POSITION = { x: 540, y: 300 };
+export const SCENARIO_POSITION = { x: 540, y: 960 };
 
 // FIX QA post-`6d14b52` — duplicados documentados de las dimensiones reales de sprite que SÍ dibujan
 // `role-view.ts` (`ROLE_SIZE` 200×200, tile de Líder/Enemigo/Escenario) y `nucleo-table-view.ts`
@@ -60,22 +53,20 @@ export const CARD_TILE_HALF_PX = MINION_TILE_HEIGHT_PX / 2; // 90
 export const MINIONS_ROW_Y = 620;
 
 // H2.10 spec §2.3 — fila de iconos de CD de habilidad, debajo del tile de rol y su HUD de texto.
-export const LEADER_ABILITIES_ROW_Y = LEADER_POSITION.y + 180;
+// `LEADER_ABILITIES_ROW_Y` se define más abajo, junto a `LEADER_POSITION` (depende de `HAND_ROW_POSITION`).
 export const ENEMY_ABILITIES_ROW_Y = ENEMY_POSITION.y + 180;
 
-// FIX QA post-`6d14b52` — margen mínimo garantizado entre el borde real (bounding box) de dos filas
-// de contenido consecutivas (tiles/texto/iconos), NO solo entre los fondos de `PANEL_ZONES`. Se usa
-// para derivar `ALLIES_ROW_Y`/`NUCLEO_TABLE_ROW_Y` aquí, y — con el mismo valor — para fijar
-// `LEADER_POSITION.y`/`HAND_ROW_POSITION.y` en `juice/recipes/placeholder.ts` (no se puede derivar
-// ahí en runtime porque `placeholder.ts` es importado POR este archivo, no al revés — evita ciclo).
+// Margen mínimo garantizado entre el borde real (bounding box) de dos filas de contenido
+// consecutivas (tiles/texto/iconos), NO solo entre los fondos de `PANEL_ZONES`. Toda fila derivada
+// de este archivo (`ALLIES_ROW_Y`, `NUCLEO_TABLE_ROW_Y`, `HAND_ROW_POSITION`, `LEADER_POSITION`, ...)
+// se calcula a partir de este valor — H4 spec §2.1, ver también `board-layout.test.ts`.
 // FIX visual (feedback Director Creativo en móvil real, docs/specs/H4_diseno_real_ui.md) — bajado de
 // 20 a 12: el Director señaló huecos negros muertos entre paneles (HUD↔panel-scenario, dentro de
 // panel-scenario alrededor del tile, panel-allies vacío ocupando demasiado alto) en su móvil real.
 // 12px sigue dejando margen real y positivo entre bounding boxes de contenido consecutivas (encima de
 // `PANEL_CONTENT_PADDING_PX` × 2 = 10, así que el fondo de dos `PanelZone` vecinas nunca llega a
 // tocarse — `board-layout.test.ts` "sin solapes" lo verifica), solo reduce el AIRE sobrante que no
-// aportaba nada. `LEADER_POSITION.y`/`CARD_HAND_POSITION.y` (`juice/recipes/placeholder.ts`) se
-// recalcularon a mano con la misma fórmula (ver comentario allí) para no romper la cadena derivada.
+// aportaba nada.
 export const CONTENT_GAP_PX = 12;
 
 // Borde inferior real del contenido de `panel-scenario`: el texto HUD (offset 120 + una línea, 144)
@@ -89,17 +80,81 @@ const SCENARIO_CONTENT_BOTTOM_Y = Math.max(
 // Derivado del borde inferior real de `panel-scenario` (`SCENARIO_CONTENT_BOTTOM_Y`) + `CONTENT_GAP_PX`
 // + la semi-altura real del tile de Aliado (`CARD_TILE_HALF_PX`) — bug análogo al del Líder hallado
 // al auditar el resto de filas: el tile de Aliado (120×180) se solapaba ~10px con `panel-nucleos`.
-export const ALLIES_ROW_Y = SCENARIO_CONTENT_BOTTOM_Y + CONTENT_GAP_PX + CARD_TILE_HALF_PX; // 1214
-const ALLIES_CONTENT_BOTTOM_Y = ALLIES_ROW_Y + CARD_TILE_HALF_PX; // 1304
+export const ALLIES_ROW_Y = SCENARIO_CONTENT_BOTTOM_Y + CONTENT_GAP_PX + CARD_TILE_HALF_PX; // 1206
+const ALLIES_CONTENT_BOTTOM_Y = ALLIES_ROW_Y + CARD_TILE_HALF_PX; // 1296
 
 /** RENOMBRADO H3.4 de `NUCLEO_POOL_ROW_Y` — mesa persistente de dados (ya no "pool" que se vacía).
  *  Alias `NUCLEO_POOL_ROW_Y` conservado para no romper imports existentes fuera de este cambio.
  *  FIX QA post-`6d14b52` — antes 1450 (número fijo). Ahora derivado de `ALLIES_CONTENT_BOTTOM_Y` +
  *  `CONTENT_GAP_PX` + `NUCLEO_TILE_HALF_PX`, dejando sitio real (no solo en `PANEL_ZONES`) entre el
  *  tile de Aliado y el dado FIXED — el tile de Aliado se solapaba ~10px con `panel-nucleos` antes. */
-export const NUCLEO_TABLE_ROW_Y = ALLIES_CONTENT_BOTTOM_Y + CONTENT_GAP_PX + NUCLEO_TILE_HALF_PX; // 1356
+export const NUCLEO_TABLE_ROW_Y = ALLIES_CONTENT_BOTTOM_Y + CONTENT_GAP_PX + NUCLEO_TILE_HALF_PX; // 1340
 export const NUCLEO_POOL_ROW_Y = NUCLEO_TABLE_ROW_Y;
-const NUCLEO_CONTENT_BOTTOM_Y = NUCLEO_TABLE_ROW_Y + NUCLEO_TILE_HALF_PX; // 1388 (solo dado FIXED base)
+
+/** NUEVO H3 (capa visual) — separación vertical entre un dado FIXED y sus dados EXTRA apilados del
+ *  mismo color (spec H3 §5.2, "agrupación visual por color"). Declarada aquí (antes de su primer uso
+ *  en `NUCLEO_MAX_STACK_OFFSET_PX` más abajo) — movida desde su ubicación original junto a
+ *  `MINIONS_ROW_X_ORIGIN`/`ALLIES_ROW_X_ORIGIN` para resolver TS2448/TS2454 ("used before its
+ *  declaration"): esas dos constantes son literales independientes sin relación de orden con esta, así
+ *  que moverla aquí no las afecta ni cambia ningún valor, solo el orden textual del archivo. */
+export const NUCLEO_EXTRA_DIE_STACK_OFFSET_PX = 70;
+
+// FIX solape móvil real (Director Creativo, hallazgo de este Programmer) — el bounding box de
+// `panel-nucleos` usaba SOLO el tamaño del dado FIXED (`NUCLEO_TILE_HALF_PX`), ignorando que
+// `nucleo-table-view.ts` (`positionFor`) apila los dados EXTRA de un mismo color DEBAJO del FIXED,
+// cada uno separado `NUCLEO_EXTRA_DIE_STACK_OFFSET_PX` (70) más que el anterior del mismo color. Con
+// al menos 1 dado EXTRA en mesa, el bottom real de la mesa de Núcleos queda por debajo de lo que este
+// archivo asumía, invadiendo el hueco reservado para Mano (medido en móvil real: ~-13px de overlap).
+//
+// Peor caso posible: todos los dados EXTRA que caben en mesa (`DEFAULT_NUCLEO_TABLE_MAX_DICE` menos
+// los `FIXED_NUCLEO_DICE_COUNT` fijos, uno por color) son del MISMO color y se apilan en una sola
+// columna — es la pila más alta que `positionFor` puede llegar a dibujar. El bounding box de
+// `panel-nucleos`/el hueco hacia Mano deben soportar este peor caso siempre, no solo el caso con 0
+// dados EXTRA, para que el gap nunca pueda volverse negativo sin importar cuántas cartas/equipo
+// añadan dados EXTRA de Núcleo durante el combate.
+export const NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR = DEFAULT_NUCLEO_TABLE_MAX_DICE - FIXED_NUCLEO_DICE_COUNT; // 10-5 = 5
+const NUCLEO_MAX_STACK_OFFSET_PX = NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR * NUCLEO_EXTRA_DIE_STACK_OFFSET_PX; // 5*70 = 350
+const NUCLEO_CONTENT_BOTTOM_Y = NUCLEO_TABLE_ROW_Y + NUCLEO_MAX_STACK_OFFSET_PX + NUCLEO_TILE_HALF_PX; // 1340+350+32 = 1722 (peor caso: pila EXTRA al máximo)
+
+// H4 spec (`docs/specs/H4_layout_fuente_unica.md`) §2.1 — antes literal (1474, importado de
+// `juice/recipes/placeholder.ts`), ahora derivado por fórmula del borde inferior real de Núcleos.
+// NOTA DE VERIFICACIÓN (Programmer anterior): con SOLO el dado FIXED (`NUCLEO_TILE_HALF_PX`), este
+// número coincidía EXACTAMENTE con el literal anterior (1474) — el `board-layout.test.ts` de "sin
+// solapes" ya estaba en VERDE antes de esa migración con 0 dados EXTRA, pero el bug real reportado en
+// móvil (Director Creativo) aparecía con >=1 dado EXTRA apilado, caso que ese bounding box no
+// contemplaba (medido: ~-13px de overlap real con la fila de Mano).
+// FIX de este Programmer (hallazgo de la investigación anterior) — `NUCLEO_CONTENT_BOTTOM_Y` ahora
+// asume el PEOR CASO posible de apilado de dados EXTRA (ver `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR`
+// arriba: 1722 en vez de 1372), así que `HAND_ROW_POSITION` (1824, antes 1474) baja lo suficiente para
+// dejar hueco real SIEMPRE, no solo en el caso feliz de 0 dados EXTRA.
+export const HAND_ROW_POSITION = { x: 540, y: NUCLEO_CONTENT_BOTTOM_Y + CONTENT_GAP_PX + CARD_TILE_HALF_PX }; // 1722+12+90 = 1824
+
+// H4 spec §2.1 — derivado del borde inferior real de Mano (antes literal 1676, luego 1676 tras H4).
+// Al mover `HAND_ROW_POSITION` al peor caso de apilado (arriba), `LEADER_POSITION` cascada con él
+// (misma cadena de derivación H4, sin cambios de fórmula) hasta 2026.
+//
+// ⚠️ HALLAZGO A ESCALAR A ARCHITECT (no resuelto en este fix, fuera del alcance de un bounding-box de
+// Núcleos-vs-Mano): con el PEOR CASO teórico (los 5 dados EXTRA que caben en mesa, todos del mismo
+// color, apilados en una sola columna — matemáticamente posible según `DEFAULT_NUCLEO_TABLE_MAX_DICE`/
+// `FIXED_NUCLEO_DICE_COUNT`, sin tope por color en el dominio), `LEADER_CONTENT.bottom` (ver más abajo)
+// llega a 2218px — 298px por ENCIMA del viewport virtual de 1920px (`COMBAT_SCENE_VIEWPORT`,
+// `CombatScene.ts`), que el propio H4 spec §2.1 exigía respetar ("cabe con 36px de margen"). La cadena
+// de derivación de H4 (Líder deriva de Mano, que deriva de Núcleos) es correcta y evita CUALQUIER
+// solape entre filas consecutivas incluso en el peor caso — pero no puede, a la vez, garantizar que
+// todo quepa dentro de los 1920px si el peor caso de apilado de Núcleos EXTRA (350px) es mayor que el
+// margen disponible (52px) antes de este fix. Este Programmer NO decide cómo resolver esa tensión
+// (opciones posibles: tope por color en el dominio, desacoplar el ancla de Líder de la posición de
+// Mano, o limitar visualmente cuántos EXTRA se apilan antes de reordenar en otra columna/fila) — es una
+// decisión de diseño/arquitectura, no de este bugfix puntual (que solo cubre "Núcleos nunca solapa
+// Mano"). Verificado en Playwright con 1 dado EXTRA (caso real reportado, no el peor caso teórico): sin
+// overlap, ver resumen de esta sesión.
+export const LEADER_POSITION = {
+  x: 540,
+  y: HAND_ROW_POSITION.y + CARD_TILE_HALF_PX + CONTENT_GAP_PX + ROLE_TILE_HALF_PX, // (1824+90)+12+100 = 2026
+};
+
+// H2.10 spec §2.3 — fila de iconos de CD de habilidad, debajo del tile de rol y su HUD de texto.
+export const LEADER_ABILITIES_ROW_Y = LEADER_POSITION.y + 180; // 2026+180 = 2206
 
 export const TILE_SEPARATION_PX = 140;
 // NUEVO H4.x — exportadas (antes privadas a minions-view.ts/allies-view.ts, eliminados ese mismo
@@ -109,9 +164,6 @@ export const TILE_SEPARATION_PX = 140;
 // punto en pantalla que el tile HTML real ocupa.
 export const MINIONS_ROW_X_ORIGIN = 200;
 export const ALLIES_ROW_X_ORIGIN = 200;
-/** NUEVO H3 (capa visual) — separación vertical entre un dado FIXED y sus dados EXTRA apilados del
- *  mismo color (spec H3 §5.2, "agrupación visual por color"). */
-export const NUCLEO_EXTRA_DIE_STACK_OFFSET_PX = 70;
 
 // FIX_combat_viewport_and_layout.md §2.2 — antes: 100. A 14px, la etiqueta más larga del catálogo
 // MVP ("Grito de Guerra 2/4", ~20 caracteres) ocupa ~170-180px renderizados — muy por encima de los
@@ -155,7 +207,7 @@ export interface PanelZone {
 // solaparse con su vecino ni dejar su sprite fuera — por construcción, no por coincidencia.
 const PANEL_CONTENT_PADDING_PX = 5;
 
-interface ContentBox {
+export interface ContentBox {
   readonly top: number;
   readonly bottom: number;
 }
@@ -194,6 +246,23 @@ const LEADER_CONTENT: ContentBox = {
   top: LEADER_POSITION.y - ROLE_TILE_HALF_PX,
   bottom: LEADER_ABILITIES_ROW_Y + ABILITY_ICON_HEIGHT_PX / 2,
 };
+
+/**
+ * H4 spec §3 paso 3 — las 7 filas de contenido real (no fondos de panel), ordenadas de arriba a
+ * abajo (Enemigo → Secuaces → Escenario → Aliados → Núcleos → Mano → Líder). Expuesto para que
+ * `board-layout.test.ts` verifique que el gap real entre bounding boxes consecutivas de CONTENIDO
+ * es siempre `>= CONTENT_GAP_PX`, no solo `> 0` — la red de seguridad que debería haber atrapado el
+ * bug de solape Núcleos↔Mano si se hubiera corrido tras el último cambio de `CONTENT_GAP_PX`.
+ */
+export const CONTENT_BOXES_TOP_TO_BOTTOM: readonly { readonly id: string; readonly box: ContentBox }[] = [
+  { id: 'enemy', box: ENEMY_CONTENT },
+  { id: 'minions', box: MINIONS_CONTENT },
+  { id: 'scenario', box: SCENARIO_CONTENT },
+  { id: 'allies', box: ALLIES_CONTENT },
+  { id: 'nucleos', box: NUCLEOS_CONTENT },
+  { id: 'hand', box: HAND_CONTENT },
+  { id: 'leader', box: LEADER_CONTENT },
+];
 
 export const PANEL_ZONES: readonly PanelZone[] = [
   panelFromContent(540, 1000, 'panel-enemy', 'Enemigo', ENEMY_CONTENT),

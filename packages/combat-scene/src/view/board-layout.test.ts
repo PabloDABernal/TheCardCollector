@@ -15,6 +15,8 @@ import {
   ROLE_TILE_HALF_PX,
   CARD_TILE_HALF_PX,
   NUCLEO_TILE_HALF_PX,
+  CONTENT_GAP_PX,
+  CONTENT_BOXES_TOP_TO_BOTTOM,
 } from './board-layout';
 
 /**
@@ -136,5 +138,45 @@ describe('board-layout — bounding box real de cada sprite/tile dentro de su Pa
 
   it('un tile de carta de Mano (card-hand-view.ts, 120x180) cae dentro de panel-hand', () => {
     expectContained('hand-card-tile', 'panel-hand', HAND_ROW_POSITION.y - CARD_TILE_HALF_PX, HAND_ROW_POSITION.y + CARD_TILE_HALF_PX);
+  });
+});
+
+/**
+ * H4 spec (`docs/specs/H4_layout_fuente_unica.md`) §3 paso 3 — regresión reforzada, expresada en
+ * términos de CONTENIDO real (tile/HUD/icono, sin el colchón de `PANEL_CONTENT_PADDING_PX` que ya
+ * cubre el test de "PANEL_ZONES sin solapes" de arriba). Exige que el gap entre bounding boxes de
+ * filas consecutivas sea `>= CONTENT_GAP_PX` — no solo `> 0` — para que cualquier futuro cambio de
+ * `CONTENT_GAP_PX` (o de cualquier constante de la cadena de derivación) que erosione ese margen
+ * mínimo, hasta llegar a gap negativo (solape real), haga fallar este test de inmediato. NOTA
+ * (Programmer, esta migración): verificado que con los valores REALES del código (no con los
+ * comentarios `//` de `ALLIES_ROW_Y`/`NUCLEO_TABLE_ROW_Y`, desactualizados de una época con
+ * `CONTENT_GAP_PX=20`, ver `board-layout.ts`), el gap Núcleos→Mano/Mano→Líder ya era exactamente
+ * `CONTENT_GAP_PX` (12) antes de esta migración — este test ya pasaba en verde contra el código sin
+ * tocar, contradiciendo la premisa de la spec de que debía estar en rojo.
+ */
+describe('board-layout — gap real entre CONTENIDO de filas consecutivas >= CONTENT_GAP_PX (H4 spec §3 paso 3)', () => {
+  it('las 7 filas de contenido están en orden vertical estrictamente creciente', () => {
+    for (let i = 1; i < CONTENT_BOXES_TOP_TO_BOTTOM.length; i += 1) {
+      const previous = CONTENT_BOXES_TOP_TO_BOTTOM[i - 1]!;
+      const current = CONTENT_BOXES_TOP_TO_BOTTOM[i]!;
+
+      expect(
+        current.box.top,
+        `${current.id} (top=${current.box.top}) no está por debajo de ${previous.id} (top=${previous.box.top})`,
+      ).toBeGreaterThan(previous.box.top);
+    }
+  });
+
+  it('el gap real entre bounding boxes de contenido consecutivas es >= CONTENT_GAP_PX', () => {
+    for (let i = 1; i < CONTENT_BOXES_TOP_TO_BOTTOM.length; i += 1) {
+      const previous = CONTENT_BOXES_TOP_TO_BOTTOM[i - 1]!;
+      const current = CONTENT_BOXES_TOP_TO_BOTTOM[i]!;
+      const gap = current.box.top - previous.box.bottom;
+
+      expect(
+        gap,
+        `gap de contenido ${previous.id}→${current.id} es ${gap}px, menor que CONTENT_GAP_PX (${CONTENT_GAP_PX})`,
+      ).toBeGreaterThanOrEqual(CONTENT_GAP_PX);
+    }
   });
 });
