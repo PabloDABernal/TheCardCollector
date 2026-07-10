@@ -56,7 +56,14 @@ export default defineConfig({
             },
           },
         ],
-        navigateFallback: `${base}offline.html`, // fallback offline mínimo (spec §4)
+        // App shell real (index.html), no offline.html: navigateFallback es lo que Workbox sirve para
+        // CUALQUIER navegación sin match exacto en precache — con React Router (rutas cliente como
+        // /run-start, /combat) el fallback correcto es el shell de la SPA, que monta React y resuelve la
+        // ruta en el cliente. index.html ya está precacheado por globPatterns, así que esto sigue
+        // funcionando offline (Workbox lo sirve desde caché sin red). offline.html queda retirado — spec
+        // §4 de H2.15_pwa.md no contempló rutas de React Router al escribir este fallback; ver
+        // decisions.md fix de "offline" en toda navegación directa a ruta de la app.
+        navigateFallback: `${base}index.html`,
         navigateFallbackDenylist: [new RegExp(`^${base}data/`)], // no interceptar peticiones de datos como si fueran navegación
       },
       devOptions: {
