@@ -1,0 +1,13 @@
+/* H4 spec §3.2 — pulso en `--danger` translúcido cuando la línea más reciente de la franja peek es
+   una acción del Enemigo, para llamar la atención sin ser un banner de pantalla completa. */
+@keyframes log-peek-pulse {
+  0% {
+    background-color: rgba(31, 30, 38, 0.88);
+  }
+  30% {
+    background-color: rgba(209, 73, 91, 0.25);
+  }
+  100% {
+    background-color: rgba(31, 30, 38, 0.88);
+  }
+}

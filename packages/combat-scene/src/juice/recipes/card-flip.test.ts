@@ -3,7 +3,7 @@
 // H2.5 spec §5 — `card-flip.test.ts`.
 import { describe, it, expect } from 'vitest';
 import { createId } from '@collector/domain-shared';
-import type { CardId, CardInstanceId } from '@collector/domain-shared';
+import type { CardId, CardInstanceId, DramaturgiaCardId } from '@collector/domain-shared';
 import { createFakeJuiceScene } from './test-utils/fake-juice-scene';
 import { cardFlip } from './card-flip';
 import type { JuiceTarget } from '../juice-recipe';
@@ -86,7 +86,7 @@ describe('cardFlip', () => {
   it('sin focusId (DRAMATURGIA_CARD_DRAWN): destruye el placeholder efímero al terminar el flip, sin acumular huérfanos entre disparos repetidos', async () => {
     const fake = createFakeJuiceScene();
     const target: JuiceTarget = {
-      event: { type: 'DRAMATURGIA_CARD_DRAWN', icon: 'ATTACK' },
+      event: { type: 'DRAMATURGIA_CARD_DRAWN', icon: 'ATTACK', cardId: 'dramaturgia-test' as DramaturgiaCardId },
     };
 
     await cardFlip.play(fake.scene, target, {});

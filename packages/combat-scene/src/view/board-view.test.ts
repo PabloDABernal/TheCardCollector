@@ -12,6 +12,7 @@ import type { BoardViewContext } from './board-view-context';
 const fakeNameLookup: NameLookup = {
   abilityName: (id) => `ability:${id}`,
   cardName: (id) => `card:${id}`,
+  minionName: (id) => `minion:${id}`,
 };
 
 function mockDie(id: string, color: NucleoDie['color'], value: number, overrides: Partial<NucleoDie> = {}): NucleoDie {

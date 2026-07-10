@@ -1,5 +1,5 @@
 import type { TargetingPrompt } from '@collector/combat-scene';
-import { chipStyle } from '../CombatHud';
+import { chipStyle } from '../chip-style';
 import { COLOR_FOIL, COLOR_TEXT_PRIMARY, SPACING, TYPE } from '../../ui/design-tokens';
 
 export interface TargetingPromptBannerProps {

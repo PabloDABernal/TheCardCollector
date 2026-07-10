@@ -1,4 +1,3 @@
-import type { CSSProperties } from 'react';
 import type { CombatBridge } from '@collector/combat-bridge';
 import type { CombatStateSnapshot } from '@collector/domain-combat';
 import type { AbilityViewData } from '@collector/combat-scene';
@@ -7,13 +6,14 @@ import {
   COLOR_BINDER,
   COLOR_FOIL,
   COLOR_RULE,
-  COLOR_TEXT_DISABLED,
   COLOR_TEXT_PRIMARY,
   COLOR_TEXT_SECONDARY,
   RADIUS_CHIP,
   SPACING,
   TYPE,
 } from '../ui/design-tokens';
+import { freeStepAvailabilityFor } from './free-step-availability';
+import { chipStyle } from './chip-style';
 
 export interface CombatHudProps {
   readonly snapshot: CombatStateSnapshot;
@@ -69,21 +69,6 @@ export function disabledReasonFor(
   }
 }
 
-/** H4 spec §6 — helper visual único reutilizado por los 6 controles (2 gratis + 4 pagados + fin de
- *  turno), sustituye el `buttonBaseStyle`/`enabledStyle`/`disabledStyle` inline anterior por una
- *  función pura testeable, mismo criterio que `disabledReasonFor`. */
-export function chipStyle(enabled: boolean): CSSProperties {
-  return {
-    ...TYPE.bodyMd,
-    borderRadius: RADIUS_CHIP,
-    padding: `${SPACING.xs}px ${SPACING.sm}px`,
-    background: COLOR_BINDER,
-    border: `1px solid ${enabled ? COLOR_RULE : 'rgba(58, 55, 68, 0.4)'}`,
-    color: enabled ? COLOR_TEXT_PRIMARY : COLOR_TEXT_DISABLED,
-    cursor: enabled ? 'pointer' : 'default',
-  };
-}
-
 /**
  * "Chrome" no-juice sobre el canvas (`architecture_stack.md` §2.3) — vida/Trama/turno YA se
  * muestran vía `CombatBoardOverlay` (H4 §2, capa HTML sincronizada); este HUD React NO duplica ese
@@ -126,9 +111,10 @@ export function CombatHud({ snapshot, bridge, onEndTurn, leaderName, leaderAbili
   const canGenerateEnergyPaid = canAct && !energyAtMax;
   const canDrawCardPaid = canAct && !handFull && !deckEmpty;
 
-  const freeStepAvailable = isLeaderTurn && !snapshot.leaderFreeStep.takenThisTurn;
-  const canFreeDraw = freeStepAvailable && !handFull && !deckEmpty;
-  const canFreeGenerate = freeStepAvailable && !energyAtMax;
+  // H4 spec §1.3 — extraído a `freeStepAvailabilityFor` (reutilizado también por `TurnStartModal`).
+  const freeStep = freeStepAvailabilityFor(snapshot);
+  const canFreeDraw = freeStep.canDraw;
+  const canFreeGenerate = freeStep.canGenerate;
 
   const enabledStyle = chipStyle(true);
   const disabledStyle = chipStyle(false);

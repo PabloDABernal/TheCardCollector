@@ -12,6 +12,9 @@ import { useTargetingPrompt } from '../combat/use-targeting-prompt';
 import { CombatBoardOverlay } from '../combat/CombatBoardOverlay';
 import { CombatHud } from '../combat/CombatHud';
 import { CombatResultModal } from '../combat/CombatResultModal';
+import { TurnStartModal } from '../combat/TurnStartModal';
+import { CombatLogPanel } from '../combat/log/CombatLogPanel';
+import { useCombatLog } from '../combat/log/use-combat-log';
 import { TargetingPromptBanner } from '../combat/card/TargetingPromptBanner';
 import { LEADER_OPTIONS, DEFAULT_LEADER_OPTION } from '../combat/leader-options';
 import { ENEMY_OPTIONS, DEFAULT_ENEMY_OPTION } from '../combat/enemy-options';
@@ -172,6 +175,8 @@ function CombatHudOverlay({
   // NUEVO H4 spec §5.2/§5.3 — banner "Elige un objetivo"/"Elige un Núcleo", montado justo debajo de
   // `CombatHud` (franja fija, fuera de la transformación de viewport virtual del canvas).
   const targetingPrompt = useTargetingPrompt(targetingSignal);
+  // NUEVO H4 spec §3/§5 — log de combate en texto, traducido desde el canal HUD.
+  const logEntries = useCombatLog(bridge, boardContext);
   return (
     <>
       {/* H4 spec §5.3 — envoltorio `position: absolute` compartido por `CombatHud` (franja fija) y
@@ -201,6 +206,8 @@ function CombatHudOverlay({
         enemyName={enemyName}
         scenarioName={scenarioName}
       />
+      <CombatLogPanel entries={logEntries} />
+      <TurnStartModal snapshot={snapshot} bridge={bridge} />
       {snapshot.status !== 'IN_PROGRESS' && <CombatResultModal snapshot={snapshot} />}
     </>
   );

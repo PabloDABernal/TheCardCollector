@@ -68,7 +68,7 @@ function createMockContext(abilities: AbilityViewData[] = []): BoardViewContext 
   ];
 
   return {
-    nameLookup: { abilityName: (id) => `ability:${id}`, cardName: (id) => `card:${id}` },
+    nameLookup: { abilityName: (id) => `ability:${id}`, cardName: (id) => `card:${id}`, minionName: (id) => `minion:${id}` },
     leaderMaxHealth: 30,
     enemyMaxHealth: 40,
     scenarioPlotDefeatThreshold: 10,

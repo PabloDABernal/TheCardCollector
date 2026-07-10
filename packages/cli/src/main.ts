@@ -96,7 +96,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   const config = buildCombatEngineConfig({ catalog, leader, enemy, scenario, randomSource });
   const engine = new CombatEngine(config);
 
-  const nameLookup = buildNameLookup({ leader, enemy, catalog });
+  const nameLookup = buildNameLookup({ leader, enemy, scenario, catalog });
   const renderCtx: RenderContext = {
     nameLookup,
     leaderMaxHealth: config.leaderMaxHealth,

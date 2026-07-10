@@ -59,7 +59,7 @@ export async function buildCombatSetup(params: BuildCombatSetupParams = {}): Pro
   const engine = new CombatEngine(config);
   const bridge = createCombatBridge(engine);
 
-  const nameLookup = buildNameLookup({ leader, enemy, catalog });
+  const nameLookup = buildNameLookup({ leader, enemy, scenario, catalog });
   const leaderCardPool: HandCardViewData[] = leader.cardPoolIds.map((cardId) => {
     const card = catalog.cards.get(cardId)!; // garantizado por CatalogLoader
     return {

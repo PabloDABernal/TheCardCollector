@@ -2302,7 +2302,7 @@ export class CombatEngine {
     this.dramaturgiaDiscardPile.push(card);
     this.currentEnemyDramaturgiaCard = card; // NUEVO H1.16 (rediseño)
     this.activeDramaturgiaCardId = card.id; // NUEVO H4.x
-    const drawn: CombatEvent = { type: 'DRAMATURGIA_CARD_DRAWN', icon: card.icon };
+    const drawn: CombatEvent = { type: 'DRAMATURGIA_CARD_DRAWN', icon: card.icon, cardId: card.id };
     events.push(drawn);
     this.eventBus.emit(drawn);
     return card.icon;

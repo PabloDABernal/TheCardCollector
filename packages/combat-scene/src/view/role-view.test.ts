@@ -13,7 +13,7 @@ const SCENARIO_ALERT_COLOR = 0xc0392b;
 
 function createMockContext(overrides: Partial<BoardViewContext> = {}): BoardViewContext {
   return {
-    nameLookup: { abilityName: (id) => `ability:${id}`, cardName: (id) => `card:${id}` },
+    nameLookup: { abilityName: (id) => `ability:${id}`, cardName: (id) => `card:${id}`, minionName: (id) => `minion:${id}` },
     leaderMaxHealth: 30,
     enemyMaxHealth: 40,
     scenarioPlotDefeatThreshold: 10,

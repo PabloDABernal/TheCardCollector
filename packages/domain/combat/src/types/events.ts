@@ -1,4 +1,4 @@
-import type { AbilityId, CardId, CardInstanceId, NucleoColor } from '@collector/domain-shared';
+import type { AbilityId, CardId, CardInstanceId, DramaturgiaCardId, NucleoColor } from '@collector/domain-shared';
 import type { NucleoInstance, NucleoDie } from './nucleo';
 import type { CombatSide } from './turn';
 import type { AbilityCooldownSnapshot } from './cooldown';
@@ -333,6 +333,9 @@ export type CombatEvent =
        *  activada (§0.5). */
       readonly type: 'DRAMATURGIA_CARD_DRAWN';
       readonly icon: DramaturgiaCardIcon;
+      /** NUEVO H4.y — id de la carta robada, para que el log/UI puedan resolver su nombre real sin
+       *  depender de una lectura síncrona de `getSnapshot()` en el listener. */
+      readonly cardId: DramaturgiaCardId;
     }
   | {
       /** NUEVO H1.18. Precede a un DRAMATURGIA_CARD_DRAWN cuando la pila de robo estaba

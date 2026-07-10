@@ -4,7 +4,7 @@
     "ruleText": "Ataque +2. Puede pagarse con cualquier dado de Núcleo (Umbral)." },
   { "id": "card-soldado-base-02", "name": "Golpe Certero", "type": "EVENTO", "cost": { "energy": 2 },
     "keywords": [{ "keyword": "ATAQUE_POR_X", "amount": 2 }],
-    "ruleText": "Ataque ×2, escalando con el valor del dado usado." },
+    "ruleText": "Ataque ×2 de energía pura." },
   { "id": "card-soldado-base-03", "name": "Arremetida", "type": "EVENTO", "cost": { "energy": 2 },
     "keywords": [{ "keyword": "ATAQUE_MAS_X", "amount": 3 }, { "keyword": "ARROLLAR" }],
     "ruleText": "Ataque +3. Arrollador: el exceso de daño pasa al Enemigo." },

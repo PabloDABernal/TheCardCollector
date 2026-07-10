@@ -4,7 +4,7 @@
     "ruleText": "Ataque +1. Caos: incluye un componente de azar en su efecto." },
   { "id": "card-mago-base-02", "name": "Descarga Arcana", "type": "EVENTO", "cost": { "energy": 2 },
     "keywords": [{ "keyword": "ATAQUE_POR_X", "amount": 2 }],
-    "ruleText": "Ataque ×2, escalando con el valor del dado usado." },
+    "ruleText": "Ataque ×2 de energía pura." },
   { "id": "card-mago-base-03", "name": "Vórtice", "type": "EVENTO", "cost": { "energy": 2 },
     "keywords": [{ "keyword": "ATAQUE_MAS_X", "amount": 2 }, { "keyword": "UMBRAL" }],
     "ruleText": "Ataque +2. Puede pagarse con cualquier dado de Núcleo (Umbral)." },

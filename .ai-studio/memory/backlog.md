@@ -4,7 +4,7 @@
 
 ## Bugs
 
-### B1: `card-mago-base-02` y `card-soldado-base-02` — ruleText menciona escala de dados sin Umbral/NEUTRO
+### B1: `card-mago-base-02` y `card-soldado-base-02` — ruleText menciona escala de dados sin Umbral/NEUTRO — ✅ RESUELTO (Programmer, H4.y)
 
 **Descripción:** Las cartas "Descarga Arcana" (`card-mago-base-02`) y "Golpe Certero" (`card-soldado-base-02`) tienen `ruleText` que promete "escalando con el valor del dado usado" (mecánica de Umbral), pero:
 - No llevan keyword `UMBRAL` ni `NEUTRO` en su array de keywords.
