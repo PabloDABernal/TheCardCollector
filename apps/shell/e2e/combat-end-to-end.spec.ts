@@ -156,6 +156,17 @@ test('CombatScreen monta Phaser real dentro de #phaser-mount y un tap real sobre
 
   await page.waitForTimeout(200); // margen para que CombatScene.create() pinte el estado inicial
 
+  // FIX test preexistente (regresión detectada al verificar el fix urgente P0 de
+  // `docs/specs/H4_fix_urgente_lider_fuera_viewport.md`) — `TurnStartModal` (H4 spec, `role="dialog"`)
+  // es obligatorio al empezar el turno del Líder desde una ronda anterior a este test, e intercepta
+  // cualquier clic real sobre el tablero hasta que se descarta. Mismo botón real ("Ahora no") que un
+  // jugador usaría, mismo patrón ya usado más abajo en este archivo.
+  const dismissTurnStartModal = page.getByText('Ahora no', { exact: true });
+  if (await dismissTurnStartModal.isVisible().catch(() => false)) {
+    await dismissTurnStartModal.click();
+    await page.waitForTimeout(100);
+  }
+
   if (usedFreeGenerate) {
     // Real, mismo botón accionable del HUD que un jugador usaría (`CombatHud.tsx`, paso previo
     // gratuito) — desbloquea la carta jugable en 1 tap calculada arriba en la réplica en Node.
