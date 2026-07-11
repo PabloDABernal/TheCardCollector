@@ -17,6 +17,7 @@ import {
   NUCLEO_TILE_HALF_PX,
   CONTENT_GAP_PX,
   CONTENT_BOXES_TOP_TO_BOTTOM,
+  COMBAT_SCENE_VIEWPORT,
 } from './board-layout';
 
 /**
@@ -178,5 +179,26 @@ describe('board-layout — gap real entre CONTENIDO de filas consecutivas >= CON
         `gap de contenido ${previous.id}→${current.id} es ${gap}px, menor que CONTENT_GAP_PX (${CONTENT_GAP_PX})`,
       ).toBeGreaterThanOrEqual(CONTENT_GAP_PX);
     }
+  });
+});
+
+/**
+ * FIX URGENTE P0 (docs/specs/H4_fix_urgente_lider_fuera_viewport.md §5) — regresión: el test
+ * "reforzado" anterior (arriba, "gap real entre CONTENIDO...") solo comparaba constantes de
+ * `board-layout.ts` INTERNAMENTE CONSISTENTES ENTRE SÍ (todas derivadas de la misma cadena de
+ * fórmulas, incluyendo `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR`), nunca contra el límite REAL de
+ * `COMBAT_SCENE_VIEWPORT.height` — por eso no atrapó la regresión en la que el Líder quedaba SIEMPRE
+ * fuera del viewport: los gaps entre filas internas seguían siendo válidos (>= CONTENT_GAP_PX)
+ * incluso cuando el conjunto completo ya no cabía dentro del alto real del viewport. Este test
+ * importa `COMBAT_SCENE_VIEWPORT` directamente desde `./board-layout` (MOVIDO aquí desde
+ * `scenes/CombatScene.ts`, ver comentario junto a su definición — evita arrastrar el import runtime
+ * de `phaser` que `CombatScene.ts` sí necesita, y que crashea bajo el entorno de test sin
+ * `<canvas>` real) y asegura, con el margen mínimo de 36px exigido por H4 spec §2.1, que el borde
+ * inferior real del Líder (tile + HP + sus 4 habilidades) cae DENTRO del viewport virtual — no solo
+ * que es consistente con sus propias constantes derivadas.
+ */
+describe('board-layout — LEADER_ABILITIES_ROW_Y cabe dentro de COMBAT_SCENE_VIEWPORT.height con margen real (H4 spec §5, FIX URGENTE P0)', () => {
+  it('el borde inferior real del Líder (tile + HP + habilidades) queda >= 36px por encima del alto del viewport', () => {
+    expect(LEADER_ABILITIES_ROW_Y + ABILITY_ICON_HEIGHT_PX / 2).toBeLessThanOrEqual(COMBAT_SCENE_VIEWPORT.height - 36);
   });
 });

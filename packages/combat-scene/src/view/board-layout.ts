@@ -1,5 +1,3 @@
-import { FIXED_NUCLEO_DICE_COUNT, DEFAULT_NUCLEO_TABLE_MAX_DICE } from '@collector/domain-combat';
-
 /**
  * H4 spec (`docs/specs/H4_layout_fuente_unica.md`) §2.1 — única fuente de verdad de coordenadas de
  * combate. Todo lo que se deriva de un vecino (`HAND_ROW_POSITION`, `LEADER_POSITION`, `ALLIES_ROW_Y`,
@@ -8,11 +6,34 @@ import { FIXED_NUCLEO_DICE_COUNT, DEFAULT_NUCLEO_TABLE_MAX_DICE } from '@collect
  * vecina por encima), así que permanecen como literales documentados aquí mismo.
  *
  * Dirección de dependencia: `juice/recipes/placeholder.ts` IMPORTA estas constantes (nunca al revés)
- * — este archivo no importa nada de `placeholder.ts`, así que no hay ciclo posible. La importación de
- * `@collector/domain-combat` (`FIXED_NUCLEO_DICE_COUNT`/`DEFAULT_NUCLEO_TABLE_MAX_DICE`, ver más abajo
- * junto a `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR`) no crea ciclo — es un paquete de dominio, no de
- * `combat-scene`.
+ * — este archivo no importa nada de `placeholder.ts`, así que no hay ciclo posible. Este archivo ya NO
+ * importa nada de `@collector/domain-combat` (FIX URGENTE P0,
+ * `docs/specs/H4_fix_urgente_lider_fuera_viewport.md` — `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR` dejó
+ * de derivarse de `DEFAULT_NUCLEO_TABLE_MAX_DICE`/`FIXED_NUCLEO_DICE_COUNT`, ver ese export más abajo).
  */
+
+/** Viewport virtual de diseño — mobile-first, ver docs/architecture_stack.md §4.2. Misma resolución
+ *  que `main.ts` (H2.1) ya usaba para el propio `Phaser.Game` y que `Scale Manager` gobierna
+ *  (configurado a nivel de `Phaser.Game`, no de la escena — ver `main.ts`, spec H2.6 §4).
+ *
+ *  MOVIDO desde `scenes/CombatScene.ts` (FIX URGENTE P0,
+ *  `docs/specs/H4_fix_urgente_lider_fuera_viewport.md` §5) — `CombatScene.ts` importa `phaser` en
+ *  runtime (no solo tipos), cuyo módulo ejecuta detección real de `Device`/`Canvas` al cargarse;
+ *  `board-layout.test.ts` necesita verificar `LEADER_ABILITIES_ROW_Y` contra
+ *  `COMBAT_SCENE_VIEWPORT.height` (H4 spec §5) sin arrastrar ese import pesado (crashea bajo el
+ *  entorno de test sin un `<canvas>` real). `CombatScene.ts` reexporta este mismo valor para no
+ *  romper ningún import externo existente (`main.ts`, `index.ts`).
+ *
+ *  FIX URGENTE P0 — `height` sube de 1920 a 2060 (+140px). Combinado con bajar
+ *  `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR` de 5 a 2 (arriba), esto resuelve la regresión P0 en la
+ *  que el Líder (tile, HP, sus 4 habilidades) se renderizaba SIEMPRE fuera del viewport:
+ *  `LEADER_CONTENT.bottom` en el peor caso reservado (N=2 dados EXTRA por color) queda en 2008px,
+ *  52px por debajo de este nuevo `height` (mismo margen que existía en el diseño original entre el
+ *  caso feliz de 0 dados EXTRA y el viewport de 1920). Deuda técnica documentada (§4 de la spec): si
+ *  en el futuro un card permite apilar más de 2 dados EXTRA del mismo color, este valor debe
+ *  revisarse junto con `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR`. */
+export const COMBAT_SCENE_VIEWPORT = { width: 1080, height: 2060 } as const;
+
 export const ENEMY_POSITION = { x: 540, y: 300 };
 export const SCENARIO_POSITION = { x: 540, y: 960 };
 
@@ -113,18 +134,28 @@ export const NUCLEO_EXTRA_DIE_STACK_OFFSET_PX = 70;
 // dados EXTRA, para que el gap nunca pueda volverse negativo sin importar cuántas cartas/equipo
 // añadan dados EXTRA de Núcleo durante el combate.
 // FIX Reviewer (hallazgo doc. tras commit `195ecca`) — este layout es COMPILE-TIME (constantes
-// módulo-level, calculadas una sola vez al cargar el archivo) y por eso usa
+// módulo-level, calculadas una sola vez al cargar el archivo) y por eso usaba
 // `DEFAULT_NUCLEO_TABLE_MAX_DICE` (el valor por defecto de dominio), NO `CombatEngineConfig.tableMaxDice`
 // (que SÍ es configurable por instancia en runtime, ver `packages/domain-combat`). Hoy nadie
-// sobreescribe `tableMaxDice` en `apps/shell`, así que no hay bug activo. Pero si en el futuro se
-// configura una mesa con `tableMaxDice` mayor que el default, `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR`
-// (y por tanto `NUCLEO_CONTENT_BOTTOM_Y`/`HAND_ROW_POSITION`/`LEADER_POSITION` en cascada) quedarían
-// cortos para el peor caso real de esa mesa, sin que ningún test de este archivo lo detecte — el
-// layout no lee `tableMaxDice` de config en runtime porque es compile-time. Si se configura una mesa
-// custom con más dados que el default, este número debe revisarse a mano.
-export const NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR = DEFAULT_NUCLEO_TABLE_MAX_DICE - FIXED_NUCLEO_DICE_COUNT; // 10-5 = 5
-const NUCLEO_MAX_STACK_OFFSET_PX = NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR * NUCLEO_EXTRA_DIE_STACK_OFFSET_PX; // 5*70 = 350
-const NUCLEO_CONTENT_BOTTOM_Y = NUCLEO_TABLE_ROW_Y + NUCLEO_MAX_STACK_OFFSET_PX + NUCLEO_TILE_HALF_PX; // 1340+350+32 = 1722 (peor caso: pila EXTRA al máximo)
+// sobreescribe `tableMaxDice` en `apps/shell`, así que no hay bug activo por esa vía.
+//
+// FIX URGENTE P0 (docs/specs/H4_fix_urgente_lider_fuera_viewport.md) — este valor derivado
+// (`DEFAULT_NUCLEO_TABLE_MAX_DICE - FIXED_NUCLEO_DICE_COUNT = 10-5 = 5`) asumía SIEMPRE el peor caso
+// matemáticamente posible de apilado (5 dados EXTRA del mismo color), sin importar que NINGÚN card
+// implementa hoy `ADD_NUCLEO_DIE` — el resultado era una reserva de espacio permanente que empujaba
+// `LEADER_CONTENT.bottom` a 2218px, 298px por ENCIMA de `COMBAT_SCENE_VIEWPORT.height` (1920 antes de
+// este fix), dejando al Líder (tile, HP, sus 4 habilidades) SIEMPRE fuera del viewport, incluso con 0
+// dados EXTRA reales en mesa. Sustituido por un LITERAL de diseño (`2`), acotado al rango realista
+// (0–2 dados EXTRA por color) en vez de al peor caso teórico del dominio — ya NO se deriva de
+// `DEFAULT_NUCLEO_TABLE_MAX_DICE`/`FIXED_NUCLEO_DICE_COUNT` (import de `@collector/domain-combat`
+// retirado de este archivo, ver comentario de cabecera). Si en el futuro un card permite apilar más
+// de 2 dados EXTRA del mismo color en mesa, este valor Y `COMBAT_SCENE_VIEWPORT.height`
+// (`CombatScene.ts`) deben revisarse juntos — o migrar a reserva 100% dinámica (recalculada contra el
+// estado real de cada render), la solución correcta a largo plazo pero de alcance amplio (toca
+// `role-view.ts` y 3 componentes React), fuera de este fix P0 (ver §4 de la spec).
+export const NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR = 2; // tope de DISEÑO (rango realista 0-2), no derivado de DEFAULT_NUCLEO_TABLE_MAX_DICE
+const NUCLEO_MAX_STACK_OFFSET_PX = NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR * NUCLEO_EXTRA_DIE_STACK_OFFSET_PX; // 2*70 = 140
+const NUCLEO_CONTENT_BOTTOM_Y = NUCLEO_TABLE_ROW_Y + NUCLEO_MAX_STACK_OFFSET_PX + NUCLEO_TILE_HALF_PX; // 1340+140+32 = 1512 (peor caso reservado: N=2)
 
 // H4 spec (`docs/specs/H4_layout_fuente_unica.md`) §2.1 — antes literal (1474, importado de
 // `juice/recipes/placeholder.ts`), ahora derivado por fórmula del borde inferior real de Núcleos.
@@ -133,38 +164,34 @@ const NUCLEO_CONTENT_BOTTOM_Y = NUCLEO_TABLE_ROW_Y + NUCLEO_MAX_STACK_OFFSET_PX 
 // solapes" ya estaba en VERDE antes de esa migración con 0 dados EXTRA, pero el bug real reportado en
 // móvil (Director Creativo) aparecía con >=1 dado EXTRA apilado, caso que ese bounding box no
 // contemplaba (medido: ~-13px de overlap real con la fila de Mano).
-// FIX de este Programmer (hallazgo de la investigación anterior) — `NUCLEO_CONTENT_BOTTOM_Y` ahora
-// asume el PEOR CASO posible de apilado de dados EXTRA (ver `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR`
-// arriba: 1722 en vez de 1372), así que `HAND_ROW_POSITION` (1824, antes 1474) baja lo suficiente para
-// dejar hueco real SIEMPRE, no solo en el caso feliz de 0 dados EXTRA.
-export const HAND_ROW_POSITION = { x: 540, y: NUCLEO_CONTENT_BOTTOM_Y + CONTENT_GAP_PX + CARD_TILE_HALF_PX }; // 1722+12+90 = 1824
+// FIX de este Programmer (hallazgo de la investigación anterior) — `NUCLEO_CONTENT_BOTTOM_Y` asume el
+// PEOR CASO reservado de apilado de dados EXTRA (ver `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR` arriba),
+// así que `HAND_ROW_POSITION` baja lo suficiente para dejar hueco real SIEMPRE, no solo en el caso
+// feliz de 0 dados EXTRA.
+// FIX URGENTE P0 (docs/specs/H4_fix_urgente_lider_fuera_viewport.md) — recalculado en cascada tras
+// bajar `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR` de 5 a 2: 1824 → 1614.
+export const HAND_ROW_POSITION = { x: 540, y: NUCLEO_CONTENT_BOTTOM_Y + CONTENT_GAP_PX + CARD_TILE_HALF_PX }; // 1512+12+90 = 1614
 
-// H4 spec §2.1 — derivado del borde inferior real de Mano (antes literal 1676, luego 1676 tras H4).
-// Al mover `HAND_ROW_POSITION` al peor caso de apilado (arriba), `LEADER_POSITION` cascada con él
-// (misma cadena de derivación H4, sin cambios de fórmula) hasta 2026.
+// H4 spec §2.1 — derivado del borde inferior real de Mano. `LEADER_POSITION` cascada con
+// `HAND_ROW_POSITION` (misma fórmula de derivación H4, sin cambios de estructura).
 //
-// ⚠️ HALLAZGO A ESCALAR A ARCHITECT (no resuelto en este fix, fuera del alcance de un bounding-box de
-// Núcleos-vs-Mano): con el PEOR CASO teórico (los 5 dados EXTRA que caben en mesa, todos del mismo
-// color, apilados en una sola columna — matemáticamente posible según `DEFAULT_NUCLEO_TABLE_MAX_DICE`/
-// `FIXED_NUCLEO_DICE_COUNT`, sin tope por color en el dominio), `LEADER_CONTENT.bottom` (ver más abajo)
-// llega a 2218px — 298px por ENCIMA del viewport virtual de 1920px (`COMBAT_SCENE_VIEWPORT`,
-// `CombatScene.ts`), que el propio H4 spec §2.1 exigía respetar ("cabe con 36px de margen"). La cadena
-// de derivación de H4 (Líder deriva de Mano, que deriva de Núcleos) es correcta y evita CUALQUIER
-// solape entre filas consecutivas incluso en el peor caso — pero no puede, a la vez, garantizar que
-// todo quepa dentro de los 1920px si el peor caso de apilado de Núcleos EXTRA (350px) es mayor que el
-// margen disponible (52px) antes de este fix. Este Programmer NO decide cómo resolver esa tensión
-// (opciones posibles: tope por color en el dominio, desacoplar el ancla de Líder de la posición de
-// Mano, o limitar visualmente cuántos EXTRA se apilan antes de reordenar en otra columna/fila) — es una
-// decisión de diseño/arquitectura, no de este bugfix puntual (que solo cubre "Núcleos nunca solapa
-// Mano"). Verificado en Playwright con 1 dado EXTRA (caso real reportado, no el peor caso teórico): sin
-// overlap, ver resumen de esta sesión.
+// FIX URGENTE P0 (docs/specs/H4_fix_urgente_lider_fuera_viewport.md) — el ⚠️ HALLAZGO escalado a
+// Architect en la ronda anterior (peor caso teórico de 5 dados EXTRA empujando `LEADER_CONTENT.bottom`
+// a 2218px, 298px por ENCIMA de `COMBAT_SCENE_VIEWPORT.height` = 1920, dejando al Líder SIEMPRE fuera
+// del viewport) queda resuelto por la variante de la opción 4 elegida por Architect: bajar el tope
+// reservado (`NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR` 5→2, arriba) + crecer el viewport lo justo
+// (`COMBAT_SCENE_VIEWPORT.height` 1920→2060, `CombatScene.ts`). Con esos dos cambios,
+// `LEADER_CONTENT.bottom` en el peor caso reservado (N=2) queda en 2008px, 52px por debajo de 2060 —
+// y con 0 dados EXTRA reales (caso de hoy), 192px de margen. Deuda técnica documentada (§4 de la
+// spec): si en el futuro un card permite apilar más de 2 dados EXTRA del mismo color, este análisis
+// debe repetirse (o migrar a reserva 100% dinámica).
 export const LEADER_POSITION = {
   x: 540,
-  y: HAND_ROW_POSITION.y + CARD_TILE_HALF_PX + CONTENT_GAP_PX + ROLE_TILE_HALF_PX, // (1824+90)+12+100 = 2026
+  y: HAND_ROW_POSITION.y + CARD_TILE_HALF_PX + CONTENT_GAP_PX + ROLE_TILE_HALF_PX, // (1614+90)+12+100 = 1816
 };
 
 // H2.10 spec §2.3 — fila de iconos de CD de habilidad, debajo del tile de rol y su HUD de texto.
-export const LEADER_ABILITIES_ROW_Y = LEADER_POSITION.y + 180; // 2026+180 = 2206
+export const LEADER_ABILITIES_ROW_Y = LEADER_POSITION.y + 180; // 1816+180 = 1996
 
 export const TILE_SEPARATION_PX = 140;
 // NUEVO H4.x — exportadas (antes privadas a minions-view.ts/allies-view.ts, eliminados ese mismo

@@ -10,9 +10,10 @@ export default defineConfig({
   timeout: 30_000,
   use: {
     baseURL: 'http://localhost:5174',
-    // Viewport 1080×1920 — mismo tamaño que `Phaser.Game` (`e2e/juice-smoke-main.ts`), para que el
-    // placeholder de dado (posicionado en el centro del layout virtual, `placeholder.ts` §2) quede
-    // dentro del área visible del screenshot.
+    // Viewport 1080×1920 — mismo tamaño que `Phaser.Game` (`e2e/juice-smoke-main.ts`, harness
+    // standalone independiente de `CombatScene`/`COMBAT_SCENE_VIEWPORT`), para que el placeholder de
+    // dado (posicionado en el centro del layout virtual, `placeholder.ts` §2) quede dentro del área
+    // visible del screenshot.
     viewport: { width: 1080, height: 1920 },
     // NOTA de entorno (no forma parte de la spec): este sandbox de desarrollo bloquea la descarga
     // de nuevos binarios de Chromium desde cdn.playwright.dev (política de red del entorno) — se

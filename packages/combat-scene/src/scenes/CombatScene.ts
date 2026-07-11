@@ -6,6 +6,18 @@ import { createInputAdapter, type InputAdapter } from '../input';
 import { createBoardView, createTargetingHighlightView, createDieRejectionView, type BoardViewContext } from '../view';
 import { createGestureCommandTranslator, type TargetingSignal } from '../interaction';
 import { createWebAudioSoundManager } from '../audio';
+import { COMBAT_SCENE_VIEWPORT } from '../view/board-layout';
+
+// FIX URGENTE P0 (docs/specs/H4_fix_urgente_lider_fuera_viewport.md §5) — `COMBAT_SCENE_VIEWPORT`
+// vive ahora en `board-layout.ts` (ver definición allí) y se reexporta aquí para no romper el import
+// existente (`import { COMBAT_SCENE_VIEWPORT } from './scenes/CombatScene'`, `main.ts`) ni la
+// superficie pública de `@collector/combat-scene` (`index.ts`). Motivo del movimiento: este archivo
+// importa `phaser` en runtime (no solo tipos), cuyo módulo ejecuta detección real de
+// `Device`/`Canvas` al cargarse — `board-layout.test.ts` necesita verificar
+// `LEADER_ABILITIES_ROW_Y` contra `COMBAT_SCENE_VIEWPORT.height` (H4 spec §5) sin arrastrar ese
+// import pesado de Phaser (que crashea bajo el entorno `jsdom`/`node` de Vitest sin un `<canvas>`
+// real, ver comentario en `board-layout.test.ts`).
+export { COMBAT_SCENE_VIEWPORT };
 
 /** H4 spec §5.3/§6.1 — superficie REDUCIDA de `GestureCommandTranslator` expuesta a `apps/shell`
  *  (React): solo los 3 métodos que `CardTile`/`AbilityTile`/`TargetingPromptBanner` necesitan
@@ -20,11 +32,6 @@ export interface GestureCommandTranslatorHandle {
   handleMinionTap(minionInstanceId: string): void;
   cancelPending(): void;
 }
-
-/** Viewport virtual de diseño — mobile-first, ver docs/architecture_stack.md §4.2. Misma resolución que
- *  `main.ts` (H2.1) ya usaba para el propio `Phaser.Game`; ahora también gobierna el `Scale Manager`
- *  (configurado a nivel de `Phaser.Game`, no de esta escena — ver `main.ts`, spec H2.6 §4). */
-export const COMBAT_SCENE_VIEWPORT = { width: 1080, height: 1920 } as const;
 
 /** Data que `CombatScene` espera recibir vía `scene.init(data)` (docs/architecture_stack.md §2.3: "el
  *  CombatEngine se crea en React/factory y se inyecta a Phaser vía scene.init(data)"). `CombatScene` NUNCA

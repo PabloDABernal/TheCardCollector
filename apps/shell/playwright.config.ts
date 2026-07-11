@@ -11,10 +11,11 @@ export default defineConfig({
   timeout: 30_000,
   use: {
     baseURL: 'http://localhost:5173',
-    // Viewport 1080×1920 — mismo tamaño que `COMBAT_SCENE_VIEWPORT` (`combat-scene`), para que las
-    // coordenadas de tiles de mano/Núcleo (calculadas en el mismo espacio virtual) queden dentro del
-    // área visible del screenshot.
-    viewport: { width: 1080, height: 1920 },
+    // Viewport 1080×2060 — mismo tamaño que `COMBAT_SCENE_VIEWPORT` (`combat-scene`, subido de 1920 a
+    // 2060 por el FIX URGENTE P0 `docs/specs/H4_fix_urgente_lider_fuera_viewport.md`), para que las
+    // coordenadas de tiles de mano/Núcleo/Líder (calculadas en el mismo espacio virtual) queden dentro
+    // del área visible del screenshot.
+    viewport: { width: 1080, height: 2060 },
     // NOTA de entorno (no forma parte de la spec, mismo criterio que
     // `packages/combat-scene/playwright.config.ts`): este sandbox de desarrollo bloquea la descarga
     // de nuevos binarios de Chromium desde cdn.playwright.dev — se apunta al Chromium ya

@@ -2,6 +2,15 @@ import { test, expect } from '@playwright/test';
 import { buildCombatSetup } from '../src/combat/build-combat-setup';
 import { DEFAULT_LEADER_OPTION } from '../src/combat/leader-options';
 
+// FIX URGENTE P0 (docs/specs/H4_fix_urgente_lider_fuera_viewport.md) — literal duplicado a propósito
+// (NO importado de `@collector/combat-scene`): ese paquete reexporta `CombatScene.ts`, que importa
+// `phaser` en runtime — `phaser` asume un entorno de navegador real (`window`/`document`) y crashea
+// al cargarse en el proceso Node del test-runner de Playwright (a diferencia del código que corre
+// DENTRO de `page.evaluate`/el navegador real). `COMBAT_SCENE_VIEWPORT.height` subió de 1920 a 2060
+// — mantener este literal en sync si ese valor vuelve a cambiar (mismo criterio que
+// `HAND_ROW_X`/`TILE_SEPARATION_PX` de abajo, ya duplicados por el mismo motivo).
+const COMBAT_SCENE_VIEWPORT = { width: 1080, height: 2060 } as const;
+
 const HAND_ROW_X = 540; // `HAND_ROW_POSITION.x` (`board-layout.ts`)
 const TILE_SEPARATION_PX = 140;
 // `HAND_ROW_POSITION.y` real es 1600, pero tocar ese centro exacto es ambiguo para las cartas
@@ -120,12 +129,12 @@ test('CombatScreen monta Phaser real dentro de #phaser-mount y un tap real sobre
   expect(box).not.toBeNull();
   if (!box) return;
 
-  // Scale Manager FIT preserva el aspect ratio 1080/1920 del viewport virtual.
-  expect(box.width / box.height).toBeCloseTo(1080 / 1920, 1);
+  // Scale Manager FIT preserva el aspect ratio de COMBAT_SCENE_VIEWPORT.
+  expect(box.width / box.height).toBeCloseTo(COMBAT_SCENE_VIEWPORT.width / COMBAT_SCENE_VIEWPORT.height, 1);
 
   // FIX_combat_viewport_and_layout.md §3.1 punto 2 — la aserción de aspect ratio de arriba, por sí
-  // sola, NO detecta el Bug 1 (un canvas a tamaño nativo 1080×1920 sin escalar también cumple esa
-  // proporción). Confirmar que el canvas realmente encogió para caber en la ventana:
+  // sola, NO detecta el Bug 1 (un canvas a tamaño nativo COMBAT_SCENE_VIEWPORT sin escalar también
+  // cumple esa proporción). Confirmar que el canvas realmente encogió para caber en la ventana:
   const viewportSize = page.viewportSize();
   expect(viewportSize).not.toBeNull();
   if (viewportSize) {
@@ -138,8 +147,8 @@ test('CombatScreen monta Phaser real dentro de #phaser-mount y un tap real sobre
   const clientHeight = await page.evaluate(() => document.documentElement.clientHeight);
   expect(scrollHeight).toBeLessThanOrEqual(clientHeight + 2);
 
-  const scaleX = box.width / 1080;
-  const scaleY = box.height / 1920;
+  const scaleX = box.width / COMBAT_SCENE_VIEWPORT.width;
+  const scaleY = box.height / COMBAT_SCENE_VIEWPORT.height;
   const toPagePoint = (virtualX: number, virtualY: number) => ({
     x: box.x + virtualX * scaleX,
     y: box.y + virtualY * scaleY,
@@ -218,7 +227,7 @@ test('CombatScreen encaja sin scroll de página en un viewport ancho de escritor
   expect(box).not.toBeNull();
   if (!box) return;
 
-  expect(box.width / box.height).toBeCloseTo(1080 / 1920, 1);
+  expect(box.width / box.height).toBeCloseTo(COMBAT_SCENE_VIEWPORT.width / COMBAT_SCENE_VIEWPORT.height, 1);
 
   const viewportSize = page.viewportSize();
   expect(viewportSize).not.toBeNull();
@@ -231,3 +240,144 @@ test('CombatScreen encaja sin scroll de página en un viewport ancho de escritor
   const clientHeight = await page.evaluate(() => document.documentElement.clientHeight);
   expect(scrollHeight).toBeLessThanOrEqual(clientHeight + 2);
 });
+
+/**
+ * FIX URGENTE P0 (docs/specs/H4_fix_urgente_lider_fuera_viewport.md §5) — regresión: el Líder (tile,
+ * HP, sus 4 habilidades) se renderizaba SIEMPRE fuera del viewport (`LEADER_POSITION`/
+ * `LEADER_ABILITIES_ROW_Y` cascadeaban por encima de `COMBAT_SCENE_VIEWPORT.height`), haciéndolo
+ * intocable — bloqueaba todo combate. Ningún test anterior lo detectó porque solo comparaban
+ * constantes de `board-layout.ts` entre sí (consistencia interna), nunca contra coordenadas DOM
+ * reales medidas en pantalla, que es justo el método que QA usó para encontrar el bug. Reproduce ese
+ * método: mide `boundingClientRect()` real del panel del Líder (`CharacterPanel`, H4.x,
+ * `CombatBoardOverlay.tsx` — ya NO Phaser/`role-view.ts`) y confirma que cae DENTRO de
+ * `[0, window.innerHeight]`, luego dispara un CLIC REAL (no `force`) sobre ese panel y sobre uno de
+ * sus 4 iconos de habilidad, confirmando que el gesto se registra. Corre en AMBOS tamaños de ventana
+ * que QA usó para detectar la regresión.
+ */
+for (const viewportSize of [
+  { width: 1400, height: 900 },
+  { width: 390, height: 844 },
+] as const) {
+  test(`el Líder (panel + habilidad) es visible y clickeable de verdad en viewport ${viewportSize.width}x${viewportSize.height}`, async ({
+    page,
+  }) => {
+    const pageErrors: Error[] = [];
+    page.on('pageerror', (error) => pageErrors.push(error));
+
+    await page.setViewportSize(viewportSize);
+
+    // Réplica en Node del mismo build determinista de producción (ver docstring del primer test de
+    // este archivo) — nos da el `abilityId` real de la primera habilidad del Líder, sin asumir
+    // ningún catálogo fijo.
+    const { boardContext } = await buildCombatSetup({ leaderId: DEFAULT_LEADER_OPTION.leaderId });
+    const firstLeaderAbilityId = boardContext.leaderAbilities[0]?.abilityId;
+    expect(firstLeaderAbilityId, 'se esperaba al menos 1 habilidad de Líder en el contenido real').toBeDefined();
+
+    await page.goto('/combat');
+
+    const mountedCanvas = page.locator('#phaser-mount canvas');
+    await expect(mountedCanvas).toBeVisible();
+    await page.waitForTimeout(200); // margen para que CombatScene.create() pinte el estado inicial
+
+    // `TurnStartModal` (H4 spec §1, `role="dialog"`) es obligatorio al empezar el turno del Líder —
+    // intercepta CUALQUIER clic real sobre el tablero de abajo hasta que se descarta (spec §1.4: "que
+    // no se te olvide" es deliberado). Se cierra con "Ahora no" (mismo botón real que un jugador
+    // usaría) antes de interactuar con el panel del Líder — necesario para que el clic real de este
+    // test no falle por un elemento distinto (y correcto) tapando el objetivo.
+    const dismissTurnStartModal = page.getByText('Ahora no', { exact: true });
+    if (await dismissTurnStartModal.isVisible().catch(() => false)) {
+      await dismissTurnStartModal.click();
+    }
+
+    // HALLAZGO independiente de este fix (a escalar aparte, fuera del alcance P0 de
+    // `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR`/`COMBAT_SCENE_VIEWPORT.height`, confirmado
+    // reproducible IGUAL en el código previo a este fix — 1920/N=5 — así que no es una regresión de
+    // `H4_fix_urgente_lider_fuera_viewport.md`): `Phaser.Scale.FIT` calcula el tamaño/posición
+    // inicial del `<canvas>` contra `window` en el instante en que `new Phaser.Game(...)` se
+    // construye, ANTES de que el resto del layout de React (`CombatHud`, etc.) empuje
+    // `#phaser-mount` a su posición/tamaño final. Sin un evento `resize` real posterior, el canvas
+    // queda desalineado con su propio contenedor Y (bug relacionado en
+    // `use-phaser-viewport-transform.ts`) la capa HTML superpuesta (`CombatBoardOverlay`, donde vive
+    // el panel del Líder) queda con un `transform` CSS obsoleto de forma PERMANENTE, porque su
+    // `ResizeObserver` solo observa el contenedor `#phaser-mount` (que no cambia de tamaño) y nunca
+    // el `<canvas>` en sí (que sí cambia, por la causa de arriba) — confirmado que NO se autocorrige
+    // ni esperando 10s. Disparar un evento `resize` real (no solo esperar) fuerza el recompute de
+    // ambos (`Scale Manager` interno de Phaser + el listener `window.addEventListener('resize', ...)`
+    // de `usePhaserViewportTransform`) — se usa aquí solo como estabilización de la MEDICIÓN de este
+    // test, no como fix de producción (fuera de alcance de este bugfix P0).
+    await page.setViewportSize({ width: viewportSize.width + 1, height: viewportSize.height });
+    await page.setViewportSize(viewportSize);
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(() => {
+            const mount = document.querySelector('#phaser-mount');
+            const canvas = mount?.querySelector('canvas');
+            if (!mount || !canvas) return false;
+            const mountRect = mount.getBoundingClientRect();
+            const canvasRect = canvas.getBoundingClientRect();
+            return canvasRect.top >= mountRect.top - 1 && canvasRect.bottom <= mountRect.bottom + 1;
+          }),
+        { timeout: 15_000, message: 'el <canvas> de Phaser nunca terminó de alinearse con su contenedor #phaser-mount' },
+      )
+      .toBe(true);
+
+    // Panel del Líder: `CharacterPanel` (H4.x) renderiza `label` ("Líder") + `name` (leaderName real)
+    // dentro de un `<span>` — localizamos por el label estable (no el nombre, que depende del
+    // fixture) y subimos al contenedor `CharacterPanel` real (2 niveles: span -> RoleBlock div ->
+    // CharacterPanel div, ver `CombatBoardOverlay.tsx`). `PANEL_ZONES` también pinta una etiqueta de
+    // zona con el mismo texto exacto "Líder" (`CombatBoardOverlay.tsx`, lista de `<span>` de zona,
+    // ANTES en el DOM que los `CharacterPanel`) — `.last()` resuelve al `<span>` de `RoleBlock`
+    // dentro de `CharacterPanel`, el único de los dos con un panel clickeable como ancestro real.
+    const leaderLabel = page.getByText('Líder', { exact: true }).last();
+    await expect(leaderLabel).toBeVisible();
+    const leaderPanel = leaderLabel.locator('xpath=ancestor::div[2]');
+    await expect(leaderPanel).toBeVisible();
+
+    const panelBox = await leaderPanel.boundingBox();
+    expect(panelBox, 'el panel del Líder debe tener un bounding box real medible').not.toBeNull();
+    if (!panelBox) return;
+
+    // MEDICIÓN REAL (no tautológica, reproduce el método de QA) — el panel completo del Líder debe
+    // caer DENTRO del área visible real de la ventana, no solo "dentro del viewport virtual de
+    // Phaser" (que las aserciones algebraicas de `board-layout.test.ts` ya garantizan).
+    expect(panelBox.y, `panel del Líder empieza en y=${panelBox.y}, por ENCIMA del área visible`).toBeGreaterThanOrEqual(0);
+    expect(
+      panelBox.y + panelBox.height,
+      `panel del Líder termina en y=${panelBox.y + panelBox.height}, por DEBAJO de window.innerHeight (${viewportSize.height})`,
+    ).toBeLessThanOrEqual(viewportSize.height);
+
+    // NOTA: el mismo `abilityId` puede aparecer 2 veces en el DOM — una vez en `AbilityRow`
+    // (interactivo, `pointer-events: auto`) y, si la ficha ampliada del Líder está abierta, otra vez
+    // DENTRO de `CharacterSheetPreview` (solo lectura, `pointer-events: none`, ver `AbilityTile.tsx`).
+    // `AbilityRow` del Líder se pinta ANTES que el modal de ficha (último nodo del árbol,
+    // `CombatBoardOverlay.tsx`), así que `.first()` resuelve siempre al tile real interactivo.
+    const abilityTile = page.locator(`[data-ability-id="${firstLeaderAbilityId}"]`).first();
+    await expect(abilityTile).toBeVisible();
+    const abilityBox = await abilityTile.boundingBox();
+    expect(abilityBox, 'el tile de habilidad del Líder debe tener un bounding box real medible').not.toBeNull();
+    if (!abilityBox) return;
+
+    expect(abilityBox.y, `icono de habilidad del Líder empieza en y=${abilityBox.y}, por ENCIMA del área visible`).toBeGreaterThanOrEqual(0);
+    expect(
+      abilityBox.y + abilityBox.height,
+      `icono de habilidad del Líder termina en y=${abilityBox.y + abilityBox.height}, por DEBAJO de window.innerHeight (${viewportSize.height})`,
+    ).toBeLessThanOrEqual(viewportSize.height);
+
+    // CLIC REAL (no `force: true`) — Playwright falla si el elemento objetivo no es realmente
+    // "actionable" (visible, dentro del viewport, no tapado por otro elemento) en la posición real
+    // del clic, exactamente la condición que QA reportó rota antes de este fix.
+    const leaderNameBefore = await page.getByText(DEFAULT_LEADER_OPTION.label, { exact: true }).count();
+    await leaderPanel.click();
+    // `CharacterPanel` abre la ficha ampliada (`CharacterSheetPreview`) en `onMouseEnter` — Playwright
+    // mueve el puntero real al centro del elemento antes de hacer click, disparando ese hover.
+    await expect
+      .poll(async () => page.getByText(DEFAULT_LEADER_OPTION.label, { exact: true }).count())
+      .toBeGreaterThan(leaderNameBefore);
+
+    await abilityTile.click();
+    await page.waitForTimeout(200);
+
+    expect(pageErrors).toEqual([]);
+  });
+}
