@@ -815,4 +815,137 @@ Overhaul visual de la pantalla de combate y pantalla de inicio de run para mejor
 
 ---
 
+### E5: Rediseño de experiencia de combate — mesa de dados central, revelación progresiva, jerarquía de peso
+
+**Objetivo:** transformar la percepción del flujo de combate resolviendo la carga cognitiva y el contraste de importancia entre acciones. El feedback del Director Creativo tras jugar H4 ("sigue sin parecer un prototipo, necesito más chicha" / "cambio profundo") indicó que falta arquitectura de información, no "juice" cosmético — la información se presenta toda de golpe sin ayuda de revelación progresiva, y todas las acciones se sienten con peso igual. Esta épica implementa tres cambios combinados basados en la visión consolidada de vision.md (sección "Experiencia objetivo del combate rediseñado (2026-07-12)"): (1) la mesa de 5 dados de Núcleo pasa a ser el centro visual y cognitivo permanente de la pantalla; (2) el turno se presenta una pregunta a la vez (primero "¿qué quieres hacer?", luego detalles), (3) jerarquía deliberada entre momentos "grandes" (foco total de pantalla) y "rutinarios" (rápidos, sin ceremonia).
+
+**Alcance:**
+- `packages/combat-scene/view`: refactorizar layout colocando mesa de dados en centro permanente, rediseñar panel de decisión de turno para revelación progresiva.
+- `packages/combat-scene/input`: actualizar flujo de selección para modo "preguntas secuenciales" en vez de menú plano.
+- `packages/combat-scene/juice`: nuevas recetas para "foco total" (fadeout/blur del resto del tablero, zoom en acción importante), "rápido sin ceremonia" (resolución instant sin animación, o animación <200ms).
+- `apps/shell/screens`: refactorizar `<CombatScreen>` para soportar el nuevo modelo de revelación.
+- Motor de reglas (`packages/domain/combat`): **SIN CAMBIOS** — todas las reglas permanecen exactamente como en H1+H2+H3.
+- Contenido de juguete: **SIN CAMBIOS** — 2 Líderes, 2 Enemigos, 2 Escenarios permanecen iguales.
+
+**Criterio de éxito:**
+- Mesa de dados siempre visible y en foco central; toda interacción se lee como ocurriendo en esa mesa (ej. "gasto este dado Rojo para la habilidad").
+- Turno del Líder presenta opciones progresivamente: primero categoría ("¿Jugar Carta / Activar Habilidad / Generar Energía?"), confirmado esto, se pide el detalle ("¿Cuál carta?" o "¿Cuál habilidad?" o "¿Dónde dirigir daño?").
+- Momentos "grandes" (activar habilidad, cambio de fase, muerte de Secuaz, Trama cruza umbral) reciben foco total: el resto del tablero se desenfoca/oscurece, la acción importante ocupa el centro de la pantalla, animación y sonido dedicados.
+- Momentos "rutinarios" (generar energía, robar carta) se resuelven en <500ms sin transición de cámara, sin oscurecer el resto.
+- Usuario juega una partida completa y la experiencia se siente como "información clara, ritmo controlado, decisiones pesadas en momentos que importan".
+
+**Historias de E5:** E5.1-E5.6 (ver abajo).
+
+---
+
+### H5.1: Refactorización del layout — mesa de dados en centro permanente
+
+**Descripción:** rediseñar `CombatScene.view` para que la mesa de 5 dados de Núcleo se coloque **físicamente en el centro de la pantalla, siempre visible, nunca oculta por otros elementos**. El resto de la UI (mano, Líder, Enemigo, Escenario, Aliados/Secuaces, HUD) se organiza alrededor de este centro como referencias orbitales — igual a la referencia física de una mesa de juego (forcetable.net, strawtable.net). Los dados no son "un panel más" sino **el corazón visual del tablero**.
+
+**Criterio de aceptación:**
+- `CombatScene` compone su layout con mesa de dados en centro (viewport 40-50% altura, 60-80% ancho, posición central invariable).
+- Mano del jugador: panel inferior, separado por espacio/borde visual del centro.
+- Líder (vida, Energía, habilidades): panel arriba-izquierda o arriba centrado.
+- Enemigo (vida, habilidades): panel arriba-derecha o arriba contrario al Líder.
+- Escenario (Trama, identidad): panel derecha o arriba contrario.
+- Aliados/Secuaces: zones izquierda/derecha o inferior, sin solapar la mesa.
+- HUD de turno/info: position fixed (esquina o barra), overlay semi-transparente.
+- Tests visuales: levantar combate, verificar que dados están centrados, no ocludos, accesibles (no bloqueados por otros elementos).
+- Responsive: en móvil (viewport estrecho), layout se comprime pero dados siempre en centro sin scrolling horizontal.
+
+**Referencia:** vision.md "La mesa de dados es el centro visual permanente", decisions.md 2026-07-08 "estructura de Núcleos", H4.2 (paneles y delimitación — esta es la evolución).
+
+---
+
+### H5.2: Sistema de revelación progresiva de decisiones de turno — arquitectura de "preguntas secuenciales"
+
+**Descripción:** refactorizar el flujo de input/decisión para que en vez de presentar un menú plano con todas las opciones y sub-opciones de una vez, el turno se despliega como una serie de preguntas: (1) "¿Qué categoría de acción?" (Jugar Carta / Activar Habilidad / Generar Energía), (2) tras responder, se pide el detalle relevante ("¿Cuál carta?", "¿Cuál habilidad?", "¿Dónde dirigir daño si hay Secuaces?"), (3) confirmación y ejecución. Implementar una máquina de estados en `InputAdapter` o un nuevo componente `TurnDecisionFlow` que gestione esta secuencia y emita intents solo cuando hay suficiente información para ejecutar.
+
+**Criterio de aceptación:**
+- Máquina de estados o componente `TurnDecisionFlow` que modela fases: `SELECT_CATEGORY` → `SELECT_DETAIL` → `SELECT_TARGET` (si aplica) → `CONFIRM_ACTION`.
+- En fase `SELECT_CATEGORY`, UI muestra solo 3-4 opciones (Jugar, Activar, Generar, Pasar), cada una **sin sub-opciones expandidas**.
+- Al elegir categoría (ej. "Activar Habilidad"), transición a fase `SELECT_DETAIL` que muestra solo habilidades válidas (CD=0, Núcleo disponible).
+- Al elegir la habilidad, si hay Secuaces en mesa, transición a `SELECT_TARGET`; sino, salta a `CONFIRM_ACTION`.
+- Cada fase tiene su propia UI (puede ser modal, overlay, o sección del HUD que cambia dinámicamente).
+- Intents emitidos: `SELECT_ACTION_CATEGORY`, `SELECT_ACTION_DETAIL`, `SELECT_ACTION_TARGET`, `CONFIRM_ACTION_EXECUTION`.
+- `CombatBridge` recibe el intent final `CONFIRM_ACTION_EXECUTION` que contiene toda la información recolectada (categoría, detalle, target) y despacha el comando al engine de una sola vez.
+- Tests: simular flujo completo (categoría → detalle → target → confirm), verificar que intents se emiten en orden correcto y sin información incompleta.
+
+**Referencia:** vision.md "El turno se responde una pregunta a la vez", H2.7 (InputAdapter base), H3.8 (targeting visual — aquí es la integración en el flujo progresivo).
+
+---
+
+### H5.3: Jerarquía visual de momentos "grandes" vs. "rutinarios" — sistema de foco/blur
+
+**Descripción:** implementar en `EffectsDirector` y `JuiceConfig` un mecanismo de "foco total" que detecta qué tipo de evento está ocurriendo (grande o rutinario, según definición en vision.md) y aplica recetas visuales correspondientes: (1) **momentos grandes** (activar habilidad, cambio de fase, muerte de Secuaz, Trama cruza umbral): fade/blur el resto del tablero a ~30% opacity, zoom/pan la cámara al objeto relevante (dado gastado, Secuaz muriendo, etc.), reproducir sonido dedicado, esperar ~500-1000ms antes de permitir siguiente acción. (2) **momentos rutinarios** (generar energía, robar carta): no fade, no zoom, animación instante o <200ms, no bloquear, seguir automáticamente. Crear valores booleanos en `JuiceStep` que marquen si una acción es "big moment" o no.
+
+**Criterio de aceptación:**
+- `JuiceStep` interfaz extendida con campo `isBigMoment?: boolean`.
+- Función `applyFocusEffect(scene, isBigMoment)` que maneja fade/blur y zoom/pan según valor.
+- Para momentos grandes: fade overlay oscuro sobre tablero (duration ~300ms), zoom suave en objeto relevante.
+- Para momentos rutinarios: sin overlay, sin zoom, solo animación del objeto (ej. número flotante de energía).
+- `EffectsDirector` lee `isBigMoment` de cada paso de receta y aplica efecto antes/después de ejecutar las animaciones.
+- Eventos mapeados como "big": `ABILITY_ACTIVATED`, `PHASE_CHANGED`, `MINION_DIED`, `PLOT_THRESHOLD_CROSSED`.
+- Eventos rutinarios: `ENERGY_GENERATED`, `CARD_DRAWN`.
+- Tests: disparar eventos big y verificar que fade/zoom se aplican; rutinarios no reciben fade.
+- Sonido: recetas big disparan sonidos dedicados (ej. "whoosh" para zoom), rutinarias usan sonidos cortos/sutiles (<100ms).
+
+**Referencia:** vision.md "No todo pesa igual", H2.4-H2.5 (EffectsDirector y recetas), H2.13 (sonido).
+
+---
+
+### H5.4: Implementación de recetas de juice para "foco total" — zoom, blur, transición visual
+
+**Descripción:** crear nuevas recetas en `packages/combat-scene/juice/recipes/` que manejen los efectos visuales de "foco total" para momentos grandes: (1) `focusZoom` (tween de zoom de cámara hacia objeto, duration ~300ms), (2) `focusBlur` (crear overlay translúcido oscuro sobre tablero, duration ~300ms fade-in), (3) `unfocusReset` (zoom y blur regresan a estado normal, duration ~200ms), (4) `focusWhiteLens` (flash blanco instantáneo o fade blanco rápido, usado para "impacto" visual de habilidad/daño importante). Cada receta retorna Promise que resuelve cuando termina.
+
+**Criterio de aceptación:**
+- `focusZoom(scene, targetObject, zoomLevel=1.3, duration=300)`: anima `camera.zoom` de 1 a zoomLevel hacia centerObject.
+- `focusBlur(scene, duration=300)`: crea un `Graphics` overlay translúcido (~rgba(0,0,0,0.5)) que fade-in durante duration y queda en pantalla.
+- `unfocusReset(scene, duration=200)`: remueve blur overlay y zoom camera vuelve a 1, ambos animados.
+- `focusWhiteLens(scene, duration=100)`: flash blanco en pantalla (overlay blanco que fade-out rápido).
+- Todas retornan `Promise<void>`.
+- `JuiceConfig` integra estas recetas para eventos grandes (ej. `ABILITY_ACTIVATED` → `[focusZoom(dieObject), focusWhiteLens]`, `PHASE_CHANGED` → `[focusBlur, focusZoom, esperar 500ms, unfocusReset]`).
+- Tests: ejecutar receta de zoom, verificar que camera.zoom cambió; ejecutar blur, verificar que overlay existe; reset restaura estado.
+
+**Referencia:** vision.md "momentos grandes reciben foco total", H2.4-H2.5 (EffectsDirector), Phaser Camera y Graphics API.
+
+---
+
+### H5.5: Cableado del flujo de revelación progresiva en pantalla de combate — React + InputAdapter + TurnDecisionFlow
+
+**Descripción:** integrar el nuevo flujo `TurnDecisionFlow` (H5.2) en `apps/shell/screens/CombatScreen.tsx` y `InputAdapter` (Phaser). La pantalla ahora renderiza una sección de "decisión de turno" que cambia dinámicamente según la fase (`SELECT_CATEGORY` muestra 3-4 botones simples, `SELECT_DETAIL` muestra cartas/habilidades disponibles, etc.). El `InputAdapter` emite intents según lo que el jugador interactúa, `TurnDecisionFlow` acumula información y emite el intent final `CONFIRM_ACTION_EXECUTION`, `CombatBridge` despacha al engine. La máquina de estados es visible (ej. texto "Paso 1/3: ¿Qué quieres hacer?" que cambia a "Paso 2/3: Selecciona la habilidad").
+
+**Criterio de aceptación:**
+- `<CombatScreen>` renderiza componente `<TurnDecisionFlow>` que recibe estado del engine y callbacks para intents.
+- `<TurnDecisionFlow>` interno gestiona máquina de estados (4-5 fases).
+- UI cambia por fase: CATEGORY muestra 3-4 botones grandes, DETAIL muestra grid de cartas/habilidades, TARGET muestra selector de objetivo.
+- Texto/indicador visible que muestra en qué fase está (ej. "Paso 1: ¿Qué acción?" con icono de "pregunta").
+- `InputAdapter` emite intents mapeados a cada interacción del usuario.
+- Al llegar a `CONFIRM_ACTION_EXECUTION`, `CombatBridge.dispatch()` se llama con comando completo (tipo, detalles, target).
+- Tests: simular flujo (seleccionar categoría → detalle → target → confirm), verificar que HUD se actualiza cada fase y comando se ejecuta al final.
+
+**Referencia:** H5.2 (arquitectura de revelación), H2.7 (InputAdapter), H2.3 (CombatBridge), H2.9 (flujo end-to-end).
+
+---
+
+### H5.6: Integración de foco/jerarquía en juego completo — eventos mapeados a recetas big/rutinarias
+
+**Descripción:** completar `JuiceConfig` mapeando todos los eventos de combate a recetas (h5.1-h5.4) con indicador de "big moment" o "rutinario". Asegurar que flujo end-to-end funciona: jugar un combate completo, ver que momentos grandes (activar habilidad importante, cambio de fase) reciben foco/zoom/blur, momentos rutinarios (generar energía) se resuelven en silencio. La revelación progresiva de turno (H5.5) se integra con el flujo de juego tal que el jugador ve la pregunta "¿qué quieres hacer?", responde, ve la acción ocurrir con peso visual apropiado, espera a que se resuelva, y se prepara para el siguiente turno.
+
+**Criterio de aceptacion:**
+- `JuiceConfig` en `packages/combat-scene/juice/config.ts` mapea eventos principales:
+  - `ABILITY_ACTIVATED`: `[focusZoom, focusWhiteLens]`, `isBigMoment: true`.
+  - `PHASE_CHANGED`: `[focusBlur, focusZoom, wait(500), unfocusReset]`, `isBigMoment: true`.
+  - `MINION_DIED`: `[focusZoom al Secuaz, fade rojo, disappearFade]`, `isBigMoment: true`.
+  - `PLOT_THRESHOLD_CROSSED`: `[screenShake, focusZoom a Escenario, pulseFx]`, `isBigMoment: true`.
+  - `ENERGY_GENERATED`: `[floatingNumber "+1", sin zoom]`, `isBigMoment: false`.
+  - `CARD_DRAWN`: `[cardFlip instantáneo, animación rápida]`, `isBigMoment: false`.
+  - `CORE_ROLLED`: `[diceRoll para cada core]`, `isBigMoment: false` (evento frecuente, no big).
+- Flow end-to-end validable: jugar combate, ver que habilidad importante se resuelve con zoom/blur, energía se genera sin ceremonia.
+- Tests de integración: reproducir escenario (activar habilidad → cambio de fase → muerte de Secuaz), verificar que HUD/visuales/sonido fluyen correctamente sin "saltos" de atención.
+
+**Referencia:** H5.3-H5.4 (sistema big/rutinario), H5.5 (revelación progresiva), H2.4-H2.5 (recetas), vision.md "Cómo se siente jugar un turno completo".
+
+---
+
 ## Bugs
