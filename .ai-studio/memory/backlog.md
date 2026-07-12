@@ -2,6 +2,16 @@
 
 ## Ideas
 
+Riesgos de diseño detectados en QA de E5 — candidatos para feedback del Director Creativo (no son bugs, sino decisiones a validar en playtest futuro):
+
+1. **Umbrales de Trama intermedios no expuestos en BoardViewContext** — El sistema de foco total solo reacciona al umbral final de Trama, no a escalones intermedios. Esto significa que cambios intermedios de Trama (ej. umbral +1 en medio del path) no reciben efecto visual de "foco", solo el cambio final. Requiere análisis: ¿necesitamos revelación visual/sonora para cada umbral intermedio, o el diseño deliberadamente concentra la tensión en el final?
+
+2. **Valores de diseño playtested pero no en pantallas muy anchas** — Ratios de mesa (posición, zoom), tamaños de tile compacto, y umbrales de vida están razonados en decisions.md pero solo validados visualmente en móvil/tablet (viewport 375-768px). Riesgo: en desktop muy ancho (1920px+), proporciones y legibilidad pueden degradarse (ej. dados muy pequeños si se mantiene zoom fijo, o muy grandes si se escalan). Requiere validación en desktop antes de release.
+
+3. **focusZoom sin verificación explícita en pantallas desktop muy anchas** — La receta focusZoom asume que zoom a 1.3 sobre objeto central será visible. En un desktop ultraancho, si la cámara ya está muy alejada, zoom+pan podrían resultar imperceptibles. Requiere test de focusZoom en diferentes viewports.
+
+4. **Posible conflicto visual del keyword `--foil` (borde permanente)** — El borde permanente del Núcleo ("foil" usado como "único acento de acción" en H4) se está usando como lenguaje visual para varios elementos en E5 (ej. Núcleos especiales, Aliados en foco). Riesgo: duplicar el mismo código visual (`--foil`) para semánticas distintas confunde al jugador. Requiere revisión: o reservar `--foil` estrictamente para Núcleos, o crear variantes de borde (ej. `--foil-active`, `--foil-selected`) que diferencien el contexto.
+
 ## Bugs
 
 ### B1: `card-mago-base-02` y `card-soldado-base-02` — ruleText menciona escala de dados sin Umbral/NEUTRO — ✅ RESUELTO (Programmer, H4.y)
@@ -836,6 +846,8 @@ Overhaul visual de la pantalla de combate y pantalla de inicio de run para mejor
 
 **Historias de E5:** E5.1-E5.6 (ver abajo).
 
+**Estado:** ✅ RESUELTO (6 historias implementadas, revisadas, con 772/772 tests en verde; mesa central + revelación progresiva + jerarquía de foco completamente integradas; 2 bugs encontrados y resueltos en review).
+
 ---
 
 ### H5.1: Refactorización del layout — mesa de dados en centro permanente
@@ -855,6 +867,8 @@ Overhaul visual de la pantalla de combate y pantalla de inicio de run para mejor
 
 **Referencia:** vision.md "La mesa de dados es el centro visual permanente", decisions.md 2026-07-08 "estructura de Núcleos", H4.2 (paneles y delimitación — esta es la evolución).
 
+**Estado:** ✅ RESUELTO
+
 ---
 
 ### H5.2: Sistema de revelación progresiva de decisiones de turno — arquitectura de "preguntas secuenciales"
@@ -872,6 +886,8 @@ Overhaul visual de la pantalla de combate y pantalla de inicio de run para mejor
 - Tests: simular flujo completo (categoría → detalle → target → confirm), verificar que intents se emiten en orden correcto y sin información incompleta.
 
 **Referencia:** vision.md "El turno se responde una pregunta a la vez", H2.7 (InputAdapter base), H3.8 (targeting visual — aquí es la integración en el flujo progresivo).
+
+**Estado:** ✅ RESUELTO
 
 ---
 
@@ -892,6 +908,8 @@ Overhaul visual de la pantalla de combate y pantalla de inicio de run para mejor
 
 **Referencia:** vision.md "No todo pesa igual", H2.4-H2.5 (EffectsDirector y recetas), H2.13 (sonido).
 
+**Estado:** ✅ RESUELTO
+
 ---
 
 ### H5.4: Implementación de recetas de juice para "foco total" — zoom, blur, transición visual
@@ -909,6 +927,8 @@ Overhaul visual de la pantalla de combate y pantalla de inicio de run para mejor
 
 **Referencia:** vision.md "momentos grandes reciben foco total", H2.4-H2.5 (EffectsDirector), Phaser Camera y Graphics API.
 
+**Estado:** ✅ RESUELTO
+
 ---
 
 ### H5.5: Cableado del flujo de revelación progresiva en pantalla de combate — React + InputAdapter + TurnDecisionFlow
@@ -925,6 +945,8 @@ Overhaul visual de la pantalla de combate y pantalla de inicio de run para mejor
 - Tests: simular flujo (seleccionar categoría → detalle → target → confirm), verificar que HUD se actualiza cada fase y comando se ejecuta al final.
 
 **Referencia:** H5.2 (arquitectura de revelación), H2.7 (InputAdapter), H2.3 (CombatBridge), H2.9 (flujo end-to-end).
+
+**Estado:** ✅ RESUELTO
 
 ---
 
@@ -945,6 +967,8 @@ Overhaul visual de la pantalla de combate y pantalla de inicio de run para mejor
 - Tests de integración: reproducir escenario (activar habilidad → cambio de fase → muerte de Secuaz), verificar que HUD/visuales/sonido fluyen correctamente sin "saltos" de atención.
 
 **Referencia:** H5.3-H5.4 (sistema big/rutinario), H5.5 (revelación progresiva), H2.4-H2.5 (recetas), vision.md "Cómo se siente jugar un turno completo".
+
+**Estado:** ✅ RESUELTO
 
 ---
 

@@ -91,7 +91,7 @@ Nunca tareas.
 
 ---
 
-### H5: Rediseño de experiencia de combate — mesa de dados central, revelación progresiva de decisiones, jerarquía de peso
+### H5: Rediseño de experiencia de combate — mesa de datos central, revelación progresiva de decisiones, jerarquía de peso
 
 **Objetivo:** transformar la percepción del flujo de combate resolviendo dos problemas detectados por el Director Creativo tras jugar H4: (1) carga cognitiva alta — el jugador debe leer y procesar toda la información disponible antes de decidir nada, (2) falta de contraste de peso — todas las acciones se sienten igual de importantes, cuando debería haber momentos que "respiran" y momentos que son nudos de tensión. Esta épica implementa la visión consolidada de vision.md "Experiencia objetivo del combate rediseñado (2026-07-12)" con tres cambios combinados: (1) la mesa de 5 dados de Núcleo es el centro visual permanente (no un panel más), (2) el turno se presenta una pregunta a la vez (revelación progresiva de información), (3) jerarquía deliberada entre momentos "grandes" (foco total de pantalla) y "rutinarios" (rápidos, sin ceremonia).
 
@@ -107,5 +107,7 @@ Nunca tareas.
 - Momentos grandes (activar habilidad, cambio de fase, muerte de Secuaz, Trama cruza umbral): fade/zoom, foco visual, sonido dedicado, ~500-1000ms de resolución.
 - Momentos rutinarios (generar energía, robar carta): sin fade, resolución <500ms, automático sin pausa.
 - Usuario juega un combate completo: percibe información clara, ritmo controlado, decisiones pesadas en momentos que importan.
+
+**Estado:** COMPLETADO (772/772 tests en verde; 6 historias H5.1-H5.6 implementadas, revisadas y testeadas; mesa de datos central + revelación progresiva + jerarquía de foco/peso completamente integrados; 2 bugs encontrados y resueltos en review).
 
 **Próximo hito:** H6 (meta-progresión, pantalla de descanso entre combates, evolución de cartas, Level-Up del Líder entre batallas).
