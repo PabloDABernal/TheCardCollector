@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 import type Phaser from 'phaser';
 import { createFocusController } from './focus-controller';
 import { createFakeJuiceScene } from './recipes/test-utils/fake-juice-scene';
-import { FOCUS_OVERLAY_ALPHA, FOCUS_TARGET_ELEVATED_DEPTH } from './focus-shared';
+import { FOCUS_OVERLAY_ALPHA, FOCUS_OVERLAY_DEPTH, FOCUS_TARGET_ELEVATED_DEPTH } from './focus-shared';
 
 describe('createFocusController (H5.4 §7)', () => {
   it('1. begin() en contador 0→1: crea el overlay UNA vez, anima alpha a FOCUS_OVERLAY_ALPHA, eleva el depth del objeto resuelto por focusId', async () => {
@@ -93,5 +93,45 @@ describe('createFocusController (H5.4 §7)', () => {
 
     await expect(controller.begin(scene, 'id-inexistente')).resolves.toBeUndefined();
     await expect(controller.begin(scene, undefined)).resolves.toBeUndefined();
+  });
+
+  it('6. sesión reentrante con 2 focos solapados (H5.6 §3.5): la 2ª begin() TAMBIÉN eleva su propio focusId por encima del overlay, y end() (2→1→0) restaura ambos depths originales', async () => {
+    const controller = createFocusController();
+    const fake = createFakeJuiceScene();
+    const scene = fake.scene as unknown as Phaser.Scene;
+    const rectangleFactory = scene.add as unknown as {
+      rectangle: (...a: unknown[]) => { setName: (n: string) => unknown; setDepth: (d: number) => unknown; depth: number };
+    };
+
+    const firstTarget = rectangleFactory.rectangle(0, 0, 10, 10, 0xffffff);
+    firstTarget.setName('ability-caster');
+    firstTarget.setDepth(10);
+
+    const secondTarget = rectangleFactory.rectangle(0, 0, 10, 10, 0xffffff);
+    secondTarget.setName('enemy-damaged');
+    secondTarget.setDepth(20);
+
+    // ABILITY_ACTIVATED entra en foco primero (transición 0→1).
+    await controller.begin(scene, 'ability-caster');
+    expect((firstTarget as { depth: number }).depth).toBeGreaterThan(FOCUS_OVERLAY_DEPTH);
+
+    // ENEMY_DAMAGED se solapa en el tiempo (transición 1→2) sin que el primero haya cerrado su foco.
+    await controller.begin(scene, 'enemy-damaged');
+
+    // Ambos deben seguir por encima del overlay simultáneamente — este es el bug real: antes del
+    // fix, solo `firstTarget` quedaba elevado y `secondTarget` se ocultaba bajo el overlay.
+    expect((firstTarget as { depth: number }).depth).toBeGreaterThan(FOCUS_OVERLAY_DEPTH);
+    expect((secondTarget as { depth: number }).depth).toBeGreaterThan(FOCUS_OVERLAY_DEPTH);
+    expect((secondTarget as { depth: number }).depth).toBe(FOCUS_TARGET_ELEVATED_DEPTH);
+
+    // El primer end() (2→1) no restaura nada todavía — ambos siguen elevados.
+    await controller.end(scene);
+    expect((firstTarget as { depth: number }).depth).toBeGreaterThan(FOCUS_OVERLAY_DEPTH);
+    expect((secondTarget as { depth: number }).depth).toBeGreaterThan(FOCUS_OVERLAY_DEPTH);
+
+    // El segundo end() (1→0) restaura el depth original de AMBOS objetos elevados.
+    await controller.end(scene);
+    expect((firstTarget as { depth: number }).depth).toBe(10);
+    expect((secondTarget as { depth: number }).depth).toBe(20);
   });
 });

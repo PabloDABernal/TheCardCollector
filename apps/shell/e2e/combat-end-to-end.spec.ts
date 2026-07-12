@@ -13,14 +13,15 @@ const COMBAT_SCENE_VIEWPORT = { width: 1080, height: 2060 } as const;
 
 const HAND_ROW_X = 540; // `HAND_ROW_POSITION.x` (`board-layout.ts`)
 const TILE_SEPARATION_PX = 140;
-// `HAND_ROW_POSITION.y` real es 1600, pero tocar ese centro exacto es ambiguo para las cartas
-// centrales: el tile de rol del Líder (`LEADER_POSITION = {x:540, y:1700}`, `ROLE_SIZE 200x200`,
-// `role-view.ts`) empieza justo en y=1600 y se solapa en x con las cartas cercanas al centro
-// (440..640) — un tap ahí puede resolver contra el rol del Líder en vez de la carta (confirmado
-// empíricamente, `hitTestPointer` devuelve el sprite superior de ese solape). Las cartas ocupan
-// y ∈ [1510, 1690] (`CARD_HEIGHT=180`); se toca `y=1550`, dentro del tile de carta y por encima del
-// borde superior del rol del Líder.
-const HAND_TAP_Y = 1550;
+// ACTUALIZADO H5.1 (`docs/specs/H5.1_mesa_dados_centro.md`) — la mesa de Núcleos pasa a ser la
+// ÚNICA ancla de derivación (`NUCLEO_TABLE_CENTER_Y`, centro exacto del viewport) y todo lo demás se
+// recalcula en cadena desde ahí (`board-layout.ts`). `HAND_ROW_POSITION.y` real HOY es 1730 (antes
+// 1600, luego 1724 — el fix de deuda técnica de `CONTENT_GAP_PX` en `board-layout.ts` desplazó +6px
+// toda la zona inferior) — las cartas ocupan y ∈ [1640, 1820] (`CARD_TILE_HALF_PX=90`), y el tile del
+// Líder (`LEADER_POSITION.y=1896`, `COMPACT_ROLE_TILE_HALF_PX=70`) ya no arranca hasta y=1826: con
+// este layout el centro exacto de la fila (1730) cae de sobra dentro del tile de carta sin solapar
+// el Líder (a diferencia del layout H4 anterior, donde había que evitar el centro exacto).
+const HAND_TAP_Y = 1730;
 
 /** Misma fórmula que `card-hand-view.ts` (`tileX`, no exportada) — reproducida aquí a propósito, no
  *  importada, para no acoplar este E2E a detalles internos de `combat-scene` más allá de las
@@ -50,10 +51,12 @@ function tileX(index: number, handSize: number): number {
  * procesos (esta réplica en Node y `CombatScreen` en el navegador) parten de la misma semilla y
  * reciben la misma secuencia de comandos, así que producen exactamente el mismo estado.
  *
- * Coordenadas de tiles: calculadas contra el mismo espacio virtual 1080×1920 que
- * `COMBAT_SCENE_VIEWPORT`/`board-layout.ts` ya fijan (`HAND_ROW_POSITION = {x:540,y:1600}`,
- * `TILE_SEPARATION_PX = 140`, `NUCLEO_POOL_ROW_Y = 1450`, `NUCLEO_POOL_X_ORIGIN = 200`), escaladas
- * contra el `boundingBox()` real del `<canvas>` bajo `Scale Manager` `FIT` — mismo mecanismo que
+ * Coordenadas de tiles: calculadas contra el mismo espacio virtual 1080×2060 que
+ * `COMBAT_SCENE_VIEWPORT`/`board-layout.ts` ya fijan (`HAND_ROW_POSITION = {x:540,y:1730}`,
+ * `TILE_SEPARATION_PX = 140`, `NUCLEO_TABLE_ROW_Y = 1030`, `NUCLEO_TABLE_X_ORIGIN = 200` — los 3
+ * primeros ACTUALIZADOS por H5.1 (mesa de Núcleos al centro exacto del viewport) y por el fix de
+ * deuda técnica de `CONTENT_GAP_PX`), escaladas contra el `boundingBox()` real del `<canvas>` bajo
+ * `Scale Manager` `FIT` — mismo mecanismo que
  * `combat-scene-smoke.spec.ts` (H2.6) ya usa.
  *
  * DESVIACIÓN documentada respecto al criterio literal de §6.3 punto 4 ("tap sobre el primer tile de
@@ -76,6 +79,12 @@ function tileX(index: number, handSize: number): number {
 test('CombatScreen monta Phaser real dentro de #phaser-mount y un tap real sobre una carta dispara PLAY_CARD (HUD cambia de verdad)', async ({
   page,
 }) => {
+  // H5.5 — el flujo de revelación progresiva añade 2 gestos explícitos más (seleccionar "Jugar
+  // Carta" antes de cada tap sobre una carta) frente al timeout por defecto de 30s
+  // (`playwright.config.ts`), ya ajustado para el resto del test — margen explícito para no correr
+  // pegado al límite con las esperas reales añadidas.
+  test.setTimeout(60_000);
+
   const pageErrors: Error[] = [];
   page.on('pageerror', (error) => pageErrors.push(error));
 
@@ -125,6 +134,31 @@ test('CombatScreen monta Phaser real dentro de #phaser-mount y un tap real sobre
   const mountedCanvas = page.locator('#phaser-mount canvas');
   await expect(mountedCanvas).toBeVisible();
 
+  // Mismo "HALLAZGO independiente" documentado más abajo en este archivo (test "el Líder... es
+  // visible y clickeable de verdad") — `Phaser.Scale.FIT` calcula el tamaño/posición inicial del
+  // `<canvas>` contra `window` en el instante de construcción, ANTES de que el layout `flex` de
+  // `CombatScreen.css` (header/footer reales) reduzca `#phaser-mount` a su tamaño final. Sin un
+  // evento `resize` real posterior, `boundingBox()` del canvas queda desalineado con su contenedor —
+  // NECESARIO estabilizarlo aquí (mismo mecanismo que el otro test) porque, tras H5.1, el HUD de rol
+  // del Líder (`leaderHudClip` más abajo) cae en la franja inferior del canvas que ese desalineamiento
+  // deja fuera del área realmente pintada.
+  await page.setViewportSize({ width: COMBAT_SCENE_VIEWPORT.width + 1, height: COMBAT_SCENE_VIEWPORT.height });
+  await page.setViewportSize({ width: COMBAT_SCENE_VIEWPORT.width, height: COMBAT_SCENE_VIEWPORT.height });
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const mount = document.querySelector('#phaser-mount');
+          const canvas = mount?.querySelector('canvas');
+          if (!mount || !canvas) return false;
+          const mountRect = mount.getBoundingClientRect();
+          const canvasRect = canvas.getBoundingClientRect();
+          return canvasRect.top >= mountRect.top - 1 && canvasRect.bottom <= mountRect.bottom + 1;
+        }),
+      { timeout: 15_000, message: 'el <canvas> de Phaser nunca terminó de alinearse con su contenedor #phaser-mount' },
+    )
+    .toBe(true);
+
   const box = await mountedCanvas.boundingBox();
   expect(box).not.toBeNull();
   if (!box) return;
@@ -147,12 +181,50 @@ test('CombatScreen monta Phaser real dentro de #phaser-mount y un tap real sobre
   const clientHeight = await page.evaluate(() => document.documentElement.clientHeight);
   expect(scrollHeight).toBeLessThanOrEqual(clientHeight + 2);
 
-  const scaleX = box.width / COMBAT_SCENE_VIEWPORT.width;
-  const scaleY = box.height / COMBAT_SCENE_VIEWPORT.height;
-  const toPagePoint = (virtualX: number, virtualY: number) => ({
-    x: box.x + virtualX * scaleX,
-    y: box.y + virtualY * scaleY,
-  });
+  // FIX flakiness (H5.5) — `CombatHud.tsx` cambia de altura real entre fase CATEGORY (4 botones) y
+  // fase DETAIL ("Elige una carta", 1 fila) — `.combat-screen-canvas-area` es `flex: 1`
+  // (`CombatScreen.css`), así que ese cambio de altura del header REDIMENSIONA el `<canvas>` de
+  // Phaser (y con él, el `transform` de `CombatBoardOverlay`) cada vez que se entra/sale de DETAIL.
+  // Un `toPagePoint`/`scale` calculado UNA sola vez al arranque (como hacía este test antes) queda
+  // STALE tras cualquier transición de fase — `freshCanvasGeometry`/`captureLeaderHudClip` recalculan
+  // la geometría real del canvas en el momento exacto de cada click/screenshot, en vez de asumir que
+  // no cambió desde el arranque.
+  async function freshCanvasGeometry(): Promise<{
+    toPagePoint: (vx: number, vy: number) => { x: number; y: number };
+    scaleX: number;
+    scaleY: number;
+  }> {
+    const freshBox = await mountedCanvas.boundingBox();
+    if (!freshBox) throw new Error('canvas sin bounding box real en el momento de medir');
+    const fx = freshBox.width / COMBAT_SCENE_VIEWPORT.width;
+    const fy = freshBox.height / COMBAT_SCENE_VIEWPORT.height;
+    return {
+      toPagePoint: (virtualX: number, virtualY: number) => ({
+        x: freshBox.x + virtualX * fx,
+        y: freshBox.y + virtualY * fy,
+      }),
+      scaleX: fx,
+      scaleY: fy,
+    };
+  }
+
+  // FIX flakiness adicional (H5.5) — un screenshot-diff pixel a pixel de una región del canvas sigue
+  // siendo frágil incluso con geometría fresca: el propio reflow de `CombatHud.tsx` (CATEGORY↔DETAIL)
+  // puede dejar el `<canvas>` en un estado transitorio (`Phaser.Scale.FIT` recalcula contra `window`,
+  // ver el "HALLAZGO independiente" documentado más abajo en este archivo) en el instante exacto de
+  // la captura, sin relación con si `PLAY_CARD` se disparó o no — confirmado empíricamente: capturas
+  // completas de página (`e2e/screenshots/*.png`, generadas por este mismo test) mostrando el canvas
+  // genuinamente desalineado/recortado en `hudBefore`, pese a que `actionsTaken`/Energía SÍ habían
+  // cambiado de verdad en el DOM en ese momento. En vez de perseguir esa inestabilidad de `Phaser.Scale`
+  // (fuera de alcance de este fix, ya documentada como limitación conocida), se lee el TEXTO real de
+  // la fila de estado del Líder (`CharacterPanel` → `RoleBlock`, HTML puro fuera del `<canvas>`,
+  // NUNCA afectado por su redimensionado) — evidencia igual de "de punta a punta" que un pixel-diff,
+  // pero sin depender de la geometría del canvas en absoluto.
+  async function readLeaderHudText(): Promise<string> {
+    const nivelChip = page.getByText('Nivel', { exact: false });
+    const statsRow = nivelChip.locator('xpath=..');
+    return (await statsRow.innerText()).trim();
+  }
 
   await page.waitForTimeout(200); // margen para que CombatScene.create() pinte el estado inicial
 
@@ -174,44 +246,57 @@ test('CombatScreen monta Phaser real dentro de #phaser-mount y un tap real sobre
     await page.waitForTimeout(200);
   }
 
-  // Clip del texto HUD de rol del Líder (`role-view.ts`, LEADER_POSITION {x:540,y:1700} + offset
-  // vertical 120 del texto) — región amplia para no depender de un layout de texto pixel-perfect.
-  const leaderHudClip = {
-    x: toPagePoint(340, 1795).x,
-    y: toPagePoint(340, 1795).y,
-    width: 400 * scaleX,
-    height: 90 * scaleY,
-  };
+  // ACTUALIZADO H4.x/H5.1 — el `Text` de estado del Líder (Daño/Escudo/Energía/Nivel) ya NO vive en
+  // el canvas de Phaser (`role-view.ts` lo retiró, ver su docstring): vive en el panel HTML real
+  // `CharacterPanel` (`CombatBoardOverlay.tsx`), 3ª línea del bloque (bajo la etiqueta "Líder" y el
+  // nombre) — el nombre NO cambia al jugar una carta, así que `readLeaderHudText()` (arriba) lee
+  // específicamente la fila de chips ♥/🛡/⚡/✦ por texto, no por posición de pixel.
   await page.screenshot({ path: 'e2e/screenshots/combat-end-to-end-leader-hud-before.png' });
-  const hudBefore = await page.screenshot({ clip: leaderHudClip });
+  const hudBefore = await readLeaderHudText();
+
+  // H5.5 spec §3/§4 — `HandCardRow` ya no está montado hasta pasar por
+  // `turnDecisionFlow.selectCategory('PLAY_CARD')`: la revelación progresiva exige elegir la
+  // categoría "Jugar Carta" como gesto EXPLÍCITO del HUD (botón real, mismo patrón que "Generar
+  // energía (gratis)" arriba) antes de que la fila de cartas de mano se vuelva visible/tocable.
+  await page.getByText('Jugar Carta', { exact: true }).click();
+  await page.waitForTimeout(150); // margen para que el cambio de fase (CATEGORY→DETAIL) reflowee el header/canvas
 
   // Tap real sobre la carta EQUIPO/EVENTO jugable en 1 tap, calculada arriba contra la mano real
   // determinista (ver docstring — H3.6 ya no tiene layout fijo de mano). `HAND_TAP_Y` (no
   // `HAND_ROW_Y`) evita el solape con el tile de rol del Líder (ver comentario de la constante).
-  const playCardTile = toPagePoint(playCardVirtualX, HAND_TAP_Y);
+  // Geometría recalculada en el momento del tap (mismo motivo documentado junto a `freshCanvasGeometry`).
+  const playCardTile = (await freshCanvasGeometry()).toPagePoint(playCardVirtualX, HAND_TAP_Y);
   await page.mouse.click(playCardTile.x, playCardTile.y);
 
-  await page.waitForTimeout(200); // margen para que el dispatch síncrono repinte el HUD
+  await page.waitForTimeout(300); // margen para el dispatch + el reflow de vuelta a fase CATEGORY
 
-  const hudAfter = await page.screenshot({ clip: leaderHudClip });
+  const hudAfter = await readLeaderHudText();
   await page.screenshot({ path: 'e2e/screenshots/combat-end-to-end-leader-hud-after.png' });
 
   // Evidencia de que `dispatch` funcionó de verdad de punta a punta (traductor → bridge → engine →
   // BoardView.render), no solo la interacción visual del tap: el HUD de rol del Líder cambió (al
   // menos la Energía baja por el coste de la carta jugada).
-  expect(hudBefore.equals(hudAfter)).toBe(false);
+  expect(hudBefore).not.toBe(hudAfter);
 
   // Segundo tap real: carta de ATAQUE (`requiresNucleoInstance: true`) real de la mano resultante,
-  // calculada arriba, seguida de un Núcleo real (primer die del pool, NUCLEO_POOL_X_ORIGIN=200,
-  // NUCLEO_POOL_ROW_Y=1450) — ejercita el flujo completo de selección de 2 pasos con gestos reales.
+  // calculada arriba, seguida de un Núcleo real (primer die de la mesa, `NUCLEO_TABLE_X_ORIGIN=200`,
+  // `NUCLEO_TABLE_ROW_Y=1030` — ACTUALIZADO por H5.1, antes 1450) — ejercita el flujo completo de
+  // selección de 2 pasos con gestos reales.
   // Se espera rechazo por Energía insuficiente en el contenido real (comportamiento de dominio
   // esperado — ver desviación documentada arriba), confirmado por AUSENCIA de excepción/error de
   // consola, no por cambio de HUD.
   expect(attackCardVirtualX, 'se esperaba al menos una carta de ATAQUE en la mano tras jugar la primera').not.toBeNull();
   if (attackCardVirtualX !== null) {
-    const attackCardTile = toPagePoint(attackCardVirtualX, HAND_TAP_Y);
+    // H5.5 — el primer PLAY_CARD exitoso disparó `CARD_PLAYED`, que cierra el tramo de detalle
+    // automáticamente y devuelve el HUD a fase CATEGORY (`turn-decision-flow.ts`); hay que volver a
+    // seleccionar "Jugar Carta" para que `HandCardRow` se remonte antes de este segundo tap.
+    await page.getByText('Jugar Carta', { exact: true }).click();
+    await page.waitForTimeout(150);
+
+    // Geometría recalculada en el momento de cada tap (mismo motivo que arriba).
+    const attackCardTile = (await freshCanvasGeometry()).toPagePoint(attackCardVirtualX, HAND_TAP_Y);
     await page.mouse.click(attackCardTile.x, attackCardTile.y);
-    const firstNucleoTile = toPagePoint(200, 1450);
+    const firstNucleoTile = (await freshCanvasGeometry()).toPagePoint(200, 1030);
     await page.mouse.click(firstNucleoTile.x, firstNucleoTile.y);
   }
 
@@ -357,6 +442,16 @@ for (const viewportSize of [
       panelBox.y + panelBox.height,
       `panel del Líder termina en y=${panelBox.y + panelBox.height}, por DEBAJO de window.innerHeight (${viewportSize.height})`,
     ).toBeLessThanOrEqual(viewportSize.height);
+
+    // H5.5 spec §3/§4 — igual que `HandCardRow`, `AbilityRow` del Líder solo queda visible/interactiva
+    // tras `turnDecisionFlow.selectCategory('ACTIVATE_ABILITY')` (mismo gesto explícito del HUD que
+    // el flujo de "Jugar Carta" ya usa en el test de arriba de este archivo). H4 spec §4 —
+    // `CombatHud.tsx` abrevia la etiqueta del botón a "Habilidad" bajo el mismo breakpoint compacto
+    // que `use-is-compact-viewport.ts` (`COMPACT_VIEWPORT_BREAKPOINT_PX`, 480px) — este `for` recorre
+    // exactamente ese caso (viewport 390×844), así que hay que tocar el botón real por su texto real.
+    const activateAbilityLabel = viewportSize.width <= 480 ? 'Habilidad' : 'Activar Habilidad';
+    await page.getByText(activateAbilityLabel, { exact: true }).click();
+    await page.waitForTimeout(100);
 
     // NOTA: el mismo `abilityId` puede aparecer 2 veces en el DOM — una vez en `AbilityRow`
     // (interactivo, `pointer-events: auto`) y, si la ficha ampliada del Líder está abierta, otra vez

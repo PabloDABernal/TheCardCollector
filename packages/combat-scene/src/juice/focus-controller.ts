@@ -56,29 +56,36 @@ function zoomAndPan(
  * de referencias: solo la transición 0→1 anima el fade-in del overlay (transiciones N→N+1 solo
  * re-apuntan la cámara al nuevo `focusId`), y solo la transición 1→0 dispara el fade-out real.
  *
+ * H5.6 §3.5 — en sesiones reentrantes con más de 1 foco activo (ej. `ABILITY_ACTIVATED` seguido de
+ * `ENEMY_DAMAGED`/`MINION_DAMAGED` solapados), CADA llamada a `begin()` eleva su propio `focusId` por
+ * encima del overlay (`FOCUS_TARGET_ELEVATED_DEPTH` > `FOCUS_OVERLAY_DEPTH`), no solo la primera —
+ * de lo contrario el flash/número de daño del segundo evento queda oculto bajo el overlay oscuro
+ * hasta el fade-out final. Se mantiene un mapa de todos los objetos elevados durante la sesión
+ * (`elevatedTargets: focusId -> {target, originalDepth}`), y la transición final a 0 (`end()`)
+ * restaura el depth original de TODOS ellos, no solo del primero.
+ *
  * Factory con clausura — mismo patrón que `createTurnBannerRecipe` (H4): una instancia por
  * `CombatScene`, reutilizada entre invocaciones. `createEffectsDirector` recibe la instancia ya
  * construida (H5.3 §2.2, 5º parámetro) — nunca se instancia más de una vez por escena.
  */
 export function createFocusController(): FocusController {
   let refCount = 0;
-  let elevatedTarget: Phaser.GameObjects.GameObject | null = null;
-  let elevatedOriginalDepth = 0;
+  const elevatedTargets = new Map<string, { target: DepthCapable; originalDepth: number }>();
 
   function elevate(scene: Phaser.Scene, focusId: string | undefined): void {
+    if (focusId === undefined || elevatedTargets.has(focusId)) return;
     const target = resolveFocusTarget(scene, focusId);
     if (target && supportsDepth(target)) {
-      elevatedTarget = target;
-      elevatedOriginalDepth = target.depth;
+      elevatedTargets.set(focusId, { target, originalDepth: target.depth });
       target.setDepth(FOCUS_TARGET_ELEVATED_DEPTH);
     }
   }
 
-  function restoreElevated(): void {
-    if (elevatedTarget && supportsDepth(elevatedTarget)) {
-      elevatedTarget.setDepth(elevatedOriginalDepth);
+  function restoreAllElevated(): void {
+    for (const { target, originalDepth } of elevatedTargets.values()) {
+      target.setDepth(originalDepth);
     }
-    elevatedTarget = null;
+    elevatedTargets.clear();
   }
 
   return {
@@ -87,7 +94,9 @@ export function createFocusController(): FocusController {
       const position = resolveFocusPosition(scene, focusId);
 
       if (refCount > 1) {
-        // Transición N→N+1 — solo repanea la cámara, sin reiniciar el fade-in del overlay.
+        // Transición N→N+1 — repanea la cámara y eleva el nuevo focusId, sin reiniciar el fade-in
+        // del overlay (que ya está visible desde la transición 0→1).
+        elevate(scene, focusId);
         await zoomAndPan(scene, DEFAULT_FOCUS_ZOOM_LEVEL, position, FADE_IN_MS);
         return;
       }
@@ -111,7 +120,7 @@ export function createFocusController(): FocusController {
       const overlay = resolveOrCreateFocusOverlay(scene);
       const center = { x: COMBAT_SCENE_VIEWPORT.width / 2, y: COMBAT_SCENE_VIEWPORT.height / 2 };
       await Promise.all([fadeOverlay(scene, overlay, 0, FADE_OUT_MS), zoomAndPan(scene, 1, center, FADE_OUT_MS)]);
-      restoreElevated();
+      restoreAllElevated();
     },
   };
 }

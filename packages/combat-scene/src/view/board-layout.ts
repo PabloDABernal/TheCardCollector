@@ -150,13 +150,18 @@ const SCENARIO_BOTTOM_HALF_PX = Math.max(
   COMPACT_ROLE_HUD_TEXT_OFFSET_PX + ROLE_HUD_TEXT_LINE_HEIGHT_PX,
 ); // max(70, 108) = 108
 
+// FIX deuda técnica (Reviewer, post-E5) — H5.1 spec §2.2 dice explícitamente que el hueco INMEDIATO
+// contra el panel de Núcleos debe seguir usando `CONTENT_GAP_PX` (12, "el más importante de
+// preservar generoso"), no `COMPACT_ZONE_GAP_PX` (6, reservado a las fronteras INTERNAS de cada zona
+// compacta — ej. Escenario→Secuaces, Secuaces→Enemigo — nunca al borde contra la propia mesa). Antes
+// de este fix, `CONTENT_GAP_PX` quedaba huérfano (sin ningún uso real en la cadena de derivación).
 export const SCENARIO_POSITION = {
   x: 540,
-  y: NUCLEO_PANEL_TOP_Y - COMPACT_ZONE_GAP_PX - SCENARIO_BOTTOM_HALF_PX, // 618-6-108 = 504
+  y: NUCLEO_PANEL_TOP_Y - CONTENT_GAP_PX - SCENARIO_BOTTOM_HALF_PX, // 618-12-108 = 498
 };
 
 export const MINIONS_ROW_Y =
-  SCENARIO_POSITION.y - COMPACT_ROLE_TILE_HALF_PX - COMPACT_ZONE_GAP_PX - CARD_TILE_HALF_PX; // 504-70-6-90 = 338
+  SCENARIO_POSITION.y - COMPACT_ROLE_TILE_HALF_PX - COMPACT_ZONE_GAP_PX - CARD_TILE_HALF_PX; // 498-70-6-90 = 332
 
 /** Semi-extensión del contenido de Enemigo/Líder hacia su fila de habilidades — a diferencia del
  *  Escenario, Líder/Enemigo SÍ tienen `AbilityRow` bajo el tile, a un offset (120) mayor que el
@@ -166,29 +171,46 @@ const ROLE_WITH_ABILITIES_BOTTOM_HALF_PX = COMPACT_ABILITIES_ROW_OFFSET_PX + ABI
 
 export const ENEMY_POSITION = {
   x: 540,
-  y: MINIONS_ROW_Y - CARD_TILE_HALF_PX - COMPACT_ZONE_GAP_PX - ROLE_WITH_ABILITIES_BOTTOM_HALF_PX, // 338-90-6-132 = 110
+  y: MINIONS_ROW_Y - CARD_TILE_HALF_PX - COMPACT_ZONE_GAP_PX - ROLE_WITH_ABILITIES_BOTTOM_HALF_PX, // 332-90-6-132 = 104
 };
 
-export const ENEMY_ABILITIES_ROW_Y = ENEMY_POSITION.y + COMPACT_ABILITIES_ROW_OFFSET_PX; // 110+120 = 230
+export const ENEMY_ABILITIES_ROW_Y = ENEMY_POSITION.y + COMPACT_ABILITIES_ROW_OFFSET_PX; // 104+120 = 224
 
 // ============================================================================================
 // Zona INFERIOR — deriva HACIA ABAJO desde el borde inferior del panel de Núcleos (H5.1 §2.2).
 // Orden de derivación: Aliados (adyacente al panel) → Mano → Líder (abajo del todo).
 // ============================================================================================
 
-export const ALLIES_ROW_Y = NUCLEO_PANEL_BOTTOM_Y + COMPACT_ZONE_GAP_PX + CARD_TILE_HALF_PX; // 1442+6+90 = 1538
+// FIX deuda técnica (Reviewer, post-E5) — mismo criterio que `SCENARIO_POSITION` arriba: hueco
+// INMEDIATO contra el panel de Núcleos usa `CONTENT_GAP_PX` (12), no `COMPACT_ZONE_GAP_PX` (6).
+export const ALLIES_ROW_Y = NUCLEO_PANEL_BOTTOM_Y + CONTENT_GAP_PX + CARD_TILE_HALF_PX; // 1442+12+90 = 1544
 
 export const HAND_ROW_POSITION = {
   x: 540,
-  y: ALLIES_ROW_Y + CARD_TILE_HALF_PX + COMPACT_ZONE_GAP_PX + CARD_TILE_HALF_PX, // 1538+90+6+90 = 1724
+  y: ALLIES_ROW_Y + CARD_TILE_HALF_PX + COMPACT_ZONE_GAP_PX + CARD_TILE_HALF_PX, // 1544+90+6+90 = 1730
 };
 
 export const LEADER_POSITION = {
   x: 540,
-  y: HAND_ROW_POSITION.y + CARD_TILE_HALF_PX + COMPACT_ZONE_GAP_PX + COMPACT_ROLE_TILE_HALF_PX, // 1724+90+6+70 = 1890
+  y: HAND_ROW_POSITION.y + CARD_TILE_HALF_PX + COMPACT_ZONE_GAP_PX + COMPACT_ROLE_TILE_HALF_PX, // 1730+90+6+70 = 1896
 };
 
-export const LEADER_ABILITIES_ROW_Y = LEADER_POSITION.y + COMPACT_ABILITIES_ROW_OFFSET_PX; // 1890+120 = 2010
+// FIX deuda técnica (Reviewer, post-E5) — el margen real del Líder contra el borde del viewport baja
+// de 38px a 32px (2060-2028) tras subir los 2 gaps inmediatos al panel de Núcleos de
+// `COMPACT_ZONE_GAP_PX` (6) a `CONTENT_GAP_PX` (12) arriba (`SCENARIO_POSITION`/`ALLIES_ROW_Y`) — ese
+// cambio empuja TODA la zona inferior (Aliados→Mano→Líder) 6px hacia abajo. Sigue >= 0 (el contenido
+// completo del Líder sigue cayendo DENTRO del viewport, ver `board-layout.test.ts` §5.4), pero
+// deja de cumplir el margen mínimo histórico de 36px que exigía el test heredado de H4
+// (`H4_fix_urgente_lider_fuera_viewport.md` §5, "el borde inferior real del Líder... queda >= 36px
+// por encima del alto del viewport") — pasa a 32px. DESVIACIÓN DELIBERADA (5ª, documentada en el
+// resumen del fix de Programmer que corrigió `CONTENT_GAP_PX`): se prioriza la exigencia LITERAL y
+// más reciente de H5.1 §2.2 ("el hueco inmediato contra el panel de Núcleos es el más importante de
+// preservar generoso") sobre el margen numérico exacto de un test P0 anterior cuyo objetivo real
+// (que el Líder no quede recortado fuera del viewport) se sigue cumpliendo con margen de sobra.
+// RESUELTO: el test `board-layout.test.ts` (§"cabe dentro de COMBAT_SCENE_VIEWPORT.height") ya se
+// actualizó a exigir >= 32px (en vez de 36px) para reflejar este trade-off consciente — deja de ser
+// una decisión abierta.
+export const LEADER_ABILITIES_ROW_Y = LEADER_POSITION.y + COMPACT_ABILITIES_ROW_OFFSET_PX; // 1896+120 = 2016
 
 /** NUEVO H3 (capa visual) — separación vertical entre un dado FIXED y sus dados EXTRA apilados del
  *  mismo color (spec H3 §5.2, "agrupación visual por color"). */
