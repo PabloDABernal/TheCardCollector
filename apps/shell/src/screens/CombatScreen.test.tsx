@@ -17,6 +17,13 @@ let capturedParent: HTMLElement | null = null;
 // NUEVO H4 spec §5.2/§6.1 — ver App.test.tsx, mismo espíritu de mock.
 const fakeTargetingSignal = { getState: () => ({ kind: 'NONE' as const }), subscribe: () => () => {} };
 const fakeGestureHandle = { handleCardTap: vi.fn(), handleAbilityTap: vi.fn(), cancelPending: vi.fn() };
+// NUEVO H5.5 §1 — `CombatScene.getTurnDecisionFlow()`, mismo espíritu de mock que el resto de este
+// archivo (superficie mínima, sin máquina de estados real).
+const fakeTurnDecisionFlow = {
+  selectCategory: vi.fn(),
+  cancelDetail: vi.fn(),
+  signal: { getState: () => ({ stage: 'CATEGORY' as const }), subscribe: () => () => {} },
+};
 
 vi.mock('phaser', () => {
   class FakeGame {
@@ -25,6 +32,7 @@ vi.mock('phaser', () => {
       add: vi.fn(() => ({
         getTargetingSignal: () => fakeTargetingSignal,
         getGestureCommandTranslator: () => fakeGestureHandle,
+        getTurnDecisionFlow: () => fakeTurnDecisionFlow,
       })),
       start: vi.fn(),
     };

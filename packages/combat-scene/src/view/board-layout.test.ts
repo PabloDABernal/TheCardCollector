@@ -11,11 +11,15 @@ import {
   HAND_ROW_POSITION,
   ALLIES_ROW_Y,
   NUCLEO_TABLE_ROW_Y,
+  NUCLEO_TABLE_CENTER_Y,
+  NUCLEO_PANEL_HEIGHT_RATIO,
+  NUCLEO_PANEL_WIDTH_RATIO,
   LEADER_ABILITIES_ROW_Y,
-  ROLE_TILE_HALF_PX,
+  COMPACT_ROLE_TILE_HALF_PX,
   CARD_TILE_HALF_PX,
   NUCLEO_TILE_HALF_PX,
   CONTENT_GAP_PX,
+  COMPACT_ZONE_GAP_PX,
   CONTENT_BOXES_TOP_TO_BOTTOM,
   COMBAT_SCENE_VIEWPORT,
 } from './board-layout';
@@ -98,26 +102,31 @@ describe('board-layout — bounding box real de cada sprite/tile dentro de su Pa
     ).toBeLessThanOrEqual(panelBottom);
   }
 
-  it('el tile del Líder (role-view.ts, 200x200) cae dentro de panel-leader sin invadir panel-hand', () => {
+  it('el tile del Líder (role-view.ts, 140x140 compacto H5.1) cae dentro de panel-leader sin invadir panel-hand', () => {
     expectContained(
       'leader-tile',
       'panel-leader',
-      LEADER_POSITION.y - ROLE_TILE_HALF_PX,
+      LEADER_POSITION.y - COMPACT_ROLE_TILE_HALF_PX,
       LEADER_ABILITIES_ROW_Y + ABILITY_ICON_HEIGHT_PX / 2,
     );
   });
 
-  it('el tile del Enemigo (role-view.ts, 200x200) cae dentro de panel-enemy', () => {
+  it('el tile del Enemigo (role-view.ts, 140x140 compacto H5.1) cae dentro de panel-enemy', () => {
     expectContained(
       'enemy-tile',
       'panel-enemy',
-      ENEMY_POSITION.y - ROLE_TILE_HALF_PX,
+      ENEMY_POSITION.y - COMPACT_ROLE_TILE_HALF_PX,
       ENEMY_ABILITIES_ROW_Y + ABILITY_ICON_HEIGHT_PX / 2,
     );
   });
 
-  it('el tile del Escenario (role-view.ts, 200x200) cae dentro de panel-scenario', () => {
-    expectContained('scenario-tile', 'panel-scenario', SCENARIO_POSITION.y - ROLE_TILE_HALF_PX, SCENARIO_POSITION.y + ROLE_TILE_HALF_PX);
+  it('el tile del Escenario (role-view.ts, 140x140 compacto H5.1) cae dentro de panel-scenario', () => {
+    expectContained(
+      'scenario-tile',
+      'panel-scenario',
+      SCENARIO_POSITION.y - COMPACT_ROLE_TILE_HALF_PX,
+      SCENARIO_POSITION.y + COMPACT_ROLE_TILE_HALF_PX,
+    );
   });
 
   it('un tile de Secuaz (minions-view.ts, 120x180) cae dentro de panel-minions', () => {
@@ -146,16 +155,21 @@ describe('board-layout — bounding box real de cada sprite/tile dentro de su Pa
  * H4 spec (`docs/specs/H4_layout_fuente_unica.md`) §3 paso 3 — regresión reforzada, expresada en
  * términos de CONTENIDO real (tile/HUD/icono, sin el colchón de `PANEL_CONTENT_PADDING_PX` que ya
  * cubre el test de "PANEL_ZONES sin solapes" de arriba). Exige que el gap entre bounding boxes de
- * filas consecutivas sea `>= CONTENT_GAP_PX` — no solo `> 0` — para que cualquier futuro cambio de
- * `CONTENT_GAP_PX` (o de cualquier constante de la cadena de derivación) que erosione ese margen
- * mínimo, hasta llegar a gap negativo (solape real), haga fallar este test de inmediato. NOTA
- * (Programmer, esta migración): verificado que con los valores REALES del código (no con los
- * comentarios `//` de `ALLIES_ROW_Y`/`NUCLEO_TABLE_ROW_Y`, desactualizados de una época con
- * `CONTENT_GAP_PX=20`, ver `board-layout.ts`), el gap Núcleos→Mano/Mano→Líder ya era exactamente
- * `CONTENT_GAP_PX` (12) antes de esta migración — este test ya pasaba en verde contra el código sin
- * tocar, contradiciendo la premisa de la spec de que debía estar en rojo.
+ * filas consecutivas sea `>= mínimo de diseño` — no solo `> 0` — para que cualquier futuro cambio de
+ * `CONTENT_GAP_PX`/`COMPACT_ZONE_GAP_PX` (o de cualquier constante de la cadena de derivación) que
+ * erosione ese margen mínimo, hasta llegar a gap negativo (solape real), haga fallar este test de
+ * inmediato.
+ *
+ * H5.1 (`docs/specs/H5.1_mesa_dados_centro.md`) §5 punto 3 — con la mesa de Núcleos como ancla
+ * central, toda la cadena de derivación vive dentro de las zonas COMPACTAS (arriba/abajo de la
+ * mesa), que usan `COMPACT_ZONE_GAP_PX` (6) en vez de `CONTENT_GAP_PX` (12) — el umbral universal de
+ * este test pasa a ser el MENOR de los dos gaps de diseño (`COMPACT_ZONE_GAP_PX`, hoy siempre menor),
+ * exactamente el criterio que la spec autoriza ("un único >= min contra el menor de los dos basta
+ * como cota inferior universal").
  */
-describe('board-layout — gap real entre CONTENIDO de filas consecutivas >= CONTENT_GAP_PX (H4 spec §3 paso 3)', () => {
+describe('board-layout — gap real entre CONTENIDO de filas consecutivas >= mínimo de diseño (H4 spec §3 paso 3, H5.1 §5.3)', () => {
+  const MIN_DESIGN_GAP_PX = Math.min(CONTENT_GAP_PX, COMPACT_ZONE_GAP_PX);
+
   it('las 7 filas de contenido están en orden vertical estrictamente creciente', () => {
     for (let i = 1; i < CONTENT_BOXES_TOP_TO_BOTTOM.length; i += 1) {
       const previous = CONTENT_BOXES_TOP_TO_BOTTOM[i - 1]!;
@@ -168,7 +182,7 @@ describe('board-layout — gap real entre CONTENIDO de filas consecutivas >= CON
     }
   });
 
-  it('el gap real entre bounding boxes de contenido consecutivas es >= CONTENT_GAP_PX', () => {
+  it('el gap real entre bounding boxes de contenido consecutivas es >= mínimo de diseño (menor de CONTENT_GAP_PX/COMPACT_ZONE_GAP_PX)', () => {
     for (let i = 1; i < CONTENT_BOXES_TOP_TO_BOTTOM.length; i += 1) {
       const previous = CONTENT_BOXES_TOP_TO_BOTTOM[i - 1]!;
       const current = CONTENT_BOXES_TOP_TO_BOTTOM[i]!;
@@ -176,9 +190,50 @@ describe('board-layout — gap real entre CONTENIDO de filas consecutivas >= CON
 
       expect(
         gap,
-        `gap de contenido ${previous.id}→${current.id} es ${gap}px, menor que CONTENT_GAP_PX (${CONTENT_GAP_PX})`,
-      ).toBeGreaterThanOrEqual(CONTENT_GAP_PX);
+        `gap de contenido ${previous.id}→${current.id} es ${gap}px, menor que el mínimo de diseño (${MIN_DESIGN_GAP_PX})`,
+      ).toBeGreaterThanOrEqual(MIN_DESIGN_GAP_PX);
     }
+  });
+});
+
+/**
+ * H5.1 (`docs/specs/H5.1_mesa_dados_centro.md`) §5 — invariantes nuevas de la mesa de Núcleos como
+ * centro visual permanente del combate.
+ */
+describe('board-layout — H5.1 mesa de Núcleos como centro visual permanente', () => {
+  const nucleoPanel = PANEL_ZONES.find((zone) => zone.id === 'panel-nucleos');
+  if (!nucleoPanel) throw new Error("PanelZone 'panel-nucleos' no encontrado");
+
+  it('§5.1 — ratio de la mesa: alto en [0.40, 0.50] del viewport, ancho en [0.60, 0.80]', () => {
+    const heightRatio = nucleoPanel.height / COMBAT_SCENE_VIEWPORT.height;
+    const widthRatio = nucleoPanel.width / COMBAT_SCENE_VIEWPORT.width;
+
+    expect(heightRatio).toBeGreaterThanOrEqual(0.4);
+    expect(heightRatio).toBeLessThanOrEqual(0.5);
+    expect(widthRatio).toBeGreaterThanOrEqual(0.6);
+    expect(widthRatio).toBeLessThanOrEqual(0.8);
+    // Consistencia interna con las constantes de diseño (documentación ejecutable).
+    expect(NUCLEO_PANEL_HEIGHT_RATIO).toBeGreaterThanOrEqual(0.4);
+    expect(NUCLEO_PANEL_HEIGHT_RATIO).toBeLessThanOrEqual(0.5);
+    expect(NUCLEO_PANEL_WIDTH_RATIO).toBeGreaterThanOrEqual(0.6);
+    expect(NUCLEO_PANEL_WIDTH_RATIO).toBeLessThanOrEqual(0.8);
+  });
+
+  it('§5.2 — centrado vertical: panel-nucleos.y está a <= 10px del centro exacto del viewport', () => {
+    expect(Math.abs(nucleoPanel.y - COMBAT_SCENE_VIEWPORT.height / 2)).toBeLessThanOrEqual(10);
+    expect(Math.abs(NUCLEO_TABLE_CENTER_Y - COMBAT_SCENE_VIEWPORT.height / 2)).toBeLessThanOrEqual(10);
+  });
+
+  it('§5.4 — todo el contenido cabe dentro del viewport (LEADER_CONTENT.bottom <= height, ENEMY_CONTENT.top >= 0)', () => {
+    const enemyContent = CONTENT_BOXES_TOP_TO_BOTTOM.find((entry) => entry.id === 'enemy')!;
+    const leaderContent = CONTENT_BOXES_TOP_TO_BOTTOM.find((entry) => entry.id === 'leader')!;
+
+    expect(enemyContent.box.top).toBeGreaterThanOrEqual(0);
+    expect(leaderContent.box.bottom).toBeLessThanOrEqual(COMBAT_SCENE_VIEWPORT.height);
+  });
+
+  it('la mesa de Núcleos (fila FIXED) sigue centrada en NUCLEO_TABLE_CENTER_Y', () => {
+    expect(NUCLEO_TABLE_ROW_Y).toBe(NUCLEO_TABLE_CENTER_Y);
   });
 });
 

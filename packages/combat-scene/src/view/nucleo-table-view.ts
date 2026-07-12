@@ -121,6 +121,12 @@ export function createNucleoTable(scene: Phaser.Scene, table: readonly NucleoDie
       shadowAlpha: NUCLEO_SHADOW_ALPHA,
       shadowOffsetPx: NUCLEO_SHADOW_OFFSET_PX,
     });
+    // NUEVO H5.1 §4/H5.4 §2.2 — nombra el tile por su `NucleoInstanceId` (`setName`, mismo mecanismo
+    // ya usado por `role-view.ts` para Líder/Enemigo/Escenario y `board-anchors-view.ts` para
+    // Secuaz/Aliado). Prerrequisito técnico de H5.4: el foco total de `ABILITY_ACTIVATED` necesita
+    // resolver la posición del dado gastado por nombre (`scene.children.getByName(focusId)`) para
+    // apuntar el zoom de cámara al dado real en vez de caer al centro del viewport.
+    rect.setName(die.id);
     rect.setInteractive().setData('targetId', die.id);
     rect.setAlpha(alphaFor(die));
 

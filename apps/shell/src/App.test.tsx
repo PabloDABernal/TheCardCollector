@@ -16,6 +16,13 @@ import type { App as AppComponent } from './App';
 // síncronamente justo después de `scene.start(...)` dentro del handler de `READY`.
 const fakeTargetingSignal = { getState: () => ({ kind: 'NONE' as const }), subscribe: () => () => {} };
 const fakeGestureHandle = { handleCardTap: vi.fn(), handleAbilityTap: vi.fn(), cancelPending: vi.fn() };
+// NUEVO H5.5 §1 — `CombatScene.getTurnDecisionFlow()`, mismo espíritu de mock que el resto de este
+// archivo (superficie mínima, sin máquina de estados real).
+const fakeTurnDecisionFlow = {
+  selectCategory: vi.fn(),
+  cancelDetail: vi.fn(),
+  signal: { getState: () => ({ stage: 'CATEGORY' as const }), subscribe: () => () => {} },
+};
 
 vi.mock('phaser', () => {
   class FakeGame {
@@ -24,6 +31,7 @@ vi.mock('phaser', () => {
       add: vi.fn(() => ({
         getTargetingSignal: () => fakeTargetingSignal,
         getGestureCommandTranslator: () => fakeGestureHandle,
+        getTurnDecisionFlow: () => fakeTurnDecisionFlow,
       })),
       start: vi.fn(),
     };

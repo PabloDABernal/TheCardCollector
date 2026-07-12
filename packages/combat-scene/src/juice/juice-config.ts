@@ -21,9 +21,13 @@ export const JUICE_CONFIG: JuiceConfig = {
   NUCLEO_DIE_ADDED: [{ recipeId: 'soundOnly', mode: 'parallel', soundId: 'diceRoll' }],
   // NUEVO H3.4 — intento de añadir dado ignorado por tope de mesa (no hay dado que animar, spec §5.3).
   NUCLEO_DIE_ADD_SKIPPED: [],
-  ABILITY_ACTIVATED: [], // sin cambio — la animación de "Núcleo gastado" tampoco pasa por juice
-                         // (mismo razonamiento, §1.1); `nucleo-table-view.ts` la resuelve internamente
-                         // leyendo el diff de snapshot, no el evento.
+  // MODIFICADO H5.6 §1 — "Activar una habilidad": foco total sobre el dado gastado (focusId ya
+  // resuelto por H5.4 §3) + flash de impacto. `EffectsDirector` envuelve automáticamente con
+  // blur+zoom+hold+reset (H5.3 §2.2) — este array es SOLO el contenido que juega DENTRO de esa
+  // ventana de foco. El daño real de una habilidad de ataque llega en un evento SEPARADO
+  // (ENEMY_DAMAGED/MINION_DAMAGED, ver H5.6 §1.1) — no se duplica floatingNumber/hitImpact/
+  // screenShake aquí, evita un doble impacto visual sobre el mismo golpe.
+  ABILITY_ACTIVATED: [{ recipeId: 'focusWhiteLens', mode: 'parallel', isBigMoment: true, soundId: 'cardFlip' }],
   // NUEVO H4 (spec §3.2) — banner de canvas "Tu turno"/"Turno del Enemigo", enganchado al evento
   // real de dominio TURN_ENDED (nextTurnOwner). Antes: [].
   TURN_ENDED: [{ recipeId: 'turnBanner', mode: 'sequential' }],
@@ -63,9 +67,14 @@ export const JUICE_CONFIG: JuiceConfig = {
   ],
   // NUEVO §3.9 — el Secuaz sale de mesa (spec §3.9.6): receta nueva `minionDefeated` (fade+shrink),
   // sin receta reutilizable de "muerte" existente (H1.15 nunca elimina Aliados de mesa).
-  MINION_DEFEATED: [{ recipeId: 'minionDefeated', mode: 'sequential' }],
+  // MODIFICADO H5.6 §1 — se marca grande (momento "muerte de Secuaz", vision.md). El `focusId` de
+  // este evento (`resolveJuiceTarget`, sin cambios: `event.instanceId`) apunta al Secuaz derrotado,
+  // foco natural.
+  MINION_DEFEATED: [{ recipeId: 'minionDefeated', mode: 'sequential', isBigMoment: true }],
   MINION_PASSIVE_EFFECTS_APPLIED: [],
-  PHASE_CHANGED: [{ recipeId: 'screenShake', mode: 'sequential' }],
+  // NUEVO H5.3 §3 — momento grande ESTÁTICO: cambio de fase de Enemigo/Escenario dispara Level-Up
+  // (decisions.md), vision.md lo marca como foco total. Contenido (screenShake) sin cambio.
+  PHASE_CHANGED: [{ recipeId: 'screenShake', mode: 'sequential', isBigMoment: true }],
   LEADER_LEVELED_UP: [],
   CARD_PLAYED: [{ recipeId: 'cardFlip', mode: 'parallel', soundId: 'cardFlip' }], // soundId NUEVO H2.13
   ENEMY_DAMAGED: [

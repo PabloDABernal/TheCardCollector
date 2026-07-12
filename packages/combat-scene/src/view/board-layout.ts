@@ -2,8 +2,15 @@
  * H4 spec (`docs/specs/H4_layout_fuente_unica.md`) §2.1 — única fuente de verdad de coordenadas de
  * combate. Todo lo que se deriva de un vecino (`HAND_ROW_POSITION`, `LEADER_POSITION`, `ALLIES_ROW_Y`,
  * `NUCLEO_TABLE_ROW_Y`, ...) se calcula por fórmula en este mismo módulo — nunca se redeclara en otro
- * archivo. `ENEMY_POSITION`/`SCENARIO_POSITION` son las únicas ANCLAS (no dependen de ninguna fila
- * vecina por encima), así que permanecen como literales documentados aquí mismo.
+ * archivo.
+ *
+ * H5.1 (`docs/specs/H5.1_mesa_dados_centro.md`) §1 — INVIERTE cuál nodo es la raíz de la cadena de
+ * derivación: `NUCLEO_TABLE_CENTER_Y` (centro exacto del viewport) pasa a ser la ÚNICA ancla, y todo
+ * lo demás deriva en DOS direcciones desde ahí (zona superior Enemigo→Secuaces→Escenario hacia
+ * arriba; zona inferior Aliados→Mano→Líder hacia abajo). `ENEMY_POSITION`/`SCENARIO_POSITION`/
+ * `LEADER_POSITION` dejan de ser anclas top-down independientes — siguen siendo literales solo en el
+ * sentido de que no se recalculan desde fuera de este archivo, pero ahora se DERIVAN por fórmula
+ * desde `NUCLEO_TABLE_CENTER_Y`, no al revés.
  *
  * Dirección de dependencia: `juice/recipes/placeholder.ts` IMPORTA estas constantes (nunca al revés)
  * — este archivo no importa nada de `placeholder.ts`, así que no hay ciclo posible. Este archivo ya NO
@@ -26,32 +33,59 @@
  *
  *  FIX URGENTE P0 — `height` sube de 1920 a 2060 (+140px). Combinado con bajar
  *  `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR` de 5 a 2 (arriba), esto resuelve la regresión P0 en la
- *  que el Líder (tile, HP, sus 4 habilidades) se renderizaba SIEMPRE fuera del viewport:
- *  `LEADER_CONTENT.bottom` en el peor caso reservado (N=2 dados EXTRA por color) queda en 2008px,
- *  52px por debajo de este nuevo `height` (mismo margen que existía en el diseño original entre el
- *  caso feliz de 0 dados EXTRA y el viewport de 1920). Deuda técnica documentada (§4 de la spec): si
- *  en el futuro un card permite apilar más de 2 dados EXTRA del mismo color, este valor debe
- *  revisarse junto con `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR`. */
+ *  que el Líder (tile, HP, sus 4 habilidades) se renderizaba SIEMPRE fuera del viewport. H5.1
+ *  reutiliza el mismo viewport (sin cambios) — la mesa central se logra reorganizando la cadena de
+ *  derivación dentro del mismo alto/ancho, no ampliando el viewport de nuevo. */
 export const COMBAT_SCENE_VIEWPORT = { width: 1080, height: 2060 } as const;
 
-export const ENEMY_POSITION = { x: 540, y: 300 };
-export const SCENARIO_POSITION = { x: 540, y: 960 };
-
 // FIX QA post-`6d14b52` — duplicados documentados de las dimensiones reales de sprite que SÍ dibujan
-// `role-view.ts` (`ROLE_SIZE` 200×200, tile de Líder/Enemigo/Escenario) y `nucleo-table-view.ts`
-// (`NUCLEO_DIE_SIZE` 64, solo el dado FIXED base — los dados EXTRA apilados con
+// `nucleo-table-view.ts` (`NUCLEO_DIE_SIZE` 64, solo el dado FIXED base — los dados EXTRA apilados con
 // `NUCLEO_EXTRA_DIE_STACK_OFFSET_PX` quedan fuera de este cálculo, limitación conocida y
 // preexistente, no introducida por este fix). Mismo criterio de aislamiento que
 // `MINION_TILE_HEIGHT_PX`/`ABILITY_ICON_HEIGHT_PX` (más abajo): se duplica el número en vez de
 // importarlo, para no crear una dependencia cruzada view-a-view solo por una constante — pero queda
 // comentado 1:1 contra su origen para que un cambio futuro en uno se refleje manualmente en el otro.
-export const ROLE_TILE_HALF_PX = 100; // = ROLE_SIZE.width/height (200) / 2 (role-view.ts)
+// H5.1 §3 — el tamaño del dado (`NUCLEO_DIE_SIZE`) NO se toca en esta historia (la spec sugiere subirlo
+// moderadamente, 80-84, como ajuste visual opcional; se deja para una pasada de tuneo posterior, sin
+// riesgo de romper el ancho de columnas dentro de `NUCLEO_PANEL_WIDTH`, ver más abajo).
 export const NUCLEO_TILE_HALF_PX = 32; // = NUCLEO_DIE_SIZE (64) / 2 (nucleo-table-view.ts)
-export const ROLE_HUD_TEXT_OFFSET_PX = 120; // = HUD_TEXT_OFFSET_Y (role-view.ts)
-// Alto aproximado de una línea de texto HUD (fontSize 20px, role-view.ts) — el texto de
+
+// NUEVO H5.1 §2.2 — tamaño compacto de tile de rol (Líder/Enemigo/Escenario), sustituye a
+// `ROLE_TILE_HALF_PX` (100, RETIRADO — solo se usaba dentro de este archivo/su test, ninguna
+// dependencia externa). Documentado 1:1 contra su origen real igual que el resto de duplicados de
+// este archivo — `role-view.ts` reduce `ROLE_SIZE` de {200,200} a {140,140} en el mismo cambio.
+export const COMPACT_ROLE_TILE_HALF_PX = 70; // = ROLE_SIZE compacto (140) / 2 (role-view.ts)
+
+// NUEVO H5.1 §2.2 — offset de la fila de habilidades bajo un tile de rol compacto (Líder/Enemigo),
+// escalado proporcionalmente desde el valor anterior (180 → ~126, redondeado a 120 por la spec).
+export const COMPACT_ABILITIES_ROW_OFFSET_PX = 120;
+
+// NUEVO H5.1 §2.2 — gap dentro de las zonas compactas (superior/inferior alrededor de la mesa),
+// separado de `CONTENT_GAP_PX` (12, zonas no-compactas de fuera de esta historia — hoy ninguna, ver
+// nota abajo). AJUSTADO a 6 (spec sugería 8 como punto de partida, "Programmer ajusta... si el
+// resultado no pasa" — con 8 el margen inferior real cae a 32px, por debajo del mínimo de 36px ya
+// exigido por el test heredado de H4 P0 más abajo; 6 es el valor máximo dentro de ese margen).
+export const COMPACT_ZONE_GAP_PX = 6;
+
+// Margen mínimo garantizado entre el borde real (bounding box) de dos filas de contenido
+// consecutivas (tiles/texto/iconos), NO solo entre los fondos de `PANEL_ZONES`. H5.1 — con la mesa de
+// Núcleos como ancla central, TODAS las filas de contenido quedan dentro de las zonas compactas
+// (superior/inferior), así que `COMPACT_ZONE_GAP_PX` es hoy el único gap efectivamente usado en la
+// cadena de derivación; `CONTENT_GAP_PX` se conserva como constante propia (histórica, referenciada
+// por comentarios/tests) por si una futura zona no-compacta vuelve a necesitarla.
+export const CONTENT_GAP_PX = 12;
+
+// Alto aproximado de una línea de texto HUD (fontSize 20px, `CombatBoardOverlay.tsx`) — el texto de
 // Enemigo/Líder/Escenario no usa saltos de línea (`\n`) hoy, así que basta con una línea; si algún
-// día se añaden más líneas, este valor (y por tanto el hueco de `panel-scenario`) debe crecer con él.
-export const ROLE_HUD_TEXT_LINE_HEIGHT_PX = 24;
+// día se añaden más líneas, este valor (y por tanto el hueco reservado para Escenario) debe crecer.
+const ROLE_HUD_TEXT_LINE_HEIGHT_PX = 24;
+// NUEVO H5.1 — offset del bloque de texto HTML (`CombatBoardOverlay.tsx` `ROLE_TEXT_OFFSET_Y`) bajo
+// el CENTRO de un tile de rol compacto, escalado proporcionalmente al tile compacto (140/200 = 0.7)
+// desde el valor anterior (120 → 84). Solo relevante para el Escenario en este archivo: es el único
+// rol cuyo borde inferior de CONTENIDO real está gobernado por el texto (Trama/Fase) y no por una fila
+// de habilidades (Líder/Enemigo tienen `AbilityRow`, cuyo offset —`COMPACT_ABILITIES_ROW_OFFSET_PX`,
+// 120— ya cae más abajo que el texto, así que domina el cálculo de su propio bounding box en su lugar).
+const COMPACT_ROLE_HUD_TEXT_OFFSET_PX = 84; // = ROLE_TEXT_OFFSET_Y compacto (CombatBoardOverlay.tsx)
 
 // FIX_combat_viewport_and_layout.md §2.1 — `MINIONS_ROW_Y` debe dejar hueco vertical suficiente
 // contra `ENEMY_ABILITIES_ROW_Y` para que el tile de secuaz (120x180, `CARD_PLACEHOLDER_HEIGHT`,
@@ -67,131 +101,107 @@ export const ABILITY_ICON_HEIGHT_PX = 24; // = ICON_HEIGHT (ability-cooldown-vie
 // misma semi-altura (FIX QA post-`6d14b52`, ver auditoría de `panel-allies`/`panel-hand` abajo).
 export const CARD_TILE_HALF_PX = MINION_TILE_HEIGHT_PX / 2; // 90
 
-// ENEMY_ABILITIES_ROW_Y + ABILITY_ICON_HEIGHT_PX/2 + MINION_TILE_HEIGHT_PX/2 + margen de 20px
-// = 480 + 12 + 90 + 20 = 602 → redondeado a 620 para dejar margen legible (no pixel-perfect al
-// límite) — ver FIX_combat_viewport_and_layout.md §2.1. 620 es un valor fijado y verificado en la
-// spec, no recalculado en runtime.
-export const MINIONS_ROW_Y = 620;
+// ============================================================================================
+// H5.1 §2.1 — ancla raíz ÚNICA: centro vertical exacto del viewport. Ya NO es "lo que sobra tras
+// colocar lo demás" (como `ENEMY_POSITION` en el modelo anterior) — es un literal de DISEÑO
+// explícito (el requisito de backlog H5.1 es "centro de pantalla").
+// ============================================================================================
+export const NUCLEO_TABLE_CENTER_Y = Math.round(COMBAT_SCENE_VIEWPORT.height / 2); // 1030
 
-// H2.10 spec §2.3 — fila de iconos de CD de habilidad, debajo del tile de rol y su HUD de texto.
-// `LEADER_ABILITIES_ROW_Y` se define más abajo, junto a `LEADER_POSITION` (depende de `HAND_ROW_POSITION`).
-export const ENEMY_ABILITIES_ROW_Y = ENEMY_POSITION.y + 180;
+// NUEVO H5.1 §2.1 — rango pedido por backlog H5.1 ("40-50% alto, 60-80% ancho"). Valores de diseño
+// dentro del rango, no derivados de contenido — única excepción a `panelFromContent` en este archivo
+// (ver `PANEL_ZONES` más abajo). `NUCLEO_PANEL_HEIGHT_RATIO` queda en el EXTREMO INFERIOR permitido
+// (0.40, no 0.45 como sugería el punto de partida de la spec): un panel más alto reduce el
+// presupuesto vertical disponible para las zonas compactas de arriba/abajo, y con `0.45` el margen
+// inferior real (Líder) caía por debajo del mínimo de 36px ya exigido por un test heredado de H4 —
+// `0.40` es el valor más alto dentro del rango que sigue dejando ese margen en verde (ver
+// `board-layout.test.ts`).
+export const NUCLEO_PANEL_HEIGHT_RATIO = 0.4; // dentro de [0.40, 0.50]
+export const NUCLEO_PANEL_WIDTH_RATIO = 0.72; // dentro de [0.60, 0.80]
 
-// Margen mínimo garantizado entre el borde real (bounding box) de dos filas de contenido
-// consecutivas (tiles/texto/iconos), NO solo entre los fondos de `PANEL_ZONES`. Toda fila derivada
-// de este archivo (`ALLIES_ROW_Y`, `NUCLEO_TABLE_ROW_Y`, `HAND_ROW_POSITION`, `LEADER_POSITION`, ...)
-// se calcula a partir de este valor — H4 spec §2.1, ver también `board-layout.test.ts`.
-// FIX visual (feedback Director Creativo en móvil real, docs/specs/H4_diseno_real_ui.md) — bajado de
-// 20 a 12: el Director señaló huecos negros muertos entre paneles (HUD↔panel-scenario, dentro de
-// panel-scenario alrededor del tile, panel-allies vacío ocupando demasiado alto) en su móvil real.
-// 12px sigue dejando margen real y positivo entre bounding boxes de contenido consecutivas (encima de
-// `PANEL_CONTENT_PADDING_PX` × 2 = 10, así que el fondo de dos `PanelZone` vecinas nunca llega a
-// tocarse — `board-layout.test.ts` "sin solapes" lo verifica), solo reduce el AIRE sobrante que no
-// aportaba nada.
-export const CONTENT_GAP_PX = 12;
+export const NUCLEO_PANEL_HEIGHT = Math.round(COMBAT_SCENE_VIEWPORT.height * NUCLEO_PANEL_HEIGHT_RATIO); // 824
+export const NUCLEO_PANEL_WIDTH = Math.round(COMBAT_SCENE_VIEWPORT.width * NUCLEO_PANEL_WIDTH_RATIO); // 778
 
-// Borde inferior real del contenido de `panel-scenario`: el texto HUD (offset 120 + una línea, 144)
-// cae más abajo que el propio tile (100) — Math.max cubre ambos casos sin asumir cuál domina.
-const SCENARIO_CONTENT_BOTTOM_Y = Math.max(
-  SCENARIO_POSITION.y + ROLE_TILE_HALF_PX,
-  SCENARIO_POSITION.y + ROLE_HUD_TEXT_OFFSET_PX + ROLE_HUD_TEXT_LINE_HEIGHT_PX,
-); // 1104
-
-// FIX QA post-`6d14b52` — antes 1300 (número fijo, nunca recalculado tras ajustar filas vecinas).
-// Derivado del borde inferior real de `panel-scenario` (`SCENARIO_CONTENT_BOTTOM_Y`) + `CONTENT_GAP_PX`
-// + la semi-altura real del tile de Aliado (`CARD_TILE_HALF_PX`) — bug análogo al del Líder hallado
-// al auditar el resto de filas: el tile de Aliado (120×180) se solapaba ~10px con `panel-nucleos`.
-export const ALLIES_ROW_Y = SCENARIO_CONTENT_BOTTOM_Y + CONTENT_GAP_PX + CARD_TILE_HALF_PX; // 1206
-const ALLIES_CONTENT_BOTTOM_Y = ALLIES_ROW_Y + CARD_TILE_HALF_PX; // 1296
+// La fila de dados FIXED se sigue centrando en `NUCLEO_TABLE_CENTER_Y` — con 0 dados EXTRA (caso
+// normal), los dados están exactamente en el centro geométrico del panel. El panel tiene margen de
+// sobra por diseño (824px de panel contra ~204px de contenido real de los dados) para que el apilado
+// de dados EXTRA (hasta `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR`) nunca se acerque al borde del panel.
+export const NUCLEO_TABLE_ROW_Y = NUCLEO_TABLE_CENTER_Y; // 1030, reemplaza la fórmula derivada de ALLIES_CONTENT_BOTTOM_Y
 
 /** RENOMBRADO H3.4 de `NUCLEO_POOL_ROW_Y` — mesa persistente de dados (ya no "pool" que se vacía).
- *  Alias `NUCLEO_POOL_ROW_Y` conservado para no romper imports existentes fuera de este cambio.
- *  FIX QA post-`6d14b52` — antes 1450 (número fijo). Ahora derivado de `ALLIES_CONTENT_BOTTOM_Y` +
- *  `CONTENT_GAP_PX` + `NUCLEO_TILE_HALF_PX`, dejando sitio real (no solo en `PANEL_ZONES`) entre el
- *  tile de Aliado y el dado FIXED — el tile de Aliado se solapaba ~10px con `panel-nucleos` antes. */
-export const NUCLEO_TABLE_ROW_Y = ALLIES_CONTENT_BOTTOM_Y + CONTENT_GAP_PX + NUCLEO_TILE_HALF_PX; // 1340
+ *  Alias conservado para no romper referencias existentes fuera de este cambio. */
 export const NUCLEO_POOL_ROW_Y = NUCLEO_TABLE_ROW_Y;
 
-/** NUEVO H3 (capa visual) — separación vertical entre un dado FIXED y sus dados EXTRA apilados del
- *  mismo color (spec H3 §5.2, "agrupación visual por color"). Declarada aquí (antes de su primer uso
- *  en `NUCLEO_MAX_STACK_OFFSET_PX` más abajo) — movida desde su ubicación original junto a
- *  `MINIONS_ROW_X_ORIGIN`/`ALLIES_ROW_X_ORIGIN` para resolver TS2448/TS2454 ("used before its
- *  declaration"): esas dos constantes son literales independientes sin relación de orden con esta, así
- *  que moverla aquí no las afecta ni cambia ningún valor, solo el orden textual del archivo. */
-export const NUCLEO_EXTRA_DIE_STACK_OFFSET_PX = 70;
+const NUCLEO_PANEL_TOP_Y = NUCLEO_TABLE_CENTER_Y - NUCLEO_PANEL_HEIGHT / 2; // 1030 - 412 = 618
+const NUCLEO_PANEL_BOTTOM_Y = NUCLEO_TABLE_CENTER_Y + NUCLEO_PANEL_HEIGHT / 2; // 1030 + 412 = 1442
 
-// FIX solape móvil real (Director Creativo, hallazgo de este Programmer) — el bounding box de
-// `panel-nucleos` usaba SOLO el tamaño del dado FIXED (`NUCLEO_TILE_HALF_PX`), ignorando que
-// `nucleo-table-view.ts` (`positionFor`) apila los dados EXTRA de un mismo color DEBAJO del FIXED,
-// cada uno separado `NUCLEO_EXTRA_DIE_STACK_OFFSET_PX` (70) más que el anterior del mismo color. Con
-// al menos 1 dado EXTRA en mesa, el bottom real de la mesa de Núcleos queda por debajo de lo que este
-// archivo asumía, invadiendo el hueco reservado para Mano (medido en móvil real: ~-13px de overlap).
-//
-// Peor caso posible: todos los dados EXTRA que caben en mesa (`DEFAULT_NUCLEO_TABLE_MAX_DICE` menos
-// los `FIXED_NUCLEO_DICE_COUNT` fijos, uno por color) son del MISMO color y se apilan en una sola
-// columna — es la pila más alta que `positionFor` puede llegar a dibujar. El bounding box de
-// `panel-nucleos`/el hueco hacia Mano deben soportar este peor caso siempre, no solo el caso con 0
-// dados EXTRA, para que el gap nunca pueda volverse negativo sin importar cuántas cartas/equipo
-// añadan dados EXTRA de Núcleo durante el combate.
-// FIX Reviewer (hallazgo doc. tras commit `195ecca`) — este layout es COMPILE-TIME (constantes
-// módulo-level, calculadas una sola vez al cargar el archivo) y por eso usaba
-// `DEFAULT_NUCLEO_TABLE_MAX_DICE` (el valor por defecto de dominio), NO `CombatEngineConfig.tableMaxDice`
-// (que SÍ es configurable por instancia en runtime, ver `packages/domain-combat`). Hoy nadie
-// sobreescribe `tableMaxDice` en `apps/shell`, así que no hay bug activo por esa vía.
-//
-// FIX URGENTE P0 (docs/specs/H4_fix_urgente_lider_fuera_viewport.md) — este valor derivado
-// (`DEFAULT_NUCLEO_TABLE_MAX_DICE - FIXED_NUCLEO_DICE_COUNT = 10-5 = 5`) asumía SIEMPRE el peor caso
-// matemáticamente posible de apilado (5 dados EXTRA del mismo color), sin importar que NINGÚN card
-// implementa hoy `ADD_NUCLEO_DIE` — el resultado era una reserva de espacio permanente que empujaba
-// `LEADER_CONTENT.bottom` a 2218px, 298px por ENCIMA de `COMBAT_SCENE_VIEWPORT.height` (1920 antes de
-// este fix), dejando al Líder (tile, HP, sus 4 habilidades) SIEMPRE fuera del viewport, incluso con 0
-// dados EXTRA reales en mesa. Sustituido por un LITERAL de diseño (`2`), acotado al rango realista
-// (0–2 dados EXTRA por color) en vez de al peor caso teórico del dominio — ya NO se deriva de
-// `DEFAULT_NUCLEO_TABLE_MAX_DICE`/`FIXED_NUCLEO_DICE_COUNT` (import de `@collector/domain-combat`
-// retirado de este archivo, ver comentario de cabecera). Si en el futuro un card permite apilar más
-// de 2 dados EXTRA del mismo color en mesa, este valor Y `COMBAT_SCENE_VIEWPORT.height`
-// (`CombatScene.ts`) deben revisarse juntos — o migrar a reserva 100% dinámica (recalculada contra el
-// estado real de cada render), la solución correcta a largo plazo pero de alcance amplio (toca
-// `role-view.ts` y 3 componentes React), fuera de este fix P0 (ver §4 de la spec).
-export const NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR = 2; // tope de DISEÑO (rango realista 0-2), no derivado de DEFAULT_NUCLEO_TABLE_MAX_DICE
-const NUCLEO_MAX_STACK_OFFSET_PX = NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR * NUCLEO_EXTRA_DIE_STACK_OFFSET_PX; // 2*70 = 140
-const NUCLEO_CONTENT_BOTTOM_Y = NUCLEO_TABLE_ROW_Y + NUCLEO_MAX_STACK_OFFSET_PX + NUCLEO_TILE_HALF_PX; // 1340+140+32 = 1512 (peor caso reservado: N=2)
+// ============================================================================================
+// Zona SUPERIOR — deriva HACIA ARRIBA desde el borde superior del panel de Núcleos (H5.1 §2.2).
+// Orden de derivación: Escenario (adyacente al panel) → Secuaces → Enemigo (arriba del todo).
+// ============================================================================================
 
-// H4 spec (`docs/specs/H4_layout_fuente_unica.md`) §2.1 — antes literal (1474, importado de
-// `juice/recipes/placeholder.ts`), ahora derivado por fórmula del borde inferior real de Núcleos.
-// NOTA DE VERIFICACIÓN (Programmer anterior): con SOLO el dado FIXED (`NUCLEO_TILE_HALF_PX`), este
-// número coincidía EXACTAMENTE con el literal anterior (1474) — el `board-layout.test.ts` de "sin
-// solapes" ya estaba en VERDE antes de esa migración con 0 dados EXTRA, pero el bug real reportado en
-// móvil (Director Creativo) aparecía con >=1 dado EXTRA apilado, caso que ese bounding box no
-// contemplaba (medido: ~-13px de overlap real con la fila de Mano).
-// FIX de este Programmer (hallazgo de la investigación anterior) — `NUCLEO_CONTENT_BOTTOM_Y` asume el
-// PEOR CASO reservado de apilado de dados EXTRA (ver `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR` arriba),
-// así que `HAND_ROW_POSITION` baja lo suficiente para dejar hueco real SIEMPRE, no solo en el caso
-// feliz de 0 dados EXTRA.
-// FIX URGENTE P0 (docs/specs/H4_fix_urgente_lider_fuera_viewport.md) — recalculado en cascada tras
-// bajar `NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR` de 5 a 2: 1824 → 1614.
-export const HAND_ROW_POSITION = { x: 540, y: NUCLEO_CONTENT_BOTTOM_Y + CONTENT_GAP_PX + CARD_TILE_HALF_PX }; // 1512+12+90 = 1614
+/** Semi-extensión del contenido del Escenario hacia ABAJO desde su centro — el Escenario no tiene
+ *  fila de habilidades (a diferencia de Líder/Enemigo), así que su borde inferior real está
+ *  gobernado por el bloque de texto HTML (Trama/Fase, `CombatBoardOverlay.tsx`), no por el tile.
+ *  `Math.max` cubre ambos casos sin asumir cuál domina (mismo criterio que el `SCENARIO_CONTENT`
+ *  de abajo). */
+const SCENARIO_BOTTOM_HALF_PX = Math.max(
+  COMPACT_ROLE_TILE_HALF_PX,
+  COMPACT_ROLE_HUD_TEXT_OFFSET_PX + ROLE_HUD_TEXT_LINE_HEIGHT_PX,
+); // max(70, 108) = 108
 
-// H4 spec §2.1 — derivado del borde inferior real de Mano. `LEADER_POSITION` cascada con
-// `HAND_ROW_POSITION` (misma fórmula de derivación H4, sin cambios de estructura).
-//
-// FIX URGENTE P0 (docs/specs/H4_fix_urgente_lider_fuera_viewport.md) — el ⚠️ HALLAZGO escalado a
-// Architect en la ronda anterior (peor caso teórico de 5 dados EXTRA empujando `LEADER_CONTENT.bottom`
-// a 2218px, 298px por ENCIMA de `COMBAT_SCENE_VIEWPORT.height` = 1920, dejando al Líder SIEMPRE fuera
-// del viewport) queda resuelto por la variante de la opción 4 elegida por Architect: bajar el tope
-// reservado (`NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR` 5→2, arriba) + crecer el viewport lo justo
-// (`COMBAT_SCENE_VIEWPORT.height` 1920→2060, `CombatScene.ts`). Con esos dos cambios,
-// `LEADER_CONTENT.bottom` en el peor caso reservado (N=2) queda en 2008px, 52px por debajo de 2060 —
-// y con 0 dados EXTRA reales (caso de hoy), 192px de margen. Deuda técnica documentada (§4 de la
-// spec): si en el futuro un card permite apilar más de 2 dados EXTRA del mismo color, este análisis
-// debe repetirse (o migrar a reserva 100% dinámica).
-export const LEADER_POSITION = {
+export const SCENARIO_POSITION = {
   x: 540,
-  y: HAND_ROW_POSITION.y + CARD_TILE_HALF_PX + CONTENT_GAP_PX + ROLE_TILE_HALF_PX, // (1614+90)+12+100 = 1816
+  y: NUCLEO_PANEL_TOP_Y - COMPACT_ZONE_GAP_PX - SCENARIO_BOTTOM_HALF_PX, // 618-6-108 = 504
 };
 
-// H2.10 spec §2.3 — fila de iconos de CD de habilidad, debajo del tile de rol y su HUD de texto.
-export const LEADER_ABILITIES_ROW_Y = LEADER_POSITION.y + 180; // 1816+180 = 1996
+export const MINIONS_ROW_Y =
+  SCENARIO_POSITION.y - COMPACT_ROLE_TILE_HALF_PX - COMPACT_ZONE_GAP_PX - CARD_TILE_HALF_PX; // 504-70-6-90 = 338
+
+/** Semi-extensión del contenido de Enemigo/Líder hacia su fila de habilidades — a diferencia del
+ *  Escenario, Líder/Enemigo SÍ tienen `AbilityRow` bajo el tile, a un offset (120) mayor que el
+ *  offset del texto HUD (84+24=108), así que la fila de habilidades es la que domina el borde
+ *  inferior real de contenido. */
+const ROLE_WITH_ABILITIES_BOTTOM_HALF_PX = COMPACT_ABILITIES_ROW_OFFSET_PX + ABILITY_ICON_HEIGHT_PX / 2; // 120+12 = 132
+
+export const ENEMY_POSITION = {
+  x: 540,
+  y: MINIONS_ROW_Y - CARD_TILE_HALF_PX - COMPACT_ZONE_GAP_PX - ROLE_WITH_ABILITIES_BOTTOM_HALF_PX, // 338-90-6-132 = 110
+};
+
+export const ENEMY_ABILITIES_ROW_Y = ENEMY_POSITION.y + COMPACT_ABILITIES_ROW_OFFSET_PX; // 110+120 = 230
+
+// ============================================================================================
+// Zona INFERIOR — deriva HACIA ABAJO desde el borde inferior del panel de Núcleos (H5.1 §2.2).
+// Orden de derivación: Aliados (adyacente al panel) → Mano → Líder (abajo del todo).
+// ============================================================================================
+
+export const ALLIES_ROW_Y = NUCLEO_PANEL_BOTTOM_Y + COMPACT_ZONE_GAP_PX + CARD_TILE_HALF_PX; // 1442+6+90 = 1538
+
+export const HAND_ROW_POSITION = {
+  x: 540,
+  y: ALLIES_ROW_Y + CARD_TILE_HALF_PX + COMPACT_ZONE_GAP_PX + CARD_TILE_HALF_PX, // 1538+90+6+90 = 1724
+};
+
+export const LEADER_POSITION = {
+  x: 540,
+  y: HAND_ROW_POSITION.y + CARD_TILE_HALF_PX + COMPACT_ZONE_GAP_PX + COMPACT_ROLE_TILE_HALF_PX, // 1724+90+6+70 = 1890
+};
+
+export const LEADER_ABILITIES_ROW_Y = LEADER_POSITION.y + COMPACT_ABILITIES_ROW_OFFSET_PX; // 1890+120 = 2010
+
+/** NUEVO H3 (capa visual) — separación vertical entre un dado FIXED y sus dados EXTRA apilados del
+ *  mismo color (spec H3 §5.2, "agrupación visual por color"). */
+export const NUCLEO_EXTRA_DIE_STACK_OFFSET_PX = 70;
+
+// FIX URGENTE P0 (docs/specs/H4_fix_urgente_lider_fuera_viewport.md) — este valor es un LITERAL de
+// diseño (rango realista 0-2 dados EXTRA por color), no derivado del peor caso teórico del dominio
+// (`DEFAULT_NUCLEO_TABLE_MAX_DICE - FIXED_NUCLEO_DICE_COUNT`). Si en el futuro un card permite apilar
+// más de 2 dados EXTRA del mismo color en mesa, este valor debe revisarse junto con el presupuesto de
+// `NUCLEO_PANEL_HEIGHT`/`NUCLEO_PANEL_HEIGHT_RATIO` (H5.1).
+export const NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR = 2;
+const NUCLEO_MAX_STACK_OFFSET_PX = NUCLEO_MAX_EXTRA_DICE_STACKED_PER_COLOR * NUCLEO_EXTRA_DIE_STACK_OFFSET_PX; // 2*70 = 140
+const NUCLEO_CONTENT_BOTTOM_Y = NUCLEO_TABLE_ROW_Y + NUCLEO_MAX_STACK_OFFSET_PX + NUCLEO_TILE_HALF_PX; // 1030+140+32 = 1202 (peor caso reservado: N=2)
 
 export const TILE_SEPARATION_PX = 140;
 // NUEVO H4.x — exportadas (antes privadas a minions-view.ts/allies-view.ts, eliminados ese mismo
@@ -222,6 +232,17 @@ export const PANEL_BORDER_WIDTH_PX = 2;
 // ZONE_LABEL_COLOR_HEX retirado (H4 spec §4.1) — la etiqueta de zona deja de dibujarse en Phaser,
 // migrada a `CombatBoardOverlay.tsx` (apps/shell), ver §2 de la spec.
 
+// NUEVO H5.1 §3 — constantes de diseño del fondo/borde distintivo de la mesa de Núcleos
+// (`nucleo-table-panel.ts`), mismo criterio que `PANEL_FILL_COLOR`/`PANEL_BORDER_COLOR` de arriba
+// pero con un tono propio para diferenciar la mesa (la "ancla" visual permanente del tablero) del
+// resto de paneles.
+export const NUCLEO_PANEL_TABLE_FILL_COLOR = 0x171620; // ligeramente más oscuro que --binder (0x1f1e26)
+export const NUCLEO_PANEL_TABLE_FILL_ALPHA = 0.55;
+export const NUCLEO_PANEL_TABLE_ACCENT_COLOR = 0xd4a24c; // = --foil
+export const NUCLEO_PANEL_TABLE_ACCENT_ALPHA = 0.35; // translúcido — presente SIEMPRE, no solo en foco
+export const NUCLEO_PANEL_TABLE_ACCENT_WIDTH_PX = 3;
+export const NUCLEO_PANEL_TABLE_RADIUS_PX = 24; // más redondeado que RADIUS_PANEL (12) — distingue su forma
+
 export interface PanelZone {
   readonly id: string; // nombre estable, usado como scene name (debug/QA)
   readonly x: number; // centro X
@@ -231,18 +252,20 @@ export interface PanelZone {
   readonly label: string; // reutiliza el mismo texto que board.ts ya usaba en `zoneLabels`
 }
 
-// FIX QA post-`6d14b52` — REESCRITO: la versión anterior derivaba cada `PanelZone` a partir de
-// puntos medios ENTRE CENTROS de fila/panel vecino ("boundaries"), sin conocer nunca el tamaño real
-// del sprite que cada panel aloja — así fue como se coló el bug reportado (el tile de 200×200 del
-// Líder no cabía en un panel dimensionado solo por la distancia a su vecino). Ahora cada zona parte
-// de su BOUNDING BOX de contenido real (tile + HUD/iconos, usando las mismas constantes de tamaño
-// que sus vistas — `ROLE_TILE_HALF_PX`, `CARD_TILE_HALF_PX`, `NUCLEO_TILE_HALF_PX`, etc.) y el panel
-// se construye como ese bounding box + un margen fijo (`PANEL_CONTENT_PADDING_PX`). Como
-// `CONTENT_GAP_PX` (12, tras el FIX visual de más arriba) ya garantiza esa separación mínima entre
-// bounding boxes de filas vecinas, y `PANEL_CONTENT_PADDING_PX` (5) consume como mucho 10 de esos
-// 12px en cada frontera (dejando ~2px libres reales entre fondos de panel), ningún panel puede
-// solaparse con su vecino ni dejar su sprite fuera — por construcción, no por coincidencia.
-const PANEL_CONTENT_PADDING_PX = 5;
+// FIX QA post-`6d14b52` — cada `PanelZone` (salvo `panel-nucleos`, ver H5.1 abajo) parte de su
+// BOUNDING BOX de contenido real (tile + HUD/iconos, usando las mismas constantes de tamaño que sus
+// vistas — `COMPACT_ROLE_TILE_HALF_PX`, `CARD_TILE_HALF_PX`, `NUCLEO_TILE_HALF_PX`, etc.) y el panel
+// se construye como ese bounding box + un margen fijo (`PANEL_CONTENT_PADDING_PX`).
+// AJUSTADO H5.1 — bajado de 5 a 2: con `COMPACT_ZONE_GAP_PX` (6) por debajo del antiguo `2*5=10`
+// que este padding consumía en cada frontera, dos paneles vecinos dentro de una zona compacta
+// (`panel-enemy`/`panel-minions`, `panel-allies`/`panel-hand`, `panel-hand`/`panel-leader`, ...)
+// llegaban a solaparse aunque su CONTENIDO real no lo hiciera (test "PANEL_ZONES sin solapes").
+// `2` mantiene el mismo relleno cosmético entre sprite y fondo de panel (visualmente sutil en
+// cualquiera de los dos valores) mientras deja `6 - 2*2 = 2px` de margen real entre fondos de panel
+// vecinos — el resto de constantes de esta cadena (`COMPACT_ZONE_GAP_PX`) no pueden subir sin romper
+// el margen mínimo de 36px ya exigido para el Líder (ver test H4 P0 más abajo), así que este es el
+// lado que cede.
+const PANEL_CONTENT_PADDING_PX = 2;
 
 export interface ContentBox {
   readonly top: number;
@@ -256,7 +279,7 @@ function panelFromContent(x: number, width: number, id: string, label: string, c
 }
 
 const ENEMY_CONTENT: ContentBox = {
-  top: ENEMY_POSITION.y - ROLE_TILE_HALF_PX,
+  top: ENEMY_POSITION.y - COMPACT_ROLE_TILE_HALF_PX,
   bottom: ENEMY_ABILITIES_ROW_Y + ABILITY_ICON_HEIGHT_PX / 2,
 };
 const MINIONS_CONTENT: ContentBox = {
@@ -264,12 +287,12 @@ const MINIONS_CONTENT: ContentBox = {
   bottom: MINIONS_ROW_Y + CARD_TILE_HALF_PX,
 };
 const SCENARIO_CONTENT: ContentBox = {
-  top: SCENARIO_POSITION.y - ROLE_TILE_HALF_PX,
-  bottom: SCENARIO_CONTENT_BOTTOM_Y,
+  top: SCENARIO_POSITION.y - COMPACT_ROLE_TILE_HALF_PX,
+  bottom: SCENARIO_POSITION.y + SCENARIO_BOTTOM_HALF_PX,
 };
 const ALLIES_CONTENT: ContentBox = {
   top: ALLIES_ROW_Y - CARD_TILE_HALF_PX,
-  bottom: ALLIES_CONTENT_BOTTOM_Y,
+  bottom: ALLIES_ROW_Y + CARD_TILE_HALF_PX,
 };
 const NUCLEOS_CONTENT: ContentBox = {
   top: NUCLEO_TABLE_ROW_Y - NUCLEO_TILE_HALF_PX,
@@ -280,23 +303,24 @@ const HAND_CONTENT: ContentBox = {
   bottom: HAND_ROW_POSITION.y + CARD_TILE_HALF_PX,
 };
 const LEADER_CONTENT: ContentBox = {
-  top: LEADER_POSITION.y - ROLE_TILE_HALF_PX,
+  top: LEADER_POSITION.y - COMPACT_ROLE_TILE_HALF_PX,
   bottom: LEADER_ABILITIES_ROW_Y + ABILITY_ICON_HEIGHT_PX / 2,
 };
 
 /**
- * H4 spec §3 paso 3 — las 7 filas de contenido real (no fondos de panel), ordenadas de arriba a
- * abajo (Enemigo → Secuaces → Escenario → Aliados → Núcleos → Mano → Líder). Expuesto para que
- * `board-layout.test.ts` verifique que el gap real entre bounding boxes consecutivas de CONTENIDO
- * es siempre `>= CONTENT_GAP_PX`, no solo `> 0` — la red de seguridad que debería haber atrapado el
- * bug de solape Núcleos↔Mano si se hubiera corrido tras el último cambio de `CONTENT_GAP_PX`.
+ * H5.1 §2.1/§4 — las 7 filas de contenido real (no fondos de panel), ordenadas de arriba a abajo.
+ * `nucleos` cambia de posición respecto al modelo H4 (antes entre `allies` y `hand`; ahora entre
+ * `scenario` y `allies`, reflejando que la mesa de Núcleos pasa a ser el CENTRO de la cadena de
+ * derivación, no un eslabón más de una cadena top-down única). Expuesto para que
+ * `board-layout.test.ts` verifique que el gap real entre `ContentBox` consecutivas es siempre
+ * positivo y por encima del mínimo de diseño.
  */
 export const CONTENT_BOXES_TOP_TO_BOTTOM: readonly { readonly id: string; readonly box: ContentBox }[] = [
   { id: 'enemy', box: ENEMY_CONTENT },
   { id: 'minions', box: MINIONS_CONTENT },
   { id: 'scenario', box: SCENARIO_CONTENT },
-  { id: 'allies', box: ALLIES_CONTENT },
   { id: 'nucleos', box: NUCLEOS_CONTENT },
+  { id: 'allies', box: ALLIES_CONTENT },
   { id: 'hand', box: HAND_CONTENT },
   { id: 'leader', box: LEADER_CONTENT },
 ];
@@ -305,8 +329,12 @@ export const PANEL_ZONES: readonly PanelZone[] = [
   panelFromContent(540, 1000, 'panel-enemy', 'Enemigo', ENEMY_CONTENT),
   panelFromContent(540, 1000, 'panel-minions', 'Secuaces', MINIONS_CONTENT),
   panelFromContent(540, 1000, 'panel-scenario', 'Escenario', SCENARIO_CONTENT),
+  // NUEVO H5.1 §2.1 — ÚNICA excepción a `panelFromContent` de este archivo: el panel de Núcleos
+  // dimensiona por RATIO de viewport (diseño deliberado, "mesa central" con relleno generoso
+  // alrededor de los dados), no por el bounding box mínimo de su contenido real (`NUCLEOS_CONTENT`,
+  // que sigue existiendo arriba solo para el test de no-solape, ver §5 de la spec).
+  { id: 'panel-nucleos', x: 540, y: NUCLEO_TABLE_CENTER_Y, width: NUCLEO_PANEL_WIDTH, height: NUCLEO_PANEL_HEIGHT, label: 'Núcleos' },
   panelFromContent(540, 1000, 'panel-allies', 'Aliados', ALLIES_CONTENT),
-  panelFromContent(540, 1000, 'panel-nucleos', 'Núcleos', NUCLEOS_CONTENT),
   panelFromContent(540, 1040, 'panel-hand', 'Mano', HAND_CONTENT),
   panelFromContent(540, 1000, 'panel-leader', 'Líder', LEADER_CONTENT),
 ];

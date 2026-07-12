@@ -3,6 +3,21 @@ import type { CombatBridge, CombatEvent, Unsubscribe } from '@collector/combat-b
 import type { JuiceConfig } from './juice-config';
 import type { JuiceRecipeRegistry, JuiceStep, JuiceTarget } from './juice-recipe';
 import type { SoundManager } from '../audio/sound-manager';
+import type { BigMomentClassifier } from './big-moment-classifier';
+
+/** H5.3 §4 / H5.4 §1 — contrato de sesión de foco reentrante-segura, inyectado en
+ *  `createEffectsDirector` como 5º parámetro. La implementación real (`createFocusController`) vive
+ *  en `focus-controller.ts` (H5.4) — este archivo solo fija su lugar en la firma, mismo criterio que
+ *  la spec autoriza para desarrollo en paralelo. */
+export interface FocusController {
+  begin(scene: Phaser.Scene, focusId: string | undefined): Promise<void>;
+  end(scene: Phaser.Scene): Promise<void>;
+}
+
+/** H5.3 §2.2 — cota inferior de cuánto se sostiene un momento grande en foco, vision.md "~500-1000ms
+ *  de resolución". El contenido real de los steps (floatingNumber+hitImpact+screenShake, etc.) puede
+ *  superar este mínimo por sí solo, en cuyo caso no añade espera extra. */
+export const MIN_BIG_MOMENT_HOLD_MS = 500;
 
 /** H2.4 spec §3.3 — nombres estables que H2.8 debe usar para nombrar los game objects del
  *  tablero/Líder/Enemigo/Escenario, de modo que las recetas reales de H2.5 puedan resolverlos sin
@@ -15,6 +30,11 @@ export const FOCUS_ID_SCENARIO = 'scenario';
  *  variante de `CombatEvent`. Función pura, solo usada internamente por `resolveEvent`. */
 function resolveJuiceTarget(event: CombatEvent): JuiceTarget {
   switch (event.type) {
+    // NUEVO H5.4 §3 — el zoom de foco total (H5.3/H5.4) se dirige al dado gastado, no al `default`
+    // sin foco de antes. `NucleoInstance.id` es el mismo `NucleoInstanceId` que `nucleo-table-view.ts`
+    // usa como nombre del tile (H5.1 §4).
+    case 'ABILITY_ACTIVATED':
+      return { event, focusId: event.nucleoSpent.id };
     case 'LEADER_DAMAGED':
       return { event, focusId: FOCUS_ID_LEADER };
     case 'ENEMY_DAMAGED':
@@ -68,14 +88,28 @@ export interface EffectsDirector {
 /** Recorre `steps` en orden, disparando cada `JuiceStep` según su `mode` (§3.2). NUEVO H2.13: si el
  *  step trae `soundId`, reenvía `soundManager.play(step.soundId)` de forma síncrona y no bloqueante
  *  en el instante en que el step arranca (antes de `recipe.play`) — no participa en `pending`, no
- *  altera la secuenciación `parallel`/`sequential` ya validada en H2.4/H2.5. */
+ *  altera la secuenciación `parallel`/`sequential` ya validada en H2.4/H2.5.
+ *
+ *  NUEVO H5.3 §2.2 — si `isBigMoment` es `true`, envuelve el recorrido de `steps` con
+ *  `focusController.begin`/`end`, sosteniendo el foco un mínimo de `MIN_BIG_MOMENT_HOLD_MS` tras
+ *  completar los steps. Este wrap es responsabilidad ÚNICA de `EffectsDirector` (no de cada entrada
+ *  de `JUICE_CONFIG`) — garantiza que ningún evento grande futuro olvide el `end()` de cierre, que el
+ *  sistema sea reentrante-seguro por construcción (delegado en `FocusController`), y que
+ *  `JUICE_CONFIG` siga siendo una tabla puramente declarativa de QUÉ receta de CONTENIDO juega. */
 async function resolveEvent(
   steps: readonly JuiceStep[],
   target: JuiceTarget,
   scene: Phaser.Scene,
   recipes: JuiceRecipeRegistry,
   soundManager: SoundManager,
+  isBigMoment: boolean,
+  focusController: FocusController,
 ): Promise<void> {
+  const startedAt = isBigMoment ? Date.now() : 0;
+  if (isBigMoment) {
+    await focusController.begin(scene, target.focusId);
+  }
+
   let pending: Promise<void>[] = [];
 
   for (const step of steps) {
@@ -100,6 +134,15 @@ async function resolveEvent(
   }
 
   await Promise.all(pending);
+
+  if (isBigMoment) {
+    const elapsedMs = Date.now() - startedAt;
+    const remainingHoldMs = Math.max(0, MIN_BIG_MOMENT_HOLD_MS - elapsedMs);
+    if (remainingHoldMs > 0) {
+      await new Promise<void>((resolve) => scene.time.delayedCall(remainingHoldMs, resolve));
+    }
+    await focusController.end(scene);
+  }
 }
 
 /** Único punto de construcción — mismo patrón que `createCombatBridge` (H2.3): sin `new
@@ -109,6 +152,8 @@ export function createEffectsDirector(
   config: JuiceConfig,
   recipes: JuiceRecipeRegistry,
   soundManager: SoundManager, // NUEVO H2.13 — 3er parámetro obligatorio, mismo criterio que `recipes`
+  bigMomentClassifier: BigMomentClassifier, // NUEVO H5.3 — 4º parámetro obligatorio
+  focusController: FocusController, // NUEVO H5.3/H5.4 — 5º parámetro obligatorio
 ): EffectsDirector {
   return {
     attach(bridge: CombatBridge, scene: Phaser.Scene): Unsubscribe {
@@ -118,10 +163,11 @@ export function createEffectsDirector(
           return;
         }
 
+        const isBigMoment = steps.some((s) => s.isBigMoment === true) || bigMomentClassifier.classify(event);
         const target = resolveJuiceTarget(event);
         // Fire-and-forget respecto al bus de eventos de dominio (§3.2 punto 4) — errores no
         // capturados dentro de una receta deben propagarse como excepción no manejada visible.
-        void resolveEvent(steps, target, scene, recipes, soundManager);
+        void resolveEvent(steps, target, scene, recipes, soundManager, isBigMoment, focusController);
       });
     },
   };

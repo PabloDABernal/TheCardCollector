@@ -42,12 +42,28 @@ function createFakeSoundManager(): SoundManager {
   return { unlock: vi.fn(), play: vi.fn() };
 }
 
+// NUEVO H5.3 §2.2 — `createEffectsDirector` gana 2 parámetros obligatorios (`bigMomentClassifier`,
+// `focusController`). Este archivo no ejercita el wrap de foco (eso vive en `effects-director.test.ts`
+// H5.3 §5) — fakes inertes que mantienen el comportamiento observable de antes de H5.3.
+function createFakeBigMomentClassifier() {
+  return { classify: vi.fn(() => false) };
+}
+function createFakeFocusController() {
+  return { begin: vi.fn(async () => {}), end: vi.fn(async () => {}) };
+}
+
 describe('createRecipeRegistry + EffectsDirector — integración de secuencia (H2.5 spec §5.1, H2.13 spec §4.4)', () => {
   it('LEADER_DAMAGED: screenShake NO se invoca hasta que hitImpact completa su tween', async () => {
     const { bridge, emit } = createMockSceneBridge();
     const fake = createFakeJuiceScene({ autoComplete: false });
     const soundManager = createFakeSoundManager();
-    const director = createEffectsDirector(JUICE_CONFIG, createRecipeRegistry(soundManager), soundManager);
+    const director = createEffectsDirector(
+      JUICE_CONFIG,
+      createRecipeRegistry(soundManager, createFakeFocusController()),
+      soundManager,
+      createFakeBigMomentClassifier(),
+      createFakeFocusController(),
+    );
     director.attach(bridge, fake.scene as unknown as Phaser.Scene);
 
     const event: CombatEvent = {
@@ -88,7 +104,13 @@ describe('createRecipeRegistry + EffectsDirector — integración de secuencia (
     const { bridge, emit } = createMockSceneBridge();
     const fake = createFakeJuiceScene();
     const soundManager = createFakeSoundManager();
-    const director = createEffectsDirector(JUICE_CONFIG, createRecipeRegistry(soundManager), soundManager);
+    const director = createEffectsDirector(
+      JUICE_CONFIG,
+      createRecipeRegistry(soundManager, createFakeFocusController()),
+      soundManager,
+      createFakeBigMomentClassifier(),
+      createFakeFocusController(),
+    );
     director.attach(bridge, fake.scene as unknown as Phaser.Scene);
 
     expect(JUICE_CONFIG.NUCLEO_TABLE_REROLLED).toEqual([{ recipeId: 'soundOnly', mode: 'parallel', soundId: 'diceRoll' }]);
@@ -109,14 +131,14 @@ describe('createRecipeRegistry + EffectsDirector — integración de secuencia (
 
   it('H4 (fix Reviewer): JUICE_CONFIG.COOLDOWNS_TICKED sin receta de canvas — cooldownReady fue retirada (pulso vive en CSS card-tile--ready)', () => {
     const soundManager = createFakeSoundManager();
-    const registry = createRecipeRegistry(soundManager);
+    const registry = createRecipeRegistry(soundManager, createFakeFocusController());
     expect(JUICE_CONFIG.COOLDOWNS_TICKED).toEqual([]);
     expect(registry['cooldownReady']).toBeUndefined();
   });
 
   it('H2.11: floatingNumber registrado en createRecipeRegistry con id correcto', () => {
     const soundManager = createFakeSoundManager();
-    const registry = createRecipeRegistry(soundManager);
+    const registry = createRecipeRegistry(soundManager, createFakeFocusController());
     expect(registry['floatingNumber']).toBe(floatingNumber);
     expect(registry['floatingNumber']?.id).toBe('floatingNumber');
   });
@@ -132,7 +154,13 @@ describe('createRecipeRegistry + EffectsDirector — integración de secuencia (
     const { bridge, emit } = createMockSceneBridge();
     const fake = createFakeJuiceScene({ autoComplete: false });
     const soundManager = createFakeSoundManager();
-    const director = createEffectsDirector(JUICE_CONFIG, createRecipeRegistry(soundManager), soundManager);
+    const director = createEffectsDirector(
+      JUICE_CONFIG,
+      createRecipeRegistry(soundManager, createFakeFocusController()),
+      soundManager,
+      createFakeBigMomentClassifier(),
+      createFakeFocusController(),
+    );
     director.attach(bridge, fake.scene as unknown as Phaser.Scene);
 
     emit({
@@ -160,14 +188,14 @@ describe('createRecipeRegistry + EffectsDirector — integración de secuencia (
 
   it('H2.13: createRecipeRegistry(soundManager).soundOnly.id === "soundOnly"', () => {
     const soundManager = createFakeSoundManager();
-    const registry = createRecipeRegistry(soundManager);
+    const registry = createRecipeRegistry(soundManager, createFakeFocusController());
     expect(registry['soundOnly']).toBe(soundOnly);
     expect(registry['soundOnly']?.id).toBe('soundOnly');
   });
 
   it('H2.13: createRecipeRegistry(soundManager).combatOutcomeSound.id === "combatOutcomeSound", y su play() delega en soundManager.play para un evento COMBAT_ENDED', async () => {
     const soundManager = createFakeSoundManager();
-    const registry = createRecipeRegistry(soundManager);
+    const registry = createRecipeRegistry(soundManager, createFakeFocusController());
     const recipe = registry['combatOutcomeSound'];
 
     expect(recipe?.id).toBe('combatOutcomeSound');

@@ -18,6 +18,19 @@ export interface RecordedShake {
   readonly intensity: number;
 }
 
+/** NUEVO H5.4 — invocación registrada de `camera.zoomTo(...)` (`focus-zoom.ts`/`focus-controller.ts`). */
+export interface RecordedZoomTo {
+  readonly zoom: number;
+  readonly duration: number;
+}
+
+/** NUEVO H5.4 — invocación registrada de `camera.pan(...)` (`focus-zoom.ts`/`focus-controller.ts`). */
+export interface RecordedPan {
+  readonly x: number;
+  readonly y: number;
+  readonly duration: number;
+}
+
 export interface RecordedParticles {
   readonly x: number;
   readonly y: number;
@@ -48,6 +61,12 @@ export interface FakeJuiceRectangle {
   setFillStyle(color?: number, alpha?: number): FakeJuiceRectangle;
   setAlpha(alpha: number): FakeJuiceRectangle;
   setDepth(depth: number): FakeJuiceRectangle;
+  /** NUEVO H5.4 — `FocusController`/recetas de foco fijan el overlay a pantalla completa
+   *  independientemente del pan de cámara (`setScrollFactor(0)`). Fake sin efecto real (el fake no
+   *  modela scroll de cámara), solo registra la llamada para que un test pueda verificarla si hace
+   *  falta — mismo criterio "recordar sin renderizar" que el resto de este módulo. */
+  setScrollFactor(x: number, y?: number): FakeJuiceRectangle;
+  setStrokeStyle(width?: number, color?: number, alpha?: number): FakeJuiceRectangle;
   destroy(): void;
 }
 
@@ -94,6 +113,12 @@ export interface FakeJuiceScene {
   readonly recordedShakes: RecordedShake[];
   readonly recordedParticles: RecordedParticles[];
   readonly recordedDelayedCalls: RecordedDelayedCall[];
+  /** NUEVO H5.4 — invocaciones de `camera.zoomTo(...)`/`camera.pan(...)` (`focus-zoom.ts`/
+   *  `focus-controller.ts`), en orden de creación. Ambas se auto-completan (invocan su `callback`) en
+   *  el siguiente microtask, con independencia de `autoComplete` — mismo criterio que
+   *  `cameras.main.shake` (ver nota de `CreateFakeJuiceSceneOptions.autoComplete`). */
+  readonly recordedZoomTo: RecordedZoomTo[];
+  readonly recordedPans: RecordedPan[];
   /** H2.11 — todo `Phaser.GameObjects.Text` creado vía `scene.add.text` (`floatingNumber`), en
    *  orden de creación. */
   readonly recordedTexts: FakeJuiceText[];
@@ -163,6 +188,12 @@ function createFakeRectangle(
       rect.depth = depth;
       return rect;
     },
+    setScrollFactor() {
+      return rect;
+    },
+    setStrokeStyle() {
+      return rect;
+    },
     destroy() {
       rect.destroyed = true;
     },
@@ -217,6 +248,9 @@ export function createFakeJuiceScene(options: CreateFakeJuiceSceneOptions = {}):
   const tweenEntries: TweenEntry[] = [];
   const byName = new Map<string, FakeJuiceRectangle>();
   let currentTimeScale = 1;
+  const recordedZoomTo: RecordedZoomTo[] = [];
+  const recordedPans: RecordedPan[] = [];
+  let currentZoom = 1;
 
   function registerByName(name: string, rect: FakeJuiceRectangle): void {
     byName.set(name, rect);
@@ -349,6 +383,39 @@ export function createFakeJuiceScene(options: CreateFakeJuiceSceneOptions = {}):
           scheduleShakeCompletion(() => callback?.());
           return fakeScene as unknown;
         },
+        get zoom(): number {
+          return currentZoom;
+        },
+        set zoom(value: number) {
+          currentZoom = value;
+        },
+        /** NUEVO H5.4 — mismo patrón que `shake`: registra la llamada, auto-completa en microtask
+         *  invocando `callback` (firma real de Phaser: `(camera, progress, zoom) => void`, se invoca
+         *  aquí con `progress=1` para simular "tween terminado"). */
+        zoomTo(
+          zoom?: number,
+          duration?: number,
+          _ease?: unknown,
+          _force?: boolean,
+          callback?: (...args: unknown[]) => void,
+        ) {
+          currentZoom = zoom ?? currentZoom;
+          recordedZoomTo.push({ zoom: zoom ?? 1, duration: duration ?? 0 });
+          scheduleShakeCompletion(() => callback?.(fakeScene, 1, currentZoom));
+          return fakeScene as unknown;
+        },
+        pan(
+          x?: number,
+          y?: number,
+          duration?: number,
+          _ease?: unknown,
+          _force?: boolean,
+          callback?: (...args: unknown[]) => void,
+        ) {
+          recordedPans.push({ x: x ?? 0, y: y ?? 0, duration: duration ?? 0 });
+          scheduleShakeCompletion(() => callback?.(fakeScene, 1, x ?? 0, y ?? 0));
+          return fakeScene as unknown;
+        },
       },
     },
     time: {
@@ -374,6 +441,8 @@ export function createFakeJuiceScene(options: CreateFakeJuiceSceneOptions = {}):
     recordedDelayedCalls,
     recordedTexts,
     timeScaleAssignments,
+    recordedZoomTo,
+    recordedPans,
     completeTween,
     runDelayedCall,
   };

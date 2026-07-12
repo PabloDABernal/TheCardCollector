@@ -5,11 +5,11 @@
 // del jugador"). Mismo espíritu de "`CombatBridge` fake mínimo, `CombatStateSnapshot` construido a
 // mano" que `gesture-command-translator.test.ts` (`packages/combat-scene`).
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { createId, satisfiesCoreCost } from '@collector/domain-shared';
 import type { CombatBridge } from '@collector/combat-bridge';
 import type { CombatStateSnapshot, NucleoDie } from '@collector/domain-combat';
-import type { AbilityViewData } from '@collector/combat-scene';
+import type { AbilityViewData, TurnRevealStage } from '@collector/combat-scene';
 
 // `@collector/combat-scene`'s barrel (`src/index.ts`) también reexporta `CombatScene`, que arrastra
 // `phaser` y sus side effects de `CanvasFeatures` al importar el módulo — rompe bajo jsdom (mismo
@@ -44,6 +44,10 @@ function mockAbilityId(value: string) {
 
 function mockNucleoInstanceId(value: string) {
   return createId('NucleoInstanceId', value);
+}
+
+function mockCardId(value: string) {
+  return createId('CardId', value);
 }
 
 const CONTROL_ABILITY_ID = mockAbilityId('ability-control');
@@ -98,8 +102,24 @@ function createFakeBridge(): CombatBridge {
   } as unknown as CombatBridge;
 }
 
-function renderHud(snapshot: CombatStateSnapshot, abilities: readonly AbilityViewData[] = leaderAbilities) {
+// NUEVO H5.5 §3 — `turnDecisionFlow`/`stage` fake mínimo: por defecto en fase CATEGORY, sin ninguna
+// selección pendiente (mismo criterio "sin guardia interna" que el resto de fakes de este archivo).
+function createFakeTurnDecisionFlow() {
+  return {
+    selectCategory: vi.fn(),
+    cancelDetail: vi.fn(),
+    signal: { getState: vi.fn(() => ({ stage: 'CATEGORY' })), subscribe: vi.fn(() => vi.fn()) },
+  };
+}
+
+function renderHud(
+  snapshot: CombatStateSnapshot,
+  abilities: readonly AbilityViewData[] = leaderAbilities,
+  overrides: { stage?: TurnRevealStage; turnDecisionFlow?: ReturnType<typeof createFakeTurnDecisionFlow> } = {},
+) {
   const bridge = createFakeBridge();
+  const turnDecisionFlow = overrides.turnDecisionFlow ?? createFakeTurnDecisionFlow();
+  const stage: TurnRevealStage = overrides.stage ?? { stage: 'CATEGORY' };
   render(
     <CombatHud
       snapshot={snapshot}
@@ -107,9 +127,11 @@ function renderHud(snapshot: CombatStateSnapshot, abilities: readonly AbilityVie
       onEndTurn={vi.fn()}
       leaderName="Líder de prueba"
       leaderAbilities={abilities}
+      turnDecisionFlow={turnDecisionFlow as never}
+      stage={stage}
     />,
   );
-  return bridge;
+  return { bridge, turnDecisionFlow };
 }
 
 describe('CombatHud', () => {
@@ -120,7 +142,7 @@ describe('CombatHud', () => {
     });
     renderHud(snapshot);
 
-    expect(screen.getByText('Activar Habilidad')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('button', { name: 'Activar Habilidad' })).toBeDisabled();
   });
 
   it('habilidad CONTROL lista y un dado CONTROL disponible: "Activar Habilidad" habilitado', () => {
@@ -130,14 +152,14 @@ describe('CombatHud', () => {
     });
     renderHud(snapshot);
 
-    expect(screen.getByText('Activar Habilidad')).toHaveAttribute('aria-disabled', 'false');
+    expect(screen.getByRole('button', { name: 'Activar Habilidad' })).toBeEnabled();
   });
 
   it('mano vacía: "Jugar Carta" deshabilitado', () => {
     const snapshot = createMockSnapshot({ leaderHand: [] });
     renderHud(snapshot);
 
-    expect(screen.getByText('Jugar Carta')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('button', { name: 'Jugar Carta' })).toBeDisabled();
   });
 
   it('Energía al tope: "Generar Energía" deshabilitado', () => {
@@ -165,5 +187,48 @@ describe('CombatHud', () => {
 
     expect(screen.getByRole('button', { name: 'Robar carta (gratis)' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Generar energía (gratis)' })).toBeDisabled();
+  });
+
+  // H5.5 spec §8 casos 1-4 — selector de categoría (revelación progresiva, H5.2).
+  describe('H5.5 — revelación progresiva de decisiones de turno', () => {
+    it('1. stage CATEGORY: click en "Jugar Carta" (habilitado) llama a turnDecisionFlow.selectCategory("PLAY_CARD")', () => {
+      const snapshot = createMockSnapshot({ leaderHand: [mockCardId('card-1')] });
+      const { turnDecisionFlow } = renderHud(snapshot);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Jugar Carta' }));
+
+      expect(turnDecisionFlow.selectCategory).toHaveBeenCalledWith('PLAY_CARD');
+    });
+
+    it('2. stage CATEGORY: click en "Generar Energía" llama a selectCategory("GENERATE_ENERGY") — NO se llama a bridge.dispatch directamente', () => {
+      const snapshot = createMockSnapshot({ leaderEnergy: 2 });
+      const { turnDecisionFlow, bridge } = renderHud(snapshot);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Generar Energía' }));
+
+      expect(turnDecisionFlow.selectCategory).toHaveBeenCalledWith('GENERATE_ENERGY');
+      expect(bridge.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'GENERATE_ENERGY' }));
+    });
+
+    it('3. stage DETAIL/PLAY_CARD: renderiza "Elige una carta" + "← Atrás", NO los 4 botones de categoría', () => {
+      const snapshot = createMockSnapshot();
+      renderHud(snapshot, leaderAbilities, { stage: { stage: 'DETAIL', category: 'PLAY_CARD' } });
+
+      expect(screen.getByText('Elige una carta')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '← Atrás' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Jugar Carta' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Activar Habilidad' })).not.toBeInTheDocument();
+    });
+
+    it('4. click en "← Atrás" invoca turnDecisionFlow.cancelDetail', () => {
+      const snapshot = createMockSnapshot();
+      const { turnDecisionFlow } = renderHud(snapshot, leaderAbilities, {
+        stage: { stage: 'DETAIL', category: 'ACTIVATE_ABILITY' },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: '← Atrás' }));
+
+      expect(turnDecisionFlow.cancelDetail).toHaveBeenCalledTimes(1);
+    });
   });
 });
