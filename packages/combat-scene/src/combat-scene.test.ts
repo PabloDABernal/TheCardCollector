@@ -87,23 +87,10 @@ const createGestureCommandTranslatorMock = vi.fn(() => ({
   targetingSignal: fakeTargetingSignal,
   rejectionSignal: fakeRejectionSignal,
 }));
-// NUEVO H5.2/H5.5 — `create()` también construye `createTurnDecisionFlow({ bridge, cancelPending })`,
-// mockeada aquí con la misma superficie mínima (`selectCategory`/`cancelDetail`/`signal`) que
-// `interaction/turn-decision-flow.test.ts` ejercita en detalle — este archivo solo verifica el
-// cableado (constructor invocado, getter expone el handle), no la máquina de estados real.
-const turnDecisionFlowSelectCategoryMock = vi.fn();
-const turnDecisionFlowCancelDetailMock = vi.fn();
-const fakeTurnDecisionSignal = { getState: vi.fn(() => ({ stage: 'CATEGORY' })), subscribe: vi.fn(() => vi.fn()) };
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- firma calcada de createTurnDecisionFlow(deps)
-const createTurnDecisionFlowMock = vi.fn((_deps: { bridge: unknown; cancelPending: () => void }) => ({
-  selectCategory: turnDecisionFlowSelectCategoryMock,
-  cancelDetail: turnDecisionFlowCancelDetailMock,
-  signal: fakeTurnDecisionSignal,
-}));
+// H5.2/H5.5 CORRECCIÓN 2026-07-13 — `TurnDecisionFlow` retirado por completo de `create()`; `./interaction`
+// vuelve a mockear ÚNICAMENTE `createGestureCommandTranslator` (mismo criterio que antes de H5.2).
 vi.mock('./interaction', () => ({
   createGestureCommandTranslator: (...args: unknown[]) => createGestureCommandTranslatorMock(...(args as [])),
-  createTurnDecisionFlow: (...args: unknown[]) =>
-    createTurnDecisionFlowMock(...(args as [{ bridge: unknown; cancelPending: () => void }])),
 }));
 
 function createFakeCombatSceneSurface(scene: CombatScene) {
@@ -168,14 +155,6 @@ describe('CombatScene — init/create/shutdown (H2.6/H2.8)', () => {
     createDieRejectionViewMock.mockClear();
     createDieRejectionViewMock.mockImplementation(() => ({ destroy: dieRejectionDestroyMock }));
     dieRejectionDestroyMock.mockClear();
-    createTurnDecisionFlowMock.mockClear();
-    createTurnDecisionFlowMock.mockImplementation(() => ({
-      selectCategory: turnDecisionFlowSelectCategoryMock,
-      cancelDetail: turnDecisionFlowCancelDetailMock,
-      signal: fakeTurnDecisionSignal,
-    }));
-    turnDecisionFlowSelectCategoryMock.mockClear();
-    turnDecisionFlowCancelDetailMock.mockClear();
   });
 
   it('init(data) guarda el CombatBridge/boardContext inyectados sin dispatch ni side-effects', () => {
@@ -381,25 +360,15 @@ describe('CombatScene — init/create/shutdown (H2.6/H2.8)', () => {
     expect(translatorCancelPendingMock).toHaveBeenCalledTimes(1);
   });
 
-  it('create() construye TurnDecisionFlow(bridge, cancelPending) y getTurnDecisionFlow() expone el handle (H5.2 §3/H5.5 §1)', () => {
+  it('getEffectsQueueSignal() expone el queueSignal real del EffectsDirector construido en create() (H5.9 §2)', () => {
     const scene = new CombatScene();
     createFakeCombatSceneSurface(scene);
     const bridge = createFakeBridge();
     scene.init({ bridge, boardContext: fakeBoardContext });
     scene.create();
 
-    expect(createTurnDecisionFlowMock).toHaveBeenCalledTimes(1);
-    expect(createTurnDecisionFlowMock).toHaveBeenCalledWith(
-      expect.objectContaining({ bridge, cancelPending: expect.any(Function) }),
-    );
-
-    const handle = scene.getTurnDecisionFlow();
-    handle.selectCategory('GENERATE_ENERGY');
-    handle.cancelDetail();
-    expect(turnDecisionFlowSelectCategoryMock).toHaveBeenCalledWith('GENERATE_ENERGY');
-    expect(turnDecisionFlowCancelDetailMock).toHaveBeenCalledTimes(1);
-
-    createTurnDecisionFlowMock.mock.calls[0]?.[0]?.cancelPending();
-    expect(translatorCancelPendingMock).toHaveBeenCalledTimes(1);
+    const queueSignal = scene.getEffectsQueueSignal();
+    expect(queueSignal.isDraining()).toBe(false);
+    expect(typeof queueSignal.subscribe).toBe('function');
   });
 });

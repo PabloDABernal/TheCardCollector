@@ -7,6 +7,11 @@ import { COLOR_BINDER, COLOR_RULE, RADIUS_PANEL, SPACING, TYPE, COLOR_TEXT_SECON
 
 export interface CombatLogPanelProps {
   readonly entries: readonly CombatLogEntry[];
+  /** NUEVO H5.8 §3.2 — por defecto `'peek'` (comportamiento H4 sin cambios: franja inferior +
+   *  bottom-sheet expandible). `'sidebar'`: panel lateral SIEMPRE expandido (sin franja peek, sin
+   *  toggle), pensado para el margen lateral libre en desktop ancho — mismas entradas, mismo
+   *  `colorForTone`, solo cambia el contenedor/posición. */
+  readonly variant?: 'peek' | 'sidebar';
 }
 
 /**
@@ -14,8 +19,12 @@ export interface CombatLogPanelProps {
  * expandible a bottom-sheet con el histórico completo. Pulso `--danger` cuando la línea más
  * reciente es una acción del Enemigo (resuelve "que se vea qué hace el Enemigo" sin tocar
  * `turn-banner.ts`).
+ *
+ * H5.8 §3.2 — `variant='sidebar'` sustituye por completo la franja peek/bottom-sheet por un panel
+ * lateral siempre visible con scroll interno, para desktop ancho (`useIsWideViewport`,
+ * `CombatScreen.tsx`). `variant='peek'` (o sin prop) es comportamiento IDÉNTICO a H4.
  */
-export function CombatLogPanel({ entries }: CombatLogPanelProps): JSX.Element {
+export function CombatLogPanel({ entries, variant = 'peek' }: CombatLogPanelProps): JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const latest = entries[entries.length - 1];
   const [pulseId, setPulseId] = useState<string | null>(null);
@@ -36,6 +45,40 @@ export function CombatLogPanel({ entries }: CombatLogPanelProps): JSX.Element {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
   }, [expanded, entries.length]);
+
+  // H5.8 §3.2 — sidebar: panel lateral SIEMPRE expandido, sin franja peek ni toggle. Reutiliza
+  // `colorForTone`/mismas entradas, solo cambia el contenedor (fixed, ancla derecha, scroll interno).
+  if (variant === 'sidebar') {
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          right: 0,
+          top: 0,
+          bottom: 0,
+          width: 320,
+          background: COLOR_BINDER,
+          borderLeft: `2px solid ${COLOR_RULE}`,
+          padding: SPACING.md,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: SPACING.xs,
+          overflowY: 'auto',
+          zIndex: 6,
+        }}
+      >
+        <span style={{ ...TYPE.labelUpper, color: COLOR_TEXT_SECONDARY }}>Registro de combate</span>
+        {entries.length === 0 && (
+          <span style={{ ...TYPE.bodySm, color: COLOR_TEXT_SECONDARY }}>Sin eventos todavía.</span>
+        )}
+        {entries.map((e) => (
+          <span key={e.id} style={{ ...TYPE.bodySm, color: colorForTone(e.tone) }}>
+            {e.text}
+          </span>
+        ))}
+      </div>
+    );
+  }
 
   // FIX QA (Bug 1, layout de combate en viewports anchos/bajos) — este panel ya NO vive dentro de un
   // wrapper `position: absolute` superpuesto a la altura completa del canvas (`CombatScreen.tsx`

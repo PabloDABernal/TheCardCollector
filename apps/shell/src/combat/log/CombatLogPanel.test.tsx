@@ -71,6 +71,31 @@ describe('CombatLogPanel — patrón peek/expand', () => {
   });
 });
 
+describe('CombatLogPanel — H5.8 §3.2 variant="sidebar"', () => {
+  it('renderiza sin franja peek (sin botón de expandir), lista de entradas visible directamente', () => {
+    const entries: readonly CombatLogEntry[] = [
+      entry({ id: '1-0', text: 'Primera línea', tone: 'SYSTEM' }),
+      entry({ id: '1-1', text: 'Última línea', tone: 'SYSTEM' }),
+    ];
+    render(<CombatLogPanel entries={entries} variant="sidebar" />);
+
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getByText('Primera línea')).toBeInTheDocument();
+    expect(screen.getByText('Última línea')).toBeInTheDocument();
+  });
+
+  it('sin variant (o variant="peek"): comportamiento pixel-idéntico al H4 existente (peek, sin histórico completo)', () => {
+    const entries: readonly CombatLogEntry[] = [
+      entry({ id: '1-0', text: 'Primera línea', tone: 'SYSTEM' }),
+      entry({ id: '1-1', text: 'Última línea', tone: 'SYSTEM' }),
+    ];
+    render(<CombatLogPanel entries={entries} variant="peek" />);
+
+    expect(screen.getByText('Última línea')).toBeInTheDocument();
+    expect(screen.queryByText('Primera línea')).not.toBeInTheDocument();
+  });
+});
+
 describe('CombatLogPanel — pulso --danger en líneas de acción del Enemigo', () => {
   it('la franja peek recibe animation log-peek-pulse cuando la última línea es tone ENEMY_ACTION', () => {
     const entries: readonly CombatLogEntry[] = [

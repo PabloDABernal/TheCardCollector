@@ -17,13 +17,8 @@ let capturedParent: HTMLElement | null = null;
 // NUEVO H4 spec §5.2/§6.1 — ver App.test.tsx, mismo espíritu de mock.
 const fakeTargetingSignal = { getState: () => ({ kind: 'NONE' as const }), subscribe: () => () => {} };
 const fakeGestureHandle = { handleCardTap: vi.fn(), handleAbilityTap: vi.fn(), cancelPending: vi.fn() };
-// NUEVO H5.5 §1 — `CombatScene.getTurnDecisionFlow()`, mismo espíritu de mock que el resto de este
-// archivo (superficie mínima, sin máquina de estados real).
-const fakeTurnDecisionFlow = {
-  selectCategory: vi.fn(),
-  cancelDetail: vi.fn(),
-  signal: { getState: () => ({ stage: 'CATEGORY' as const }), subscribe: () => () => {} },
-};
+// NUEVO H5.9 §2 — ver App.test.tsx, mismo espíritu de mock.
+const fakeEffectsQueueSignal = { isDraining: () => false, subscribe: () => () => {} };
 
 vi.mock('phaser', () => {
   class FakeGame {
@@ -32,7 +27,7 @@ vi.mock('phaser', () => {
       add: vi.fn(() => ({
         getTargetingSignal: () => fakeTargetingSignal,
         getGestureCommandTranslator: () => fakeGestureHandle,
-        getTurnDecisionFlow: () => fakeTurnDecisionFlow,
+        getEffectsQueueSignal: () => fakeEffectsQueueSignal,
       })),
       start: vi.fn(),
     };
@@ -70,6 +65,13 @@ vi.mock('@collector/combat-scene', () => ({
   LEADER_ABILITIES_ROW_Y: 1888,
   ENEMY_ABILITIES_ROW_Y: 480,
   ABILITY_ICON_SEPARATION_PX: 200,
+  // NUEVO H5.7 §3.1 — `SideActionRail` (renderizado dentro de `CombatBoardOverlay`) lee estas
+  // constantes de posición vía `@collector/combat-scene`.
+  SIDE_ACTION_RAIL_X: 76,
+  SIDE_ACTION_RAIL_Y: 1030,
+  SIDE_ACTION_RAIL_GAP_PX: 96,
+  RAIL_CHIP_HALF_WIDTH_PX: 55,
+  RAIL_CHIP_HEIGHT_PX: 44,
 }));
 
 const fakeSnapshot: CombatStateSnapshot = {
@@ -131,7 +133,7 @@ describe('CombatScreen — contenedor de Phaser con tamaño real (Bug 1, FIX_com
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText('Fin de turno')).toBeInTheDocument();
+    expect(await screen.findByText('Acciones')).toBeInTheDocument();
 
     const root = document.querySelector('.combat-screen-root');
     expect(root).not.toBeNull();

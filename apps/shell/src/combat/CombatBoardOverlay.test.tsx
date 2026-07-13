@@ -1,13 +1,14 @@
-// H5.5 spec §8 casos 5-6 — gating de `HandCardRow`/`AbilityRow` (Líder) por `stage` (revelación
-// progresiva, H5.2). Mismo motivo de mock que `HandCardRow.test.tsx`: el barrel
-// `@collector/combat-scene` reexporta `CombatScene`, que arrastra `phaser`/`CanvasFeatures` — rompe
-// bajo jsdom. Se mockea con los mismos valores reales de `board-layout.ts` que consumen
-// `CombatBoardOverlay.tsx` y sus hijos (`HandCardRow`/`AbilityRow`/`MinionRow`/`AllyRow`/
-// `EnemyDramaturgiaCardSlot`).
+// H5.5 corrección 2026-07-13 — reemplaza los casos de gating por `stage` (H5.2 retirado): mano y
+// habilidades del Líder vuelven a estar SIEMPRE visibles/interactivas durante el turno del jugador.
+// Mismo motivo de mock que `HandCardRow.test.tsx`: el barrel `@collector/combat-scene` reexporta
+// `CombatScene`, que arrastra `phaser`/`CanvasFeatures` — rompe bajo jsdom. Se mockea con los mismos
+// valores reales de `board-layout.ts` que consumen `CombatBoardOverlay.tsx` y sus hijos
+// (`HandCardRow`/`AbilityRow`/`MinionRow`/`AllyRow`/`SideActionRail`/`EnemyDramaturgiaCardSlot`).
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { createId } from '@collector/domain-shared';
 import type { CardId } from '@collector/domain-shared';
+import type { CombatBridge } from '@collector/combat-bridge';
 import type { CombatStateSnapshot } from '@collector/domain-combat';
 
 vi.mock('@collector/combat-scene', () => ({
@@ -25,6 +26,12 @@ vi.mock('@collector/combat-scene', () => ({
   HAND_ROW_POSITION: { x: 540, y: 1724 },
   TILE_SEPARATION_PX: 140,
   ABILITY_ICON_SEPARATION_PX: 200,
+  SIDE_ACTION_RAIL_X: 76,
+  SIDE_ACTION_RAIL_Y: 1030,
+  SIDE_ACTION_RAIL_GAP_PX: 96,
+  RAIL_CHIP_HALF_WIDTH_PX: 55,
+  RAIL_CHIP_HEIGHT_PX: 44,
+  isAnyLeaderAbilityActivatable: vi.fn(() => false),
 }));
 
 // eslint-disable-next-line import/first -- debe importarse después del `vi.mock` de arriba
@@ -102,10 +109,19 @@ function createFakeGestureHandle(): GestureCommandTranslatorHandle {
   };
 }
 
+function createFakeBridge(): CombatBridge {
+  return {
+    dispatch: vi.fn(() => ({ ok: true, value: [] })),
+    getSnapshot: vi.fn(),
+    subscribeHudEvents: vi.fn(() => vi.fn()),
+    subscribeSceneEvents: vi.fn(() => vi.fn()),
+  } as unknown as CombatBridge;
+}
+
 const TRANSFORM = { offsetX: 0, offsetY: 0, scale: 1 };
 
-describe('CombatBoardOverlay — H5.5 §8 casos 5-6 (gating por stage)', () => {
-  it('5. stage CATEGORY: HandCardRow NO está en el árbol renderizado, AbilityRow del Líder recibe visible=false (sin tiles renderizados)', () => {
+describe('CombatBoardOverlay — H5.5 corrección 2026-07-13 (mano/habilidades siempre visibles)', () => {
+  it('con gestureHandle no-nulo: HandCardRow SIEMPRE está en el árbol, AbilityRow del Líder SIEMPRE interactive', () => {
     render(
       <CombatBoardOverlay
         snapshot={createMockSnapshot()}
@@ -114,45 +130,106 @@ describe('CombatBoardOverlay — H5.5 §8 casos 5-6 (gating por stage)', () => {
         leaderName="Líder de prueba"
         gestureHandle={createFakeGestureHandle()}
         targetingPrompt={{ kind: 'NONE' }}
-        stage={{ stage: 'CATEGORY' }}
-      />,
-    );
-
-    expect(document.querySelector('[data-card-id="card-1"]')).toBeNull();
-    expect(screen.queryByText('Habilidad 1')).not.toBeInTheDocument();
-  });
-
-  it('6. stage DETAIL/PLAY_CARD: HandCardRow SÍ está presente; AbilityRow del Líder sigue visible=false; AbilityRow del Enemigo sigue presente por defecto', () => {
-    render(
-      <CombatBoardOverlay
-        snapshot={createMockSnapshot()}
-        ctx={createMockCtx()}
-        transform={TRANSFORM}
-        leaderName="Líder de prueba"
-        gestureHandle={createFakeGestureHandle()}
-        targetingPrompt={{ kind: 'NONE' }}
-        stage={{ stage: 'DETAIL', category: 'PLAY_CARD' }}
+        bridge={createFakeBridge()}
       />,
     );
 
     expect(document.querySelector('[data-card-id="card-1"]')).toBeTruthy();
-    expect(screen.queryByText('Habilidad 1')).not.toBeInTheDocument();
+    expect(screen.getByText('Habilidad 1')).toBeInTheDocument();
   });
 
-  it('stage DETAIL/ACTIVATE_ABILITY: AbilityRow del Líder visible (tile renderizado), HandCardRow oculta', () => {
+  it('tap directo en una carta de mano dispara handleCardTap sin ningún paso previo de "elegir categoría"', () => {
+    const gestureHandle = createFakeGestureHandle();
     render(
       <CombatBoardOverlay
         snapshot={createMockSnapshot()}
         ctx={createMockCtx()}
         transform={TRANSFORM}
         leaderName="Líder de prueba"
-        gestureHandle={createFakeGestureHandle()}
+        gestureHandle={gestureHandle}
         targetingPrompt={{ kind: 'NONE' }}
-        stage={{ stage: 'DETAIL', category: 'ACTIVATE_ABILITY' }}
+        bridge={createFakeBridge()}
       />,
     );
 
-    expect(screen.getByText('Habilidad 1')).toBeInTheDocument();
+    document.querySelector<HTMLElement>('[data-card-id="card-1"]')!.click();
+
+    expect(gestureHandle.handleCardTap).toHaveBeenCalledWith(mockCardId('card-1'));
+  });
+
+  it('tap directo en un icono de habilidad dispara handleAbilityTap sin paso previo', () => {
+    const gestureHandle = createFakeGestureHandle();
+    const abilityId = createId('AbilityId', 'ability-1');
+    render(
+      <CombatBoardOverlay
+        snapshot={createMockSnapshot()}
+        ctx={createMockCtx()}
+        transform={TRANSFORM}
+        leaderName="Líder de prueba"
+        gestureHandle={gestureHandle}
+        targetingPrompt={{ kind: 'NONE' }}
+        bridge={createFakeBridge()}
+      />,
+    );
+
+    document.querySelector<HTMLElement>(`[data-ability-id="${abilityId}"]`)!.click();
+
+    expect(gestureHandle.handleAbilityTap).toHaveBeenCalledWith(abilityId);
+  });
+
+  it('sin gestureHandle (todavía no READY): ni HandCardRow ni AbilityRow del Líder son interactivos, pero SideActionRail sigue montado', () => {
+    render(
+      <CombatBoardOverlay
+        snapshot={createMockSnapshot()}
+        ctx={createMockCtx()}
+        transform={TRANSFORM}
+        leaderName="Líder de prueba"
+        gestureHandle={null}
+        targetingPrompt={{ kind: 'NONE' }}
+        bridge={createFakeBridge()}
+      />,
+    );
+
     expect(document.querySelector('[data-card-id="card-1"]')).toBeNull();
+    expect(screen.getByRole('button', { name: /Energía/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Robar/ })).toBeInTheDocument();
+  });
+
+  it('SideActionRail: click en "Robar Carta" (habilitado) despacha DRAW_CARD directo, sin ningún intermediario', () => {
+    const bridge = createFakeBridge();
+    render(
+      <CombatBoardOverlay
+        snapshot={createMockSnapshot({ leaderDeckRemaining: 10, leaderHand: [] })}
+        ctx={createMockCtx()}
+        transform={TRANSFORM}
+        leaderName="Líder de prueba"
+        gestureHandle={createFakeGestureHandle()}
+        targetingPrompt={{ kind: 'NONE' }}
+        bridge={bridge}
+      />,
+    );
+
+    screen.getByRole('button', { name: /Robar/ }).click();
+
+    expect(bridge.dispatch).toHaveBeenCalledWith({ type: 'DRAW_CARD' });
+  });
+
+  it('SideActionRail: click en "Generar Energía" (habilitado) despacha GENERATE_ENERGY directo', () => {
+    const bridge = createFakeBridge();
+    render(
+      <CombatBoardOverlay
+        snapshot={createMockSnapshot({ leaderEnergy: 2 })}
+        ctx={createMockCtx()}
+        transform={TRANSFORM}
+        leaderName="Líder de prueba"
+        gestureHandle={createFakeGestureHandle()}
+        targetingPrompt={{ kind: 'NONE' }}
+        bridge={bridge}
+      />,
+    );
+
+    screen.getByRole('button', { name: /Energía/ }).click();
+
+    expect(bridge.dispatch).toHaveBeenCalledWith({ type: 'GENERATE_ENERGY' });
   });
 });

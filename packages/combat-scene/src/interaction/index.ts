@@ -21,9 +21,7 @@ export type { RejectionSignal, DieRejectionEvent } from './rejection-signal';
 // gestos (`handleAbilityTap`).
 export { findValidDiceForAbility, isAnyLeaderAbilityActivatable } from './ability-activation';
 
-// NUEVO H5.2 §1/§6 — `TurnDecisionFlow`/`TurnDecisionSignal`/`TurnRevealStage`/`ActionCategory` SÍ se
-// reexportan desde el barrel público (`src/index.ts`): `apps/shell` necesita los tipos para
-// `useTurnRevealStage`/`CombatHud`/`CombatBoardOverlay` (H5.5), aunque la construcción
-// (`createTurnDecisionFlow`) siga siendo un detalle interno de `CombatScene.create()`.
-export type { TurnDecisionFlow, TurnDecisionSignal, TurnRevealStage, ActionCategory, TurnDecisionFlowDeps } from './turn-decision-flow';
-export { createTurnDecisionFlow } from './turn-decision-flow';
+// H5.2/H5.5 CORRECCIÓN 2026-07-13 — `TurnDecisionFlow`/`TurnDecisionSignal`/`TurnRevealStage`/
+// `ActionCategory` RETIRADOS por completo (gating de categoría sobre-aplicado a PLAY_CARD/
+// ACTIVATE_ABILITY, que ya tenían objetivo visual propio en mesa). Ver
+// docs/specs/H5.2_revelacion_progresiva.md / docs/specs/H5.5_cableado_flujo_progresivo.md.

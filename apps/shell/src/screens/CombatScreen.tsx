@@ -6,9 +6,9 @@ import { CombatScene, COMBAT_SCENE_VIEWPORT } from '@collector/combat-scene';
 import type {
   AbilityViewData,
   BoardViewContext,
+  EffectsQueueSignal,
   GestureCommandTranslatorHandle,
   TargetingSignal,
-  TurnDecisionFlow,
 } from '@collector/combat-scene';
 import type { CombatBridge } from '@collector/combat-bridge';
 import './CombatScreen.css';
@@ -16,7 +16,9 @@ import { buildCombatSetup } from '../combat/build-combat-setup';
 import { useCombatSnapshot } from '../combat/use-combat-snapshot';
 import { usePhaserViewportTransform } from '../combat/use-phaser-viewport-transform';
 import { useTargetingPrompt } from '../combat/use-targeting-prompt';
-import { useTurnRevealStage } from '../combat/use-turn-reveal-stage';
+import { useIsWideViewport } from '../combat/use-is-wide-viewport';
+import { useEffectsQueueDraining } from '../combat/use-effects-queue-draining';
+import { useAutoEndTurn } from '../combat/use-auto-end-turn';
 import { CombatBoardOverlay } from '../combat/CombatBoardOverlay';
 import { CombatHud } from '../combat/CombatHud';
 import { CombatResultModal } from '../combat/CombatResultModal';
@@ -91,9 +93,9 @@ export function CombatScreen(): JSX.Element {
   // se crea/arranca DENTRO del handler de READY, así que estos dos solo existen a partir de ahí).
   const [targetingSignal, setTargetingSignal] = useState<TargetingSignal | null>(null);
   const [gestureHandle, setGestureHandle] = useState<GestureCommandTranslatorHandle | null>(null);
-  // NUEVO H5.5 §1/§2 — flujo de revelación progresiva del turno, obtenido de `CombatScene` tras
-  // `READY`, mismo ciclo de vida que `targetingSignal`/`gestureHandle`.
-  const [turnDecisionFlow, setTurnDecisionFlow] = useState<TurnDecisionFlow | null>(null);
+  // NUEVO H5.9 §2 — obtenido de `CombatScene` tras `READY`, mismo ciclo de vida que
+  // `targetingSignal`/`gestureHandle`.
+  const [effectsQueueSignal, setEffectsQueueSignal] = useState<EffectsQueueSignal | null>(null);
   // H4 spec §2.3 — sincroniza la capa HTML del overlay con el escalado real que
   // `Phaser.Scale.FIT` aplica al canvas.
   const transform = usePhaserViewportTransform(mountRef);
@@ -129,7 +131,7 @@ export function CombatScreen(): JSX.Element {
         // están disponibles inmediatamente después de `scene.start(...)`.
         setTargetingSignal(scene.getTargetingSignal());
         setGestureHandle(scene.getGestureCommandTranslator());
-        setTurnDecisionFlow(scene.getTurnDecisionFlow());
+        setEffectsQueueSignal(scene.getEffectsQueueSignal());
       });
       setLeaderAbilities(boardContext.leaderAbilities);
       setBoardContext(boardContext);
@@ -165,7 +167,7 @@ export function CombatScreen(): JSX.Element {
             transform={transform}
             targetingSignal={targetingSignal}
             gestureHandle={gestureHandle}
-            turnDecisionFlow={turnDecisionFlow}
+            effectsQueueSignal={effectsQueueSignal}
             headerContainer={headerEl}
             footerContainer={footerEl}
           />
@@ -196,7 +198,7 @@ function CombatHudOverlay({
   transform,
   targetingSignal,
   gestureHandle,
-  turnDecisionFlow,
+  effectsQueueSignal,
   headerContainer,
   footerContainer,
 }: {
@@ -209,8 +211,8 @@ function CombatHudOverlay({
   readonly transform: ReturnType<typeof usePhaserViewportTransform>;
   readonly targetingSignal: TargetingSignal | null;
   readonly gestureHandle: GestureCommandTranslatorHandle | null;
-  /** NUEVO H5.5 §2. */
-  readonly turnDecisionFlow: TurnDecisionFlow | null;
+  /** NUEVO H5.9 §2. */
+  readonly effectsQueueSignal: EffectsQueueSignal | null;
   /** FIX QA (Bug 1/Bug 2) — nodos DOM reales de `.combat-screen-header`/`.combat-screen-footer`
    *  (filas del flex column de `CombatScreen.css`, siempre presentes en el árbol). `CombatHud`/
    *  `TargetingPromptBanner`/`CombatLogPanel` se proyectan ahí vía `createPortal` en vez de vivir
@@ -226,9 +228,16 @@ function CombatHudOverlay({
   const targetingPrompt = useTargetingPrompt(targetingSignal);
   // NUEVO H4 spec §3/§5 — log de combate en texto, traducido desde el canal HUD.
   const logEntries = useCombatLog(bridge, boardContext);
-  // NUEVO H5.5 §2 — fase vigente de revelación progresiva del turno (CATEGORY/DETAIL), calculada una
-  // única vez aquí y pasada a `CombatHud`/`CombatBoardOverlay`.
-  const stage = useTurnRevealStage(turnDecisionFlow);
+  // NUEVO H5.8 §3.2 — en desktop ancho (>= 1100px CSS reales), `CombatLogPanel` pasa a sidebar
+  // persistente (`position: fixed`, no necesita reservar fila del footer); en el resto de casos
+  // conserva el comportamiento peek/bottom-sheet de H4, portado a `.combat-screen-footer`.
+  const isWideViewport = useIsWideViewport();
+  // NUEVO H5.9 §2 — evita el "popup ciego": `TurnStartModal` espera a que la cola de `EffectsDirector`
+  // termine de drenar el turno del Enemigo antes de aparecer.
+  const effectsQueueDraining = useEffectsQueueDraining(effectsQueueSignal);
+  // NUEVO H5.9 §3.2 — fin de turno automático, sustituye al botón manual "Fin de turno" (retirado en
+  // H5.5 corrección §5).
+  useAutoEndTurn(bridge, snapshot, leaderAbilities);
   return (
     <>
       {/* H4 spec §5.3 — `CombatHud` (franja de cabecera) + `TargetingPromptBanner` (banner justo
@@ -241,11 +250,8 @@ function CombatHudOverlay({
             <CombatHud
               snapshot={snapshot}
               bridge={bridge}
-              onEndTurn={() => bridge.dispatch({ type: 'END_TURN' })}
               leaderName={leaderName}
               leaderAbilities={leaderAbilities}
-              turnDecisionFlow={turnDecisionFlow}
-              stage={stage}
             />
             <TargetingPromptBanner
               prompt={targetingPrompt}
@@ -263,10 +269,12 @@ function CombatHudOverlay({
         enemyName={enemyName}
         scenarioName={scenarioName}
         targetingPrompt={targetingPrompt}
-        stage={stage}
+        bridge={bridge}
       />
-      {footerContainer && createPortal(<CombatLogPanel entries={logEntries} />, footerContainer)}
-      <TurnStartModal snapshot={snapshot} bridge={bridge} />
+      {isWideViewport
+        ? <CombatLogPanel entries={logEntries} variant="sidebar" />
+        : footerContainer && createPortal(<CombatLogPanel entries={logEntries} variant="peek" />, footerContainer)}
+      <TurnStartModal snapshot={snapshot} bridge={bridge} effectsQueueDraining={effectsQueueDraining} />
       {snapshot.status !== 'IN_PROGRESS' && <CombatResultModal snapshot={snapshot} />}
     </>
   );

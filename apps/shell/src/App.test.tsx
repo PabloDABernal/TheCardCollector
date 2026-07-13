@@ -16,13 +16,9 @@ import type { App as AppComponent } from './App';
 // síncronamente justo después de `scene.start(...)` dentro del handler de `READY`.
 const fakeTargetingSignal = { getState: () => ({ kind: 'NONE' as const }), subscribe: () => () => {} };
 const fakeGestureHandle = { handleCardTap: vi.fn(), handleAbilityTap: vi.fn(), cancelPending: vi.fn() };
-// NUEVO H5.5 §1 — `CombatScene.getTurnDecisionFlow()`, mismo espíritu de mock que el resto de este
-// archivo (superficie mínima, sin máquina de estados real).
-const fakeTurnDecisionFlow = {
-  selectCategory: vi.fn(),
-  cancelDetail: vi.fn(),
-  signal: { getState: () => ({ stage: 'CATEGORY' as const }), subscribe: () => () => {} },
-};
+// NUEVO H5.9 §2 — `CombatScene.getEffectsQueueSignal()`, mismo espíritu de mock que el resto de este
+// archivo (superficie mínima, sin cola de reproducción real).
+const fakeEffectsQueueSignal = { isDraining: () => false, subscribe: () => () => {} };
 
 vi.mock('phaser', () => {
   class FakeGame {
@@ -31,7 +27,7 @@ vi.mock('phaser', () => {
       add: vi.fn(() => ({
         getTargetingSignal: () => fakeTargetingSignal,
         getGestureCommandTranslator: () => fakeGestureHandle,
-        getTurnDecisionFlow: () => fakeTurnDecisionFlow,
+        getEffectsQueueSignal: () => fakeEffectsQueueSignal,
       })),
       start: vi.fn(),
     };
@@ -70,6 +66,13 @@ vi.mock('@collector/combat-scene', () => ({
   LEADER_ABILITIES_ROW_Y: 1888,
   ENEMY_ABILITIES_ROW_Y: 480,
   ABILITY_ICON_SEPARATION_PX: 200,
+  // NUEVO H5.7 §3.1 — `SideActionRail` (renderizado dentro de `CombatBoardOverlay`) lee estas
+  // constantes de posición vía `@collector/combat-scene`.
+  SIDE_ACTION_RAIL_X: 76,
+  SIDE_ACTION_RAIL_Y: 1030,
+  SIDE_ACTION_RAIL_GAP_PX: 96,
+  RAIL_CHIP_HALF_WIDTH_PX: 55,
+  RAIL_CHIP_HEIGHT_PX: 44,
 }));
 
 const fakeSnapshot: CombatStateSnapshot = {
@@ -146,7 +149,7 @@ describe('App routing', () => {
     // (Soldado Base) — regresión cero respecto al flujo que `apps/shell` ya jugaba antes.
     await user.click(screen.getByText('Iniciar combate'));
     expect(document.getElementById('phaser-mount')).not.toBeNull();
-    expect(await screen.findByText('Fin de turno')).toBeInTheDocument();
+    expect(await screen.findByText('Acciones')).toBeInTheDocument();
     // H4 spec §6 — `CombatHud` ya no prefija "Líder: " (mockup §6, solo el nombre en `TYPE.displaySm`
     // junto al contador de acciones); el mismo nombre también aparece en `CombatBoardOverlay`
     // (línea de rol), así que se verifica dentro del contenedor `.combat-hud` específicamente.
@@ -169,7 +172,7 @@ describe('App routing', () => {
     await user.click(screen.getByText('Iniciar combate'));
 
     expect(document.getElementById('phaser-mount')).not.toBeNull();
-    expect(await screen.findByText('Fin de turno')).toBeInTheDocument();
+    expect(await screen.findByText('Acciones')).toBeInTheDocument();
     expect(document.querySelector('.combat-hud')?.textContent).toContain('Mago Base');
     expect(document.querySelector('.combat-hud')?.textContent).not.toContain('Soldado Base');
     expect(buildCombatSetupMock).toHaveBeenCalledWith({
@@ -189,7 +192,7 @@ describe('App routing', () => {
     render(<App />);
 
     expect(document.getElementById('phaser-mount')).not.toBeNull();
-    expect(await screen.findByText('Fin de turno')).toBeInTheDocument();
+    expect(await screen.findByText('Acciones')).toBeInTheDocument();
     // H4 spec §6 — `CombatHud` ya no prefija "Líder: " (mockup §6, solo el nombre en `TYPE.displaySm`
     // junto al contador de acciones); el mismo nombre también aparece en `CombatBoardOverlay`
     // (línea de rol), así que se verifica dentro del contenedor `.combat-hud` específicamente.

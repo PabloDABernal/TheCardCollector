@@ -505,4 +505,120 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
       expect(focusController.end).toHaveBeenCalledTimes(1);
     });
   });
+
+  // H5.9 spec §6 casos 1-3 — cola de reproducción serializada + queueSignal.
+  describe('H5.9 — cola de reproducción serializada (EffectsQueueSignal)', () => {
+    it('1. el segundo evento no arranca su receta hasta que la del primero (incluido su posible foco) resolvió', async () => {
+      const { bridge, emit } = createMockSceneBridge();
+      const soundManager = createFakeSoundManager();
+      let resolveTurnBanner: () => void = () => {};
+      const registry: JuiceRecipeRegistry = {
+        turnBanner: {
+          id: 'turnBanner',
+          play: vi.fn(() => new Promise<void>((resolve) => { resolveTurnBanner = resolve; })),
+        },
+        hitImpact: { id: 'hitImpact', play: vi.fn(async () => {}) },
+        screenShake: { id: 'screenShake', play: vi.fn(async () => {}) },
+        floatingNumber: { id: 'floatingNumber', play: vi.fn(async () => {}) },
+      };
+      const director = createEffectsDirector(
+        JUICE_CONFIG,
+        registry,
+        soundManager,
+        createFakeBigMomentClassifier(),
+        createFakeFocusController(),
+      );
+      director.attach(bridge, {} as Phaser.Scene);
+
+      const turnEndedEvent: CombatEvent = { type: 'TURN_ENDED', previousTurnOwner: 'ENEMY', nextTurnOwner: 'LEADER', turnNumber: 2 };
+      const leaderDamagedEvent: CombatEvent = {
+        type: 'LEADER_DAMAGED',
+        sourceId: 'enemy-ability-1',
+        side: 'ENEMY',
+        nucleoSpent: { id: NUCLEO_ID_1, color: 'AGRESION', value: 2 },
+        rawAmount: 5,
+        absorbedByShield: 0,
+        appliedDamage: 5,
+        leaderShieldAfter: 0,
+        leaderDamageAfter: 5,
+      };
+
+      // Ambos emitidos EN LA MISMA pila síncrona (mismo patrón que `handleEndTurn` real) — sin await
+      // entre ellos.
+      emit(turnEndedEvent);
+      emit(leaderDamagedEvent);
+
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(registry.turnBanner!.play).toHaveBeenCalledTimes(1);
+      expect(registry.hitImpact!.play).not.toHaveBeenCalled(); // el 2º evento espera su turno en la cola
+
+      resolveTurnBanner();
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(registry.hitImpact!.play).toHaveBeenCalledTimes(1);
+    });
+
+    it('2. isDraining() pasa a true en cuanto el primer evento con receta entra en cola, y a false solo tras drenar el último', async () => {
+      const { bridge, emit } = createMockSceneBridge();
+      const { registry } = createTestRegistry();
+      const soundManager = createFakeSoundManager();
+      const director = createEffectsDirector(
+        JUICE_CONFIG,
+        registry as unknown as JuiceRecipeRegistry,
+        soundManager,
+        createFakeBigMomentClassifier(),
+        createFakeFocusController(),
+      );
+      director.attach(bridge, {} as Phaser.Scene);
+
+      const transitions: boolean[] = [];
+      director.queueSignal.subscribe((draining) => transitions.push(draining));
+
+      expect(director.queueSignal.isDraining()).toBe(false);
+
+      const turnEndedEvent: CombatEvent = { type: 'TURN_ENDED', previousTurnOwner: 'ENEMY', nextTurnOwner: 'LEADER', turnNumber: 2 };
+      const cardPlayedEvent: CombatEvent = {
+        type: 'CARD_PLAYED',
+        cardId: createId<'CardId'>('CardId', 'card-1') as CardId,
+        sourceId: 'card-instance-1',
+        leaderEnergyAfter: 2,
+      };
+
+      emit(turnEndedEvent);
+      emit(cardPlayedEvent);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(transitions).toEqual([true, false]);
+      expect(director.queueSignal.isDraining()).toBe(false);
+    });
+
+    it('3. un evento sin receta (steps.length === 0) no dispara ningún cambio de isDraining()', async () => {
+      const { bridge, emit } = createMockSceneBridge();
+      const { registry } = createTestRegistry();
+      const soundManager = createFakeSoundManager();
+      const director = createEffectsDirector(
+        JUICE_CONFIG,
+        registry as unknown as JuiceRecipeRegistry,
+        soundManager,
+        createFakeBigMomentClassifier(),
+        createFakeFocusController(),
+      );
+      director.attach(bridge, {} as Phaser.Scene);
+
+      const transitions: boolean[] = [];
+      director.queueSignal.subscribe((draining) => transitions.push(draining));
+
+      // COOLDOWNS_TICKED no tiene receta en JUICE_CONFIG (array vacío) — no debe entrar en cola.
+      emit({ type: 'COOLDOWNS_TICKED', changes: [] } as unknown as CombatEvent);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(transitions).toEqual([]);
+      expect(director.queueSignal.isDraining()).toBe(false);
+    });
+  });
 });

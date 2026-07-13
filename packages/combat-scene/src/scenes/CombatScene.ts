@@ -1,10 +1,10 @@
 import Phaser from 'phaser';
 import type { AbilityId, CardId } from '@collector/domain-shared';
 import type { CombatBridge, Unsubscribe } from '@collector/combat-bridge';
-import { createEffectsDirector, JUICE_CONFIG, createRecipeRegistry, createBigMomentClassifier, createFocusController } from '../juice';
+import { createEffectsDirector, JUICE_CONFIG, createRecipeRegistry, createBigMomentClassifier, createFocusController, type EffectsQueueSignal } from '../juice';
 import { createInputAdapter, type InputAdapter } from '../input';
 import { createBoardView, createTargetingHighlightView, createDieRejectionView, type BoardViewContext } from '../view';
-import { createGestureCommandTranslator, createTurnDecisionFlow, type TargetingSignal, type TurnDecisionFlow } from '../interaction';
+import { createGestureCommandTranslator, type TargetingSignal } from '../interaction';
 import { createWebAudioSoundManager } from '../audio';
 import { COMBAT_SCENE_VIEWPORT } from '../view/board-layout';
 
@@ -62,9 +62,10 @@ export class CombatScene extends Phaser.Scene {
    *  (poblado en `create()`, no en `init()` — mismo criterio que el resto de recursos de escena). */
   private translatorHandle!: GestureCommandTranslatorHandle;
   private targetingSignal!: TargetingSignal;
-  /** NUEVO H5.2 §3/H5.5 §1 — máquina de estados de revelación progresiva del turno (construida en
-   *  `create()`, no en `init()` — mismo criterio que el resto de recursos de escena). */
-  private turnDecisionFlowHandle!: TurnDecisionFlow;
+  /** NUEVO H5.9 §2 — guarda la instancia de `EffectsDirector` (antes variable local descartada tras
+   *  `attach()`) para poder exponer su `queueSignal`, mismo criterio de propiedad de instancia que
+   *  `targetingSignal`/`translatorHandle`. */
+  private effectsDirectorHandle!: { queueSignal: EffectsQueueSignal };
 
   constructor() {
     super('CombatScene');
@@ -82,10 +83,10 @@ export class CombatScene extends Phaser.Scene {
     return this.translatorHandle;
   }
 
-  /** NUEVO H5.5 §1 — expuesto a `apps/shell` tras `READY`, mismo ciclo de vida que
+  /** NUEVO H5.9 §2 — expuesto a `apps/shell` tras `READY`, mismo ciclo de vida que
    *  `getTargetingSignal()`/`getGestureCommandTranslator()`. */
-  getTurnDecisionFlow(): TurnDecisionFlow {
-    return this.turnDecisionFlowHandle;
+  getEffectsQueueSignal(): EffectsQueueSignal {
+    return this.effectsDirectorHandle.queueSignal;
   }
 
   /** Fase 1 del ciclo de vida Phaser — recibe `CombatSceneInitData`. Únicamente asigna `this.bridge`/
@@ -144,6 +145,7 @@ export class CombatScene extends Phaser.Scene {
       focusController,
     );
     const unsubscribeEffects: Unsubscribe = effectsDirector.attach(this.bridge, this);
+    this.effectsDirectorHandle = effectsDirector; // NUEVO H5.9 §2
 
     // H2.7 §2.3 — umbrales por defecto; H2.8/H2.9 pueden pasar config si el feel lo pide. Sin consumidor
     // semántico todavía en esta historia (§0.1): la traducción PointerGesture -> PlayerIntent de dominio es
@@ -177,13 +179,6 @@ export class CombatScene extends Phaser.Scene {
     };
     const unsubscribeTranslator: Unsubscribe = this.inputAdapter.subscribe((gesture) => {
       translator.handleGesture(gesture);
-    });
-
-    // NUEVO H5.2 §3/H5.5 §1 — construido inmediatamente después de `translator`, mismo punto donde
-    // ya se construyen `this.targetingSignal`/`this.translatorHandle`.
-    this.turnDecisionFlowHandle = createTurnDecisionFlow({
-      bridge: this.bridge,
-      cancelPending: () => translator.cancelPending(),
     });
 
     // NUEVO H4 spec §5.4 — highlight visual (glow `--foil` pulsante) sobre los sprites de mesa

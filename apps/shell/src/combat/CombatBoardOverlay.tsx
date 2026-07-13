@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react';
+import type { CombatBridge } from '@collector/combat-bridge';
 import type { CombatStateSnapshot } from '@collector/domain-combat';
-import type { BoardViewContext, GestureCommandTranslatorHandle, TargetingPrompt, TurnRevealStage } from '@collector/combat-scene';
+import type { BoardViewContext, GestureCommandTranslatorHandle, TargetingPrompt } from '@collector/combat-scene';
 import {
   COMBAT_SCENE_VIEWPORT,
   LEADER_POSITION,
@@ -29,6 +30,7 @@ import { EnemyDramaturgiaCardSlot } from './card/EnemyDramaturgiaCardSlot';
 import { MinionRow } from './card/MinionRow';
 import { AllyRow } from './card/AllyRow';
 import { CharacterSheetPreview } from './card/CharacterSheetPreview';
+import { SideActionRail } from './SideActionRail';
 
 // H4 spec §2 — mismo offset que `role-view.ts` usaba para su `Text` de estado (retirado de Phaser,
 // migrado aquí), para que la posición visual de la línea de rol no cambie respecto a la versión
@@ -56,10 +58,10 @@ export interface CombatBoardOverlayProps {
   /** NUEVO H4.x — targeting vigente, consumido por `MinionRow` para resolver el highlight
    *  `selected` de un Secuaz que sea objetivo válido ahora mismo. */
   readonly targetingPrompt: TargetingPrompt;
-  /** NUEVO H5.5 §4 — fase vigente de revelación progresiva del turno (H5.2). Gobierna la
-   *  visibilidad/interactividad de `HandCardRow` y `AbilityRow` del Líder — el resto del tablero
-   *  (Núcleos, roles, Secuaces, Aliados, log) nunca se oculta por `stage` (H5.5 §5). */
-  readonly stage: TurnRevealStage;
+  /** NUEVO H5.5 corrección 2026-07-13 §4/§6 — necesario para que `SideActionRail` (montado aquí,
+   *  hermano de `AbilityRow`/`MinionRow`/`AllyRow`) pueda despachar `GENERATE_ENERGY`/`DRAW_CARD`
+   *  directamente, mismo patrón que `CombatHud` ya recibe `bridge` desde H3.5. */
+  readonly bridge: CombatBridge;
 }
 
 /**
@@ -82,7 +84,7 @@ export function CombatBoardOverlay({
   scenarioName,
   gestureHandle,
   targetingPrompt,
-  stage,
+  bridge,
 }: CombatBoardOverlayProps): JSX.Element {
   const leaderRemainingRatio =
     (ctx.leaderMaxHealth - snapshot.leaderDamage) / Math.max(ctx.leaderMaxHealth, 1);
@@ -224,25 +226,24 @@ export function CombatBoardOverlay({
       <AllyRow snapshot={snapshot} ctx={ctx} />
 
       {/* NUEVO H4 spec §1/§4/§6 — mano del Líder, sustituye `card-hand-view.ts` (Phaser).
-          MODIFICADO H5.5 §4 — SOLO visible/interactiva en DETAIL/PLAY_CARD: en CATEGORY (o
-          DETAIL/ACTIVATE_ABILITY) la fila queda OCULTA por completo (sin renderizar), no solo
-          deshabilitada — la revelación progresiva significa que el jugador no ve las cartas hasta
-          elegir la categoría, no que las ve atenuadas. */}
-      {gestureHandle && stage.stage === 'DETAIL' && stage.category === 'PLAY_CARD' && (
+          H5.5 corrección 2026-07-13 §4 — REVIERTE el gating por `stage` (H5.2 original): la mano
+          vuelve a estar SIEMPRE visible/interactiva durante el turno del jugador, tap directo en
+          una carta dispara el comando, exactamente el criterio de H4 antes de H5.2/H5.5. */}
+      {gestureHandle && (
         <HandCardRow snapshot={snapshot} ctx={ctx} gestureHandle={gestureHandle} />
       )}
 
       {/* NUEVO H4 spec §2/§6 — habilidades del Líder (interactivas) y del Enemigo (informativas),
-          sustituye `ability-cooldown-view.ts` (Phaser). MODIFICADO H5.5 §4 — habilidades del Líder
-          gated a DETAIL/ACTIVATE_ABILITY (mismo criterio que HandCardRow arriba). Habilidades del
-          Enemigo SIN cambio: siempre visibles, nunca interactivas. */}
+          sustituye `ability-cooldown-view.ts` (Phaser). H5.5 corrección 2026-07-13 §4 — habilidades
+          del Líder vuelven a estar SIEMPRE visibles/interactivas (sin gating por `stage`), mismo
+          criterio que HandCardRow arriba. Habilidades del Enemigo SIN cambio: siempre visibles,
+          nunca interactivas. */}
       <AbilityRow
         snapshot={snapshot}
         abilities={ctx.leaderAbilities}
         side="LEADER"
         rowY={LEADER_ABILITIES_ROW_Y}
-        interactive={gestureHandle !== null && stage.stage === 'DETAIL' && stage.category === 'ACTIVATE_ABILITY'}
-        visible={stage.stage === 'DETAIL' && stage.category === 'ACTIVATE_ABILITY'}
+        interactive={gestureHandle !== null}
         {...(gestureHandle ? { gestureHandle } : {})}
       />
       <AbilityRow
@@ -252,6 +253,10 @@ export function CombatBoardOverlay({
         rowY={ENEMY_ABILITIES_ROW_Y}
         interactive={false}
       />
+
+      {/* NUEVO H5.7 §3.3 — Generar Energía/Robar Carta, discretos, anclados al margen lateral de la
+          mesa de Núcleos (decisions.md 2026-07-13 punto 2: sin objetivo visual propio en mesa). */}
+      <SideActionRail bridge={bridge} snapshot={snapshot} leaderAbilities={ctx.leaderAbilities} />
     </div>
 
     {/* FIX Reviewer — modal centrado en el viewport REAL, renderizado como HERMANO del `<div>` con
