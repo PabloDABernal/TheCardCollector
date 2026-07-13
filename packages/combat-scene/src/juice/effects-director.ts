@@ -71,6 +71,15 @@ function resolveJuiceTarget(event: CombatEvent): JuiceTarget {
   }
 }
 
+/** H5.9 §1 — señal de lectura de si la cola de reproducción tiene trabajo pendiente/en curso.
+ *  Expuesta para que `apps/shell` pueda esperar a que la "reproducción" de un turno completo del
+ *  Enemigo termine antes de mostrar `TurnStartModal` (evita el "popup ciego"). Mismo patrón de
+ *  pub/sub que `TargetingSignal`/`RejectionSignal`. */
+export interface EffectsQueueSignal {
+  isDraining(): boolean;
+  subscribe(listener: (draining: boolean) => void): () => void;
+}
+
 /**
  * H2.4 spec §3.1 — puente entre el stream de `CombatEvent` de `subscribeSceneEvents` y las
  * recetas de juice declaradas en `JuiceConfig`.
@@ -81,8 +90,15 @@ export interface EffectsDirector {
    *  suscripción (H2.6 lo invoca en el `shutdown`/`destroy` de `CombatScene`). Llamar `attach` dos
    *  veces sobre la misma instancia crea dos suscripciones independientes — el caller (H2.6) es
    *  responsable de no hacerlo por accidente; no hay guardia interna contra doble-attach en esta
-   *  historia (YAGNI). */
+   *  historia (YAGNI).
+   *
+   *  H5.9 §1 — MODIFICADO: en vez de disparar `resolveEvent` inmediatamente por cada evento entrante
+   *  ("fire-and-forget"), encola y drena uno a uno en orden de llegada (FIFO) — necesario para que el
+   *  turno completo del Enemigo (5-15+ eventos emitidos en la MISMA pila síncrona de `dispatch({type:
+   *  'END_TURN'})`) se reproduzca en secuencia legible en vez de superpuesto. */
   attach(bridge: CombatBridge, scene: Phaser.Scene): Unsubscribe;
+  /** NUEVO H5.9 §1. */
+  readonly queueSignal: EffectsQueueSignal;
 }
 
 /** Recorre `steps` en orden, disparando cada `JuiceStep` según su `mode` (§3.2). NUEVO H2.13: si el
@@ -155,20 +171,76 @@ export function createEffectsDirector(
   bigMomentClassifier: BigMomentClassifier, // NUEVO H5.3 — 4º parámetro obligatorio
   focusController: FocusController, // NUEVO H5.3/H5.4 — 5º parámetro obligatorio
 ): EffectsDirector {
+  // H5.9 §1 — cola de reproducción serializada: `attach()` deja de disparar `resolveEvent` de forma
+  // "fire-and-forget" por cada evento; encola y drena uno a uno, en orden de llegada.
+  const queue: JuiceTarget[] = [];
+  let draining = false;
+  const listeners = new Set<(draining: boolean) => void>();
+
+  function setDraining(next: boolean): void {
+    if (draining === next) return;
+    draining = next;
+    listeners.forEach((listener) => listener(draining));
+  }
+
+  async function drain(scene: Phaser.Scene): Promise<void> {
+    setDraining(true);
+    // FIX Reviewer post-E5 (bug real 1, bloqueante) — `setDraining(false)` vive en un `finally` que
+    // envuelve TODO el `while`: si el `while` se corta por cualquier motivo (incluida una excepción no
+    // capturada por el `try` interno de abajo, que no debería ocurrir pero no se confía ciegamente),
+    // `draining` nunca queda atascado en `true` — condición necesaria para que `attach()` vuelva a
+    // llamar `drain()` en el futuro y para que `queueSignal.isDraining()` no bloquee `TurnStartModal`
+    // para siempre (ver `docs/specs/H5.9_fin_de_turno_automatico.md` §2).
+    try {
+      while (queue.length > 0) {
+        const target = queue.shift()!;
+        const steps = config[target.event.type] ?? [];
+        const isBigMoment = steps.some((s) => s.isBigMoment === true) || bigMomentClassifier.classify(target.event);
+        try {
+          // await DENTRO del bucle es DELIBERADO — secuenciación estricta, ver H5.9 §1
+          // (`no-await-in-loop` no está habilitada en este proyecto, sin necesidad de disable).
+          await resolveEvent(steps, target, scene, recipes, soundManager, isBigMoment, focusController);
+        } catch (error) {
+          // FIX Reviewer post-E5 (bug real 1) — una receta rota (ej. `recipeId` inexistente, o una
+          // excepción real dentro de `recipe.play`) NO debe bloquear el resto de la cola: el resto de
+          // eventos ya encolados (potencialmente el turno completo del Enemigo, H5.9 §0.2) deben poder
+          // seguir reproduciéndose. El error sigue siendo visible/no silencioso (§3.2 punto 4 de la
+          // spec H5.9: "errores no capturados dentro de una receta deben propagarse como excepción no
+          // manejada visible") — se reporta como `unhandledRejection` de forma asíncrona (mismo
+          // criterio "fire-and-forget" que ya regía este canal antes de la cola serializada), sin
+          // interrumpir el `while`.
+          void Promise.reject(error);
+        }
+      }
+    } finally {
+      setDraining(false);
+    }
+  }
+
   return {
     attach(bridge: CombatBridge, scene: Phaser.Scene): Unsubscribe {
       return bridge.subscribeSceneEvents((event: CombatEvent) => {
         const steps = config[event.type] ?? [];
         if (steps.length === 0) {
-          return;
+          return; // sin receta — no entra en cola, mismo comportamiento que antes (se ignora)
         }
 
-        const isBigMoment = steps.some((s) => s.isBigMoment === true) || bigMomentClassifier.classify(event);
-        const target = resolveJuiceTarget(event);
-        // Fire-and-forget respecto al bus de eventos de dominio (§3.2 punto 4) — errores no
-        // capturados dentro de una receta deben propagarse como excepción no manejada visible.
-        void resolveEvent(steps, target, scene, recipes, soundManager, isBigMoment, focusController);
+        queue.push(resolveJuiceTarget(event));
+        if (!draining) {
+          // Fire-and-forget respecto al bus de eventos de dominio (§3.2 punto 4) — errores no
+          // capturados dentro de una receta deben propagarse como excepción no manejada visible.
+          void drain(scene);
+        }
+        // si ya está drenando, el nuevo evento simplemente se procesa cuando le toque su turno en
+        // la cola (orden FIFO) — reentrante-seguro por construcción.
       });
+    },
+    queueSignal: {
+      isDraining: () => draining,
+      subscribe(listener: (draining: boolean) => void): () => void {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
     },
   };
 }

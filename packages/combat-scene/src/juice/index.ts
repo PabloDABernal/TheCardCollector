@@ -1,7 +1,7 @@
 export type { JuiceTarget, JuiceStep, JuiceStepMode, JuiceRecipe, JuiceRecipeRegistry } from './juice-recipe';
 export type { JuiceConfig } from './juice-config';
 export { JUICE_CONFIG } from './juice-config';
-export type { EffectsDirector, FocusController } from './effects-director';
+export type { EffectsDirector, FocusController, EffectsQueueSignal } from './effects-director';
 export { createEffectsDirector, FOCUS_ID_LEADER, FOCUS_ID_ENEMY, FOCUS_ID_SCENARIO, MIN_BIG_MOMENT_HOLD_MS } from './effects-director';
 export { createRecipeRegistry } from './recipes';
 // NUEVO H5.3 §1 — clasificación dinámica de "momento grande" por cruce de umbral (Trama/vida).

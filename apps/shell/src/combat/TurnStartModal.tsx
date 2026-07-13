@@ -22,6 +22,11 @@ import {
 export interface TurnStartModalProps {
   readonly snapshot: CombatStateSnapshot;
   readonly bridge: CombatBridge;
+  /** NUEVO H5.9 §2 — mientras `true`, el modal NO aparece aunque el resto de la condición de
+   *  `shouldShow` ya se cumpla: el turno del Enemigo (o la última acción del propio Líder) todavía
+   *  se está reproduciendo visualmente (`EffectsQueueSignal`, `EffectsDirector`). Evita el "popup
+   *  ciego" — el jugador ve completo lo que ocurrió antes de que se le pida la siguiente decisión. */
+  readonly effectsQueueDraining: boolean;
 }
 
 /**
@@ -32,15 +37,20 @@ export interface TurnStartModalProps {
  * sigue disponible el resto del turno vía la franja de `CombatHud`). Sin cierre por clic fuera ni
  * Escape (spec §1.4: "que no se te olvide" es el encargo central, no debe poder ignorarse por
  * accidente).
+ *
+ * H5.9 §2 — añade `effectsQueueDraining` a la condición de aparición: espera a que la cola de
+ * reproducción de `EffectsDirector` termine de drenar (turno completo del Enemigo ya visible) antes
+ * de interrumpir con el popup de la siguiente decisión.
  */
-export function TurnStartModal({ snapshot, bridge }: TurnStartModalProps): JSX.Element | null {
+export function TurnStartModal({ snapshot, bridge, effectsQueueDraining }: TurnStartModalProps): JSX.Element | null {
   const [dismissedForTurn, setDismissedForTurn] = useState<ReadonlySet<number>>(new Set());
 
   const shouldShow =
     snapshot.status === 'IN_PROGRESS' &&
     snapshot.turn.turnOwner === 'LEADER' &&
     !snapshot.leaderFreeStep.takenThisTurn &&
-    !dismissedForTurn.has(snapshot.turn.turnNumber);
+    !dismissedForTurn.has(snapshot.turn.turnNumber) &&
+    !effectsQueueDraining;
 
   if (!shouldShow) {
     return null;

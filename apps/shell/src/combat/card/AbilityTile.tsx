@@ -128,7 +128,7 @@ export function AbilityTile({ ability, interactive, onTap, forceShowRuleText = f
           {ready ? '✓' : ability.remaining}
         </span>
       </div>
-      <span style={{ ...TYPE.labelUpper, fontSize: 11, color: COLOR_TEXT_SECONDARY, textAlign: 'center' }}>
+      <span style={{ ...TYPE.labelUpper, fontSize: 14, color: COLOR_TEXT_SECONDARY, textAlign: 'center' }}>
         {ability.name}
       </span>
 

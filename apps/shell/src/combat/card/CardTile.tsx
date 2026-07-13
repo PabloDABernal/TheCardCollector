@@ -89,7 +89,7 @@ export function CardTile({
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <span style={{ fontSize: isHand || isBoard ? 16 : 22 }}>{CARD_ICON_GLYPH[card.icon]}</span>
+        <span style={{ fontSize: isHand || isBoard ? 18 : 24 }}>{CARD_ICON_GLYPH[card.icon]}</span>
         {/* NUEVO H4.x — badge de vida sustituye al de coste para tiles 'board' (Aliado/Secuaz en
             mesa, `card.cost` siempre null). Mismo contenedor visual, contenido condicional — nunca
             compiten por layout porque `card.boardLife`/`card.cost` no coexisten. */}
@@ -97,7 +97,7 @@ export function CardTile({
           <span
             style={{
               ...TYPE.dataMd,
-              fontSize: 11,
+              fontSize: 14, // H5.8 §2.1 — ANTES: 11
               padding: '1px 5px',
               borderRadius: RADIUS_CHIP,
               background: COLOR_INK,
@@ -134,7 +134,7 @@ export function CardTile({
       <span
         style={{
           ...(isHand || isBoard ? TYPE.bodyMd : TYPE.displaySm),
-          fontSize: isBoard ? 12 : undefined,
+          fontSize: isBoard ? 15 : undefined, // H5.8 §2.1 — ANTES: 12
           fontWeight: 700,
           color: COLOR_TEXT_PRIMARY,
           overflow: 'hidden',
@@ -160,7 +160,7 @@ export function CardTile({
               key={`${k.keyword}-${i}`}
               style={{
                 ...TYPE.labelUpper,
-                fontSize: 10,
+                fontSize: 13, // H5.8 §2.1 — ANTES: 10
                 padding: '2px 6px',
                 borderRadius: RADIUS_CHIP,
                 background: COLOR_INK,

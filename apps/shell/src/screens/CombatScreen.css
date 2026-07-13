@@ -62,6 +62,11 @@
   flex: 1;
   min-height: 240px;
   overflow: hidden;
+  /* H5.8 §3.1 — el margen lateral residual en desktop ancho deja de leerse como "pantalla rota"/
+     "contenido cortado" y pasa a leerse como marco decorativo intencional, mismo lenguaje visual
+     que el resto de paneles (`--binder` ya es el fondo de todos los paneles/modales). Sustituye la
+     herencia de `#000` plano del `<body>` sin declaración propia. */
+  background: radial-gradient(ellipse at center, var(--binder) 0%, var(--ink) 100%);
 }
 
 #phaser-mount {
@@ -96,7 +101,8 @@
   --hud-padding-v: 16px;       /* = SPACING.md */
   --hud-padding-h: 16px;       /* = SPACING.md */
   --hud-gap: 8px;              /* = SPACING.sm */
-  --hud-title-size: 20px;      /* = TYPE.displaySm.fontSize */
+  --hud-title-size: 13px;      /* H5.7 §1 — ANTES: 20px (TYPE.displaySm). Nombre del Líder baja a
+                                   jerarquía labelUpper, dentro del rango 50-70% pedido por B5.1. */
   --hud-counter-size: 22px;    /* = TYPE.dataLg.fontSize */
   --hud-label-size: 12px;      /* = TYPE.labelUpper.fontSize */
   --hud-chip-padding-v: 4px;   /* = SPACING.xs, igual que chip-style.ts */
@@ -109,7 +115,7 @@
     --hud-padding-v: 4px;      /* SPACING.xs */
     --hud-padding-h: 8px;      /* SPACING.sm */
     --hud-gap: 4px;            /* SPACING.xs */
-    --hud-title-size: 15px;
+    --hud-title-size: 11px;    /* H5.7 §1 — ANTES: 15px */
     --hud-counter-size: 16px;
     --hud-label-size: 10px;
     --hud-chip-padding-v: 2px;

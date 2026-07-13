@@ -20,9 +20,13 @@ export type { DefaultCombatSetup } from './default-combat-setup';
 // `GestureCommandTranslatorHandle` (superficie reducida de `handleCardTap`/`handleAbilityTap`/
 // `cancelPending`, expuesta por `CombatScene.getGestureCommandTranslator()`).
 export type { TargetingSignal, TargetingPrompt } from './interaction';
-// NUEVO H5.2/H5.5 — `apps/shell` necesita estos 4 tipos para `useTurnRevealStage`/`CombatHud`/
-// `CombatBoardOverlay` (revelación progresiva de decisiones de turno).
-export type { TurnDecisionFlow, TurnDecisionSignal, TurnRevealStage, ActionCategory } from './interaction';
+// NUEVO H5.9 §2 — `apps/shell` necesita este tipo para `useEffectsQueueDraining`/`TurnStartModal`
+// (esperar a que la cola de reproducción termine antes de mostrar el popup de inicio de turno).
+export type { EffectsQueueSignal } from './juice';
+// H5.2/H5.5 CORRECCIÓN 2026-07-13 — `TurnDecisionFlow`/`TurnDecisionSignal`/`TurnRevealStage`/
+// `ActionCategory` RETIRADOS (ver docs/specs/H5.2_revelacion_progresiva.md corrección). Mano y
+// habilidades del Líder vuelven a ser siempre visibles/interactivas; Generar Energía/Robar Carta
+// pasan a `SideActionRail` (H5.7), dispatch directo sin máquina de estados.
 // H4 spec §2.3 — `PANEL_ZONES`/`PanelZone` SÍ se reexportan (excepción puntual, mismo espíritu que
 // `isAnyLeaderAbilityActivatable` abajo): `apps/shell` (`CombatBoardOverlay.tsx`) necesita las MISMAS
 // coordenadas de zona que `board-layout.ts` ya calcula, para las etiquetas de zona y las líneas de
@@ -44,8 +48,14 @@ export {
   ALLIES_ROW_Y,
   MINIONS_ROW_X_ORIGIN,
   ALLIES_ROW_X_ORIGIN,
-  // NUEVO H5.1 §1/§7 — ancla raíz de la mesa de Núcleos, reutilizada por H5.5.
+  // NUEVO H5.1 §1/§7 — ancla raíz de la mesa de Núcleos.
   NUCLEO_TABLE_CENTER_Y,
+  // NUEVO H5.7 §3.1 — riel de acciones discretas (`SideActionRail.tsx`, `apps/shell`).
+  SIDE_ACTION_RAIL_X,
+  SIDE_ACTION_RAIL_Y,
+  SIDE_ACTION_RAIL_GAP_PX,
+  RAIL_CHIP_HALF_WIDTH_PX,
+  RAIL_CHIP_HEIGHT_PX,
 } from './view';
 // FIX Reviewer post-H3 (commit `cce72a3`) — `isAnyLeaderAbilityActivatable` SÍ se reexporta
 // (excepción puntual a "sin detalles internos" de arriba): `apps/shell` (`CombatHud.tsx`) lo

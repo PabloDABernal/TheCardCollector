@@ -5,8 +5,9 @@ import { test, expect } from '@playwright/test';
  * mismo criterio no-CI que H2.5 §7 (`juice-smoke.spec.ts`). Navega a `combat-scene-smoke.html`
  * (bootstrap standalone que reusa `CombatScene`/`buildDefaultCombatBridge` reales de producción, ver
  * `combat-scene-smoke-main.ts`), confirma que el `<canvas>` de Phaser existe con el `Scale Manager` en
- * modo `FIT` (viewport virtual 1080×1920), que no hay errores de consola/excepciones no capturadas
- * durante el arranque, y que al menos una receta de juice se dispara visualmente.
+ * modo `FIT` (viewport virtual 1280×2060, H5.8 §1 — subido desde 1080×1920), que no hay errores de
+ * consola/excepciones no capturadas durante el arranque, y que al menos una receta de juice se dispara
+ * visualmente.
  *
  * DESVIACIÓN respecto a la spec §5.3 (documentada, no bloqueante): la spec asumía que "`NUCLEO_POOL_ROLLED`
  * ya ocurre al construir el `CombatEngine` inicial [...] así que el `EffectsDirector` ya dispara `diceRoll`
@@ -35,12 +36,13 @@ test('CombatScene arranca con canvas real, sin errores, y diceRoll se dispara al
   await expect(canvas).toBeVisible();
 
   // Scale Manager en modo FIT: el canvas se ajusta al contenedor manteniendo el aspect ratio del
-  // viewport virtual 1080×1920 (COMBAT_SCENE_VIEWPORT) — no necesariamente esos px exactos en pantalla,
-  // pero sí el mismo aspect ratio (1080/1920).
+  // viewport virtual 1280×2060 (COMBAT_SCENE_VIEWPORT, H5.8 §1) — no necesariamente esos px exactos en
+  // pantalla, pero sí el mismo aspect ratio (1280/2060). FIX Reviewer post-E5 (test desactualizado) —
+  // ANTES: 1080/1920, desactualizado desde que H5.8 cambió COMBAT_SCENE_VIEWPORT.
   const box = await canvas.boundingBox();
   expect(box).not.toBeNull();
   if (box) {
-    expect(box.width / box.height).toBeCloseTo(1080 / 1920, 1);
+    expect(box.width / box.height).toBeCloseTo(1280 / 2060, 1);
   }
 
   await page.waitForFunction(() => Boolean((window as unknown as { __combatBridge?: unknown }).__combatBridge));

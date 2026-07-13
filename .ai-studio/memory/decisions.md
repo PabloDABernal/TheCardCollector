@@ -234,7 +234,7 @@ Revisado `common-cards.json`, `mago-base-cards.json`, `soldado-base-cards.json`:
 ### 4. Traslado a Coordinator
 Se traslada a Coordinator (no se toca el JSON aquí) la lista concreta de ajustes sugeridos, ver resumen de esta sesión.
 
-## 2026-07-12 — Rediseño de experiencia de combate: mesa de dados central, revelación progresiva de decisiones, jerarquía de peso (Director Creativo + Game Designer)
+## 2026-07-12 — Rediseño de experiencia de combate: mesa de datos central, revelación progresiva de decisiones, jerarquía de peso (Director Creativo + Game Designer)
 
 Responde al feedback del Director Creativo tras jugar el build de H4 ("sigue sin parecer un prototipo, necesito más chicha" / "no necesito cambios pequeños. cambio profundo y que luego vea un juego diferente"). El Director Creativo aprobó combinar las tres direcciones propuestas por Game Designer sin elegir una sola ("radical. haz todas").
 
@@ -243,3 +243,41 @@ Responde al feedback del Director Creativo tras jugar el build de H4 ("sigue sin
 - **Alcance:** precede a un nuevo hito de UX de combate; se traslada a Coordinator para desglosar en épica/historias. **Ninguna regla de Núcleos, turno con paso previo + 2 acciones, cooldowns, Umbral, Trama, IA del Enemigo o velocidad de juego cambia.** Es 100% trabajo de secuenciación de UI, jerarquía visual/foco y layout.
 - **Contenido de juguete (2 Líderes, 2 Enemigos, 2 Escenarios) NO cambia en este trabajo** — solo la experiencia de presentación y secuenciación del combate.
 - **Referencias:** H1 cierre de reglas (decisions.md 2026-07-08), vision.md "Experiencia objetivo del combate rediseñado (2026-07-12)" (documento completo, no resumen — es la fuente de verdad).
+
+## 2026-07-13 — Corrección crítica tras playtesting real de E5: gating de categoría mal aplicado a acciones con objetivo visual propio (Director Creativo)
+
+**SUSTITUYE Y CORRIGE** la parte de H5.2/H5.5 sobre gating de categoría en decisions.md 2026-07-12 y vision.md "Experiencia objetivo del combate rediseñado" punto 2. El Director Creativo probó el build real de GitHub Pages tras E5 completada y reportó un "error de diseño central" en la implementación: **la revelación progresiva (elegir categoría antes de ver detalle) fue sobre-aplicada a acciones que ya tienen un objetivo visual explícito en el tablero.**
+
+### Feedback textual del Director Creativo tras playtesting:
+
+*"Tú puedes hacer 4 cosas. Jugar carta (que sería jugar la carta, no hace falta declarar 'jugar carta'), activar habilidad (Que sería darle a una habilidad presente y activarla, tampoco hace falta declararla), robar carta y generar energía. Esas dos opciones deberían salir discretamente a un lado del tablero."*
+
+### Diagnóstico y corrección:
+
+1. **Jugar Carta y Activar Habilidad NO deben estar en el flujo de "preguntas secuenciales" de H5.2.** Ambas tienen un objetivo visual ya en mesa (la carta en la mano, el icono de habilidad en el Líder). El jugador debe poder tocar directamente esos objetos y ejecutar la acción con un solo gesto — sin pedir primero "¿quieres jugar una carta?" como pregunta categórica. Eso es ceremonia innecesaria cuando el objetivo ya es visible.
+
+2. **Generar Energía y Robar Carta SÍ quedan como botones discretos y pequeños a un lado del tablero.** Estas dos acciones NO tienen un objetivo visual propio en mesa (no son "tocar X cosa visible"), así que gating de categoría tiene sentido para ellas: el jugador elige si genera energía o roba carta desde un botón explícito.
+
+3. **Layout visual:** Los 4 botones de acción (Jugar Carta, Activar Habilidad, Generar Energía, Robar Carta) NO deben ser una fila principal de 4 botones iguales. En su lugar: Jugar Carta y Activar Habilidad son **acciones directas al tocar el objeto**, sin botón que las acompañe (la interacción está en Phaser, en H3.1 y H3.3 ya cableadas). Generar Energía y Robar Carta son **dos botones pequeños y discretos a un lado del tablero**, visibles pero no como protagonistas.
+
+4. **Otras correcciones de UX detectadas en playtesting real:**
+   - HUD superior (nombre del Líder "SOLDADO BASE" en texto grande) tiene peso visual desproporcionado sin razón funcional → reducir prominencia.
+   - Layout desperdicia ancho de pantalla en navegador/desktop (contenido comprimido en columna central, franjas negras vacías) → **priorizar legibilidad en desktop/navegador primero**, adaptación a móvil es batalla posterior.
+   - Legibilidad general de texto es mala: etiquetas pequeñas, nombres de Secuaces/Escenario/Enemigo/HP ilegibles → mejorar tamaños y contraste.
+   - Flujo de fin de turno confuso: botón "Fin de Turno" no tiene sentido cuando el jugador ya gastó sus 2 acciones → **debe terminar automáticamente al agotar acciones**, sin botón que dependa de su interpretación. Y cambio de turno hacia Enemigo NO debe saltar a popup ciego — primero mostrar visualmente qué hace el Enemigo (qué carta/habilidad de Dramaturgia juega, con foco si aplica) para que el jugador entienda qué pasó, solo entonces popup de cambio de turno.
+
+### Alcance de corrección:
+
+- **H5.2 (revelación progresiva) reinterpretada:** No es una máquina de estados de 4-5 fases para todas las acciones. Es un flujo **dentro de acciones que lo necesitan** (ej. si hay múltiples Secuaces, targeting requiere elegir objetivo). Para Jugar Carta y Activar Habilidad, **el gating de categoría se elimina** — tap directo sobre el objeto, sin "¿quieres?" previo.
+
+- **H5.5 (cableado del flujo) refactorizado:** TurnDecisionFlow no es el componente central de todo el turno. Es un helper para acciones que necesitan secuenciación (targeting, selección de detail si aplica). La acción "Jugar Carta" y "Activar Habilidad" siguen siendo tap/click directo, igual a H3.1/H3.3 — sin cambios en el cableado de input Phaser que ya funciona.
+
+- **Visión de H5 preservada parcialmente:** Mesa central (H5.1), jerarquía big/rutinario (H5.3-H5.4, H5.6) se mantienen íntegros. Solo se reinterpreta qué acciones están sujetas a revelación progresiva.
+
+- **Otras correcciones (HUD, layout desktop, legibilidad, fin de turno):** No estaban cubiertas por E5.1-E5.6. Requieren 3-4 historias/bugs nuevos con prioridad P0, bloqueantes.
+
+### Referencias para Architect/Programmer:
+
+- H5.2 (revelación progresiva) continúa existiendo pero su alcance es más acotado: targeting (cuando hay múltiples objetivos) y selección de detail (cuando aplica).
+- H5.5 (cableado) continúa pero refactoriza TurnDecisionFlow para que no sea el orchestrador de **todas** las decisiones — solo de las secuenciadas.
+- Historias nuevas que salen de esto: ver backlog.md "Reabierta E5 2026-07-13" y nuevos bugs P0.

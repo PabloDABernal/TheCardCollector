@@ -36,7 +36,19 @@
  *  que el Líder (tile, HP, sus 4 habilidades) se renderizaba SIEMPRE fuera del viewport. H5.1
  *  reutiliza el mismo viewport (sin cambios) — la mesa central se logra reorganizando la cadena de
  *  derivación dentro del mismo alto/ancho, no ampliando el viewport de nuevo. */
-export const COMBAT_SCENE_VIEWPORT = { width: 1080, height: 2060 } as const;
+// H5.8 (`docs/specs/H5.8_layout_desktop_legibilidad.md`) §1 — `width` sube de 1080 a 1280 (`height`
+// SIN cambiar — eje ya validado exhaustivamente por H4/H5.1). Reduce (sin eliminar del todo) las
+// franjas negras en desktop/navegador panorámico; el resto del ancho libre se rellena de intención
+// visual/funcional en `apps/shell` (fondo temático + `CombatLogPanel` sidebar, H5.8 §3). Rediseño
+// topológico completo (viewport genuinamente panorámico) queda fuera de alcance, ver H5.8 §4.
+export const COMBAT_SCENE_VIEWPORT = { width: 1280, height: 2060 } as const;
+
+/** H5.8 §1.1 — la inmensa mayoría de las constantes X de este archivo son fórmulas derivadas del
+ *  ancho del viewport; este alias evita repetir `COMBAT_SCENE_VIEWPORT.width / 2` en cada sitio.
+ *  Exportado (no solo interno) para que `board-view.ts`/`juice/recipes/placeholder.ts` — que también
+ *  centran horizontalmente algo contra el viewport completo — usen el mismo valor derivado en vez de
+ *  un literal `540` desincronizado tras H5.8. */
+export const VIEWPORT_CENTER_X = COMBAT_SCENE_VIEWPORT.width / 2; // 640
 
 // FIX QA post-`6d14b52` — duplicados documentados de las dimensiones reales de sprite que SÍ dibujan
 // `nucleo-table-view.ts` (`NUCLEO_DIE_SIZE` 64, solo el dado FIXED base — los dados EXTRA apilados con
@@ -156,7 +168,7 @@ const SCENARIO_BOTTOM_HALF_PX = Math.max(
 // compacta — ej. Escenario→Secuaces, Secuaces→Enemigo — nunca al borde contra la propia mesa). Antes
 // de este fix, `CONTENT_GAP_PX` quedaba huérfano (sin ningún uso real en la cadena de derivación).
 export const SCENARIO_POSITION = {
-  x: 540,
+  x: VIEWPORT_CENTER_X,
   y: NUCLEO_PANEL_TOP_Y - CONTENT_GAP_PX - SCENARIO_BOTTOM_HALF_PX, // 618-12-108 = 498
 };
 
@@ -170,7 +182,7 @@ export const MINIONS_ROW_Y =
 const ROLE_WITH_ABILITIES_BOTTOM_HALF_PX = COMPACT_ABILITIES_ROW_OFFSET_PX + ABILITY_ICON_HEIGHT_PX / 2; // 120+12 = 132
 
 export const ENEMY_POSITION = {
-  x: 540,
+  x: VIEWPORT_CENTER_X,
   y: MINIONS_ROW_Y - CARD_TILE_HALF_PX - COMPACT_ZONE_GAP_PX - ROLE_WITH_ABILITIES_BOTTOM_HALF_PX, // 332-90-6-132 = 104
 };
 
@@ -186,12 +198,12 @@ export const ENEMY_ABILITIES_ROW_Y = ENEMY_POSITION.y + COMPACT_ABILITIES_ROW_OF
 export const ALLIES_ROW_Y = NUCLEO_PANEL_BOTTOM_Y + CONTENT_GAP_PX + CARD_TILE_HALF_PX; // 1442+12+90 = 1544
 
 export const HAND_ROW_POSITION = {
-  x: 540,
+  x: VIEWPORT_CENTER_X,
   y: ALLIES_ROW_Y + CARD_TILE_HALF_PX + COMPACT_ZONE_GAP_PX + CARD_TILE_HALF_PX, // 1544+90+6+90 = 1730
 };
 
 export const LEADER_POSITION = {
-  x: 540,
+  x: VIEWPORT_CENTER_X,
   y: HAND_ROW_POSITION.y + CARD_TILE_HALF_PX + COMPACT_ZONE_GAP_PX + COMPACT_ROLE_TILE_HALF_PX, // 1730+90+6+70 = 1896
 };
 
@@ -264,6 +276,20 @@ export const NUCLEO_PANEL_TABLE_ACCENT_COLOR = 0xd4a24c; // = --foil
 export const NUCLEO_PANEL_TABLE_ACCENT_ALPHA = 0.35; // translúcido — presente SIEMPRE, no solo en foco
 export const NUCLEO_PANEL_TABLE_ACCENT_WIDTH_PX = 3;
 export const NUCLEO_PANEL_TABLE_RADIUS_PX = 24; // más redondeado que RADIUS_PANEL (12) — distingue su forma
+
+// NUEVO H5.7 §3.1 — riel de acciones discretas (Generar Energía/Robar Carta, `SideActionRail`,
+// `apps/shell`), anclado al margen lateral IZQUIERDO libre entre el borde del viewport y
+// `panel-nucleos`. Fórmula (no literal fijo) para que H5.8 (ensanche de `COMBAT_SCENE_VIEWPORT`)
+// recalcule el margen disponible automáticamente sin tocar este archivo de nuevo.
+const SIDE_ACTION_RAIL_MARGIN_PX = (COMBAT_SCENE_VIEWPORT.width - NUCLEO_PANEL_WIDTH) / 2;
+export const SIDE_ACTION_RAIL_X = Math.round(SIDE_ACTION_RAIL_MARGIN_PX / 2);
+export const SIDE_ACTION_RAIL_Y = NUCLEO_TABLE_CENTER_Y;
+export const SIDE_ACTION_RAIL_GAP_PX = 96;
+// Dimensiones de diseño del chip compacto del riel (`railChipStyle`, `SideActionRail.tsx`) —
+// duplicadas aquí (mismo criterio de aislamiento que el resto de este archivo) solo para que
+// `board-layout.test.ts` pueda verificar que el riel no se sale del viewport ni solapa la mesa.
+export const RAIL_CHIP_HALF_WIDTH_PX = 55; // = 110 (ancho del chip) / 2
+export const RAIL_CHIP_HEIGHT_PX = 44; // = MIN_TAP_TARGET_PX (design-tokens.ts)
 
 export interface PanelZone {
   readonly id: string; // nombre estable, usado como scene name (debug/QA)
@@ -348,15 +374,15 @@ export const CONTENT_BOXES_TOP_TO_BOTTOM: readonly { readonly id: string; readon
 ];
 
 export const PANEL_ZONES: readonly PanelZone[] = [
-  panelFromContent(540, 1000, 'panel-enemy', 'Enemigo', ENEMY_CONTENT),
-  panelFromContent(540, 1000, 'panel-minions', 'Secuaces', MINIONS_CONTENT),
-  panelFromContent(540, 1000, 'panel-scenario', 'Escenario', SCENARIO_CONTENT),
+  panelFromContent(VIEWPORT_CENTER_X, 1000, 'panel-enemy', 'Enemigo', ENEMY_CONTENT),
+  panelFromContent(VIEWPORT_CENTER_X, 1000, 'panel-minions', 'Secuaces', MINIONS_CONTENT),
+  panelFromContent(VIEWPORT_CENTER_X, 1000, 'panel-scenario', 'Escenario', SCENARIO_CONTENT),
   // NUEVO H5.1 §2.1 — ÚNICA excepción a `panelFromContent` de este archivo: el panel de Núcleos
   // dimensiona por RATIO de viewport (diseño deliberado, "mesa central" con relleno generoso
   // alrededor de los dados), no por el bounding box mínimo de su contenido real (`NUCLEOS_CONTENT`,
   // que sigue existiendo arriba solo para el test de no-solape, ver §5 de la spec).
-  { id: 'panel-nucleos', x: 540, y: NUCLEO_TABLE_CENTER_Y, width: NUCLEO_PANEL_WIDTH, height: NUCLEO_PANEL_HEIGHT, label: 'Núcleos' },
-  panelFromContent(540, 1000, 'panel-allies', 'Aliados', ALLIES_CONTENT),
-  panelFromContent(540, 1040, 'panel-hand', 'Mano', HAND_CONTENT),
-  panelFromContent(540, 1000, 'panel-leader', 'Líder', LEADER_CONTENT),
+  { id: 'panel-nucleos', x: VIEWPORT_CENTER_X, y: NUCLEO_TABLE_CENTER_Y, width: NUCLEO_PANEL_WIDTH, height: NUCLEO_PANEL_HEIGHT, label: 'Núcleos' },
+  panelFromContent(VIEWPORT_CENTER_X, 1000, 'panel-allies', 'Aliados', ALLIES_CONTENT),
+  panelFromContent(VIEWPORT_CENTER_X, 1040, 'panel-hand', 'Mano', HAND_CONTENT),
+  panelFromContent(VIEWPORT_CENTER_X, 1000, 'panel-leader', 'Líder', LEADER_CONTENT),
 ];

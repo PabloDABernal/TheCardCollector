@@ -65,12 +65,12 @@ export const TYPE = {
   bodySm: { fontFamily: FONT_UI, fontSize: '13px', fontWeight: 400 },
   labelUpper: {
     fontFamily: FONT_UI,
-    fontSize: '12px',
+    fontSize: '14px', // H5.8 §2.2 — ANTES: 12px (legibilidad de etiquetas de zona/Secuaz/Escenario/Enemigo)
     fontWeight: 700,
     letterSpacing: '0.08em',
     textTransform: 'uppercase',
   },
-  dataMd: { fontFamily: FONT_MONO, fontSize: '15px', fontVariantNumeric: 'tabular-nums' },
+  dataMd: { fontFamily: FONT_MONO, fontSize: '17px', fontVariantNumeric: 'tabular-nums' }, // H5.8 §2.2 — ANTES: 15px (HP/Trama/Fase)
   dataLg: { fontFamily: FONT_MONO, fontSize: '22px', fontVariantNumeric: 'tabular-nums' },
 } as const;
 

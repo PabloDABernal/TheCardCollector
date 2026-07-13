@@ -22,6 +22,9 @@ import {
   COMPACT_ZONE_GAP_PX,
   CONTENT_BOXES_TOP_TO_BOTTOM,
   COMBAT_SCENE_VIEWPORT,
+  NUCLEO_PANEL_WIDTH,
+  SIDE_ACTION_RAIL_X,
+  RAIL_CHIP_HALF_WIDTH_PX,
 } from './board-layout';
 
 /**
@@ -258,5 +261,20 @@ describe('board-layout — LEADER_ABILITIES_ROW_Y cabe dentro de COMBAT_SCENE_VI
     // contra el panel de Núcleos, lo que empuja la zona inferior 6px hacia abajo; el Líder sigue DENTRO
     // del viewport, solo se reduce el colchón extra del margen (no es el overflow real de H4 P0).
     expect(LEADER_ABILITIES_ROW_Y + ABILITY_ICON_HEIGHT_PX / 2).toBeLessThanOrEqual(COMBAT_SCENE_VIEWPORT.height - 32);
+  });
+});
+
+/**
+ * H5.7 (`docs/specs/H5.7_hud_lider_discreto.md`) §5 punto 4 — `SideActionRail` (Generar Energía/
+ * Robar Carta) no debe salirse por el borde izquierdo del viewport ni solapar la mesa de Núcleos.
+ */
+describe('board-layout — H5.7 SideActionRail dentro del margen lateral libre', () => {
+  it('el chip no se sale por el borde izquierdo del viewport', () => {
+    expect(SIDE_ACTION_RAIL_X - RAIL_CHIP_HALF_WIDTH_PX).toBeGreaterThan(0);
+  });
+
+  it('el chip no solapa el borde izquierdo de panel-nucleos', () => {
+    const nucleoLeftEdge = (COMBAT_SCENE_VIEWPORT.width - NUCLEO_PANEL_WIDTH) / 2;
+    expect(SIDE_ACTION_RAIL_X + RAIL_CHIP_HALF_WIDTH_PX).toBeLessThan(nucleoLeftEdge);
   });
 });

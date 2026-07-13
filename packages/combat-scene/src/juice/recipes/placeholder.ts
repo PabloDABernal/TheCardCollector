@@ -1,5 +1,5 @@
 import type Phaser from 'phaser';
-import { LEADER_POSITION, HAND_ROW_POSITION, ENEMY_POSITION, SCENARIO_POSITION } from '../../view/board-layout';
+import { LEADER_POSITION, HAND_ROW_POSITION, ENEMY_POSITION, SCENARIO_POSITION, VIEWPORT_CENTER_X } from '../../view/board-layout';
 
 /**
  * H2.5 spec §2 — posiciones fijas de referencia para los placeholders genéricos que las recetas
@@ -20,7 +20,7 @@ export const PLACEHOLDER_POSITIONS: Record<string, { x: number; y: number }> = {
 
 /** Posición por defecto cuando `focusId` no es uno de los 3 roles fijos (p.ej. un
  *  `cardInstanceId`/`allyInstanceId` real todavía sin sprite propio, o `focusId` ausente). */
-export const DEFAULT_PLACEHOLDER_POSITION = { x: 540, y: 960 };
+export const DEFAULT_PLACEHOLDER_POSITION = { x: VIEWPORT_CENTER_X, y: 960 }; // H5.8 §1 — x sigue COMBAT_SCENE_VIEWPORT.width/2, y sin cambio (eje vertical fuera de alcance de H5.8)
 
 /** Posición de "mano/mesa" genérica para placeholders de carta cuyo `focusId` no es uno de los 3
  *  roles fijos (spec §3.2 punto 1). Alias directo de `HAND_ROW_POSITION` (`view/board-layout.ts`) —

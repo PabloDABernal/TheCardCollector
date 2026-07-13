@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react';
+import type { CombatBridge } from '@collector/combat-bridge';
 import type { CombatStateSnapshot } from '@collector/domain-combat';
-import type { BoardViewContext, GestureCommandTranslatorHandle, TargetingPrompt, TurnRevealStage } from '@collector/combat-scene';
+import type { BoardViewContext, GestureCommandTranslatorHandle, TargetingPrompt } from '@collector/combat-scene';
 import {
   COMBAT_SCENE_VIEWPORT,
   LEADER_POSITION,
@@ -29,6 +30,7 @@ import { EnemyDramaturgiaCardSlot } from './card/EnemyDramaturgiaCardSlot';
 import { MinionRow } from './card/MinionRow';
 import { AllyRow } from './card/AllyRow';
 import { CharacterSheetPreview } from './card/CharacterSheetPreview';
+import { SideActionRail } from './SideActionRail';
 
 // H4 spec §2 — mismo offset que `role-view.ts` usaba para su `Text` de estado (retirado de Phaser,
 // migrado aquí), para que la posición visual de la línea de rol no cambie respecto a la versión
@@ -56,10 +58,10 @@ export interface CombatBoardOverlayProps {
   /** NUEVO H4.x — targeting vigente, consumido por `MinionRow` para resolver el highlight
    *  `selected` de un Secuaz que sea objetivo válido ahora mismo. */
   readonly targetingPrompt: TargetingPrompt;
-  /** NUEVO H5.5 §4 — fase vigente de revelación progresiva del turno (H5.2). Gobierna la
-   *  visibilidad/interactividad de `HandCardRow` y `AbilityRow` del Líder — el resto del tablero
-   *  (Núcleos, roles, Secuaces, Aliados, log) nunca se oculta por `stage` (H5.5 §5). */
-  readonly stage: TurnRevealStage;
+  /** NUEVO H5.5 corrección 2026-07-13 §4/§6 — necesario para que `SideActionRail` (montado aquí,
+   *  hermano de `AbilityRow`/`MinionRow`/`AllyRow`) pueda despachar `GENERATE_ENERGY`/`DRAW_CARD`
+   *  directamente, mismo patrón que `CombatHud` ya recibe `bridge` desde H3.5. */
+  readonly bridge: CombatBridge;
 }
 
 /**
@@ -82,7 +84,7 @@ export function CombatBoardOverlay({
   scenarioName,
   gestureHandle,
   targetingPrompt,
-  stage,
+  bridge,
 }: CombatBoardOverlayProps): JSX.Element {
   const leaderRemainingRatio =
     (ctx.leaderMaxHealth - snapshot.leaderDamage) / Math.max(ctx.leaderMaxHealth, 1);
@@ -176,6 +178,7 @@ export function CombatBoardOverlay({
         name={leaderName}
         isOpen={openSheet === 'LEADER'}
         onOpenChange={(open) => setOpenSheet((cur) => (open ? 'LEADER' : cur === 'LEADER' ? null : cur))}
+        denseGap
       >
         <span style={{ color: isLeaderLowHealth ? COLOR_DANGER : COLOR_TEXT_PRIMARY }}>
           ♥ {snapshot.leaderDamage}/{ctx.leaderMaxHealth}
@@ -224,25 +227,24 @@ export function CombatBoardOverlay({
       <AllyRow snapshot={snapshot} ctx={ctx} />
 
       {/* NUEVO H4 spec §1/§4/§6 — mano del Líder, sustituye `card-hand-view.ts` (Phaser).
-          MODIFICADO H5.5 §4 — SOLO visible/interactiva en DETAIL/PLAY_CARD: en CATEGORY (o
-          DETAIL/ACTIVATE_ABILITY) la fila queda OCULTA por completo (sin renderizar), no solo
-          deshabilitada — la revelación progresiva significa que el jugador no ve las cartas hasta
-          elegir la categoría, no que las ve atenuadas. */}
-      {gestureHandle && stage.stage === 'DETAIL' && stage.category === 'PLAY_CARD' && (
+          H5.5 corrección 2026-07-13 §4 — REVIERTE el gating por `stage` (H5.2 original): la mano
+          vuelve a estar SIEMPRE visible/interactiva durante el turno del jugador, tap directo en
+          una carta dispara el comando, exactamente el criterio de H4 antes de H5.2/H5.5. */}
+      {gestureHandle && (
         <HandCardRow snapshot={snapshot} ctx={ctx} gestureHandle={gestureHandle} />
       )}
 
       {/* NUEVO H4 spec §2/§6 — habilidades del Líder (interactivas) y del Enemigo (informativas),
-          sustituye `ability-cooldown-view.ts` (Phaser). MODIFICADO H5.5 §4 — habilidades del Líder
-          gated a DETAIL/ACTIVATE_ABILITY (mismo criterio que HandCardRow arriba). Habilidades del
-          Enemigo SIN cambio: siempre visibles, nunca interactivas. */}
+          sustituye `ability-cooldown-view.ts` (Phaser). H5.5 corrección 2026-07-13 §4 — habilidades
+          del Líder vuelven a estar SIEMPRE visibles/interactivas (sin gating por `stage`), mismo
+          criterio que HandCardRow arriba. Habilidades del Enemigo SIN cambio: siempre visibles,
+          nunca interactivas. */}
       <AbilityRow
         snapshot={snapshot}
         abilities={ctx.leaderAbilities}
         side="LEADER"
         rowY={LEADER_ABILITIES_ROW_Y}
-        interactive={gestureHandle !== null && stage.stage === 'DETAIL' && stage.category === 'ACTIVATE_ABILITY'}
-        visible={stage.stage === 'DETAIL' && stage.category === 'ACTIVATE_ABILITY'}
+        interactive={gestureHandle !== null}
         {...(gestureHandle ? { gestureHandle } : {})}
       />
       <AbilityRow
@@ -252,6 +254,10 @@ export function CombatBoardOverlay({
         rowY={ENEMY_ABILITIES_ROW_Y}
         interactive={false}
       />
+
+      {/* NUEVO H5.7 §3.3 — Generar Energía/Robar Carta, discretos, anclados al margen lateral de la
+          mesa de Núcleos (decisions.md 2026-07-13 punto 2: sin objetivo visual propio en mesa). */}
+      <SideActionRail bridge={bridge} snapshot={snapshot} leaderAbilities={ctx.leaderAbilities} />
     </div>
 
     {/* FIX Reviewer — modal centrado en el viewport REAL, renderizado como HERMANO del `<div>` con
@@ -318,11 +324,25 @@ interface RoleBlockProps {
   /** NUEVO H4.x — cuando es `true`, renderiza SIN su propio `position: absolute` (el padre,
    *  `CharacterPanel`, ya se encarga de posicionar el bloque completo). */
   readonly embedded?: boolean;
+  /** FIX Reviewer post-E5 (bug real 2) — cuando es `true`, elimina el `gap` vertical entre
+   *  etiqueta/nombre/fila de datos (en vez de `SPACING.xs`). Necesario ÚNICAMENTE para el panel del
+   *  Líder: el bump de fuente de `TYPE.labelUpper`/`TYPE.dataMd` (H5.8 §2.2, 12→14px/15→17px) creció
+   *  el alto real renderizado de `RoleBlock` lo suficiente para que el panel del Líder (el más abajo
+   *  de los 3, más cerca del borde inferior del viewport) cruzara el margen mínimo disponible en
+   *  viewport 1400×900 (medido con el e2e real: overflow de ~1.46px). Escogido sobre alternativas (ver
+   *  discusión en `docs/specs/H5.8_layout_desktop_legibilidad.md` / resumen del fix): NO se toca
+   *  `board-layout.ts` (el margen de 32px que reserva ya es para la fila de habilidades, un elemento
+   *  DISTINTO — cambiarlo no habría movido ni un píxel el overflow real, que viene del alto propio de
+   *  `RoleBlock`, gobernado por CSS/fuentes, no por las posiciones Y de `board-layout.ts`), y NO se
+   *  revierte el bump de fuente (perdería la mejora de legibilidad de H5.8 para el Líder, el bloque más
+   *  consultado). Solo el panel del Líder usa `denseGap` — Enemigo/Escenario conservan el gap normal,
+   *  no tienen el mismo problema de margen. */
+  readonly denseGap?: boolean;
 }
 
 /** H4 spec §4.3 — bloque de rol: etiqueta (`TYPE.labelUpper`), nombre (`TYPE.displaySm`, Staatliches)
  *  y fila de datos (`TYPE.dataMd`, JetBrains Mono con `tabular-nums`) en chips separados por `gap`. */
-function RoleBlock({ x, y, label, name, children, embedded = false }: RoleBlockProps): JSX.Element {
+function RoleBlock({ x, y, label, name, children, embedded = false, denseGap = false }: RoleBlockProps): JSX.Element {
   return (
     <div
       style={{
@@ -330,7 +350,7 @@ function RoleBlock({ x, y, label, name, children, embedded = false }: RoleBlockP
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: SPACING.xs,
+        gap: denseGap ? 0 : SPACING.xs,
         textAlign: 'center',
       }}
     >
@@ -356,7 +376,7 @@ interface CharacterPanelProps extends RoleBlockProps {
  *  `CardTile`) y dispara `CharacterSheetPreview` (ficha ampliada) al mantener pulsado (400ms,
  *  `LONG_PRESS_MS` de `AbilityTile.tsx`, reutilizado) o al pasar el cursor (hover, desktop) sobre el
  *  tile compacto — spec H4_targeting_habilidades_y_ficha_personaje.md §3.2. */
-function CharacterPanel({ x, y, label, name, children, isOpen, onOpenChange }: CharacterPanelProps): JSX.Element {
+function CharacterPanel({ x, y, label, name, children, isOpen, onOpenChange, denseGap = false }: CharacterPanelProps): JSX.Element {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleTouchStart(): void {
@@ -385,7 +405,7 @@ function CharacterPanel({ x, y, label, name, children, isOpen, onOpenChange }: C
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
-      <RoleBlock x={0} y={0} label={label} name={name} embedded>
+      <RoleBlock x={0} y={0} label={label} name={name} embedded denseGap={denseGap}>
         {children}
       </RoleBlock>
     </div>
