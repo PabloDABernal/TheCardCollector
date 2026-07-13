@@ -185,15 +185,36 @@ export function createEffectsDirector(
 
   async function drain(scene: Phaser.Scene): Promise<void> {
     setDraining(true);
-    while (queue.length > 0) {
-      const target = queue.shift()!;
-      const steps = config[target.event.type] ?? [];
-      const isBigMoment = steps.some((s) => s.isBigMoment === true) || bigMomentClassifier.classify(target.event);
-      // await DENTRO del bucle es DELIBERADO — secuenciación estricta, ver H5.9 §1 (`no-await-in-loop`
-      // no está habilitada en este proyecto, sin necesidad de disable).
-      await resolveEvent(steps, target, scene, recipes, soundManager, isBigMoment, focusController);
+    // FIX Reviewer post-E5 (bug real 1, bloqueante) — `setDraining(false)` vive en un `finally` que
+    // envuelve TODO el `while`: si el `while` se corta por cualquier motivo (incluida una excepción no
+    // capturada por el `try` interno de abajo, que no debería ocurrir pero no se confía ciegamente),
+    // `draining` nunca queda atascado en `true` — condición necesaria para que `attach()` vuelva a
+    // llamar `drain()` en el futuro y para que `queueSignal.isDraining()` no bloquee `TurnStartModal`
+    // para siempre (ver `docs/specs/H5.9_fin_de_turno_automatico.md` §2).
+    try {
+      while (queue.length > 0) {
+        const target = queue.shift()!;
+        const steps = config[target.event.type] ?? [];
+        const isBigMoment = steps.some((s) => s.isBigMoment === true) || bigMomentClassifier.classify(target.event);
+        try {
+          // await DENTRO del bucle es DELIBERADO — secuenciación estricta, ver H5.9 §1
+          // (`no-await-in-loop` no está habilitada en este proyecto, sin necesidad de disable).
+          await resolveEvent(steps, target, scene, recipes, soundManager, isBigMoment, focusController);
+        } catch (error) {
+          // FIX Reviewer post-E5 (bug real 1) — una receta rota (ej. `recipeId` inexistente, o una
+          // excepción real dentro de `recipe.play`) NO debe bloquear el resto de la cola: el resto de
+          // eventos ya encolados (potencialmente el turno completo del Enemigo, H5.9 §0.2) deben poder
+          // seguir reproduciéndose. El error sigue siendo visible/no silencioso (§3.2 punto 4 de la
+          // spec H5.9: "errores no capturados dentro de una receta deben propagarse como excepción no
+          // manejada visible") — se reporta como `unhandledRejection` de forma asíncrona (mismo
+          // criterio "fire-and-forget" que ya regía este canal antes de la cola serializada), sin
+          // interrumpir el `while`.
+          void Promise.reject(error);
+        }
+      }
+    } finally {
+      setDraining(false);
     }
-    setDraining(false);
   }
 
   return {

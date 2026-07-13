@@ -2,8 +2,10 @@ import type { CombatStateSnapshot } from '@collector/domain-combat';
 import type { AbilityViewData } from '@collector/combat-scene';
 import { isAnyLeaderAbilityActivatable } from '@collector/combat-scene';
 
-const LEADER_ENERGY_MAX = 5; // GDD §2.2 / decisions.md — tope de Energía, mismo valor que el motor
-const LEADER_HAND_SIZE_MAX = 7; // decisions.md "Tope de mano: 7"
+// FIX Reviewer post-E5 (deuda técnica) — exportadas: antes duplicadas como literales también en
+// `CombatHud.tsx`, que ahora las importa de aquí en vez de redeclararlas.
+export const LEADER_ENERGY_MAX = 5; // GDD §2.2 / decisions.md — tope de Energía, mismo valor que el motor
+export const LEADER_HAND_SIZE_MAX = 7; // decisions.md "Tope de mano: 7"
 
 /** H5.5 spec (corrección 2026-07-13) §7 — helper puro compartido, extraído de lo que antes vivía
  *  inline y duplicado dentro de `CombatHud.tsx` (mismo criterio de extracción que

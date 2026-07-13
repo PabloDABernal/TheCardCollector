@@ -14,6 +14,7 @@ import {
 import { freeStepAvailabilityFor } from './free-step-availability';
 import { chipStyle } from './chip-style';
 import { useIsCompactViewport } from './use-is-compact-viewport';
+import { LEADER_ENERGY_MAX, LEADER_HAND_SIZE_MAX } from './paid-action-availability';
 
 export interface CombatHudProps {
   readonly snapshot: CombatStateSnapshot;
@@ -25,9 +26,6 @@ export interface CombatHudProps {
    *  `SideActionRail`/H5.9 — `CombatHud` perdió los 4 botones de acción que la necesitaban). */
   readonly leaderAbilities: readonly AbilityViewData[];
 }
-
-const LEADER_ENERGY_MAX = 5; // GDD §2.2 / decisions.md — tope de Energía, mismo valor que el motor
-const LEADER_HAND_SIZE_MAX = 7; // decisions.md "Tope de mano: 7"
 
 /** H4 spec §3.2 — override de padding/fontSize aplicado DESPUÉS del spread de
  *  `enabledStyle`/`disabledStyle` en cada chip (el que va después gana en `style={{...a, ...b}}`).

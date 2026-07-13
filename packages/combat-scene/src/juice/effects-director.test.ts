@@ -620,5 +620,68 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
       expect(transitions).toEqual([]);
       expect(director.queueSignal.isDraining()).toBe(false);
     });
+
+    it('4. FIX Reviewer post-E5 (bug real 1) — una receta que lanza NO bloquea el resto de la cola: el siguiente evento SÍ se resuelve y isDraining() vuelve a false', async () => {
+      const { bridge, emit } = createMockSceneBridge();
+      const soundManager = createFakeSoundManager();
+
+      // CARD_PLAYED apunta a un recipeId inexistente — reproduce una receta rota (mismo mecanismo que
+      // el test "recipeId inexistente..." de arriba), pero aquí seguida de un segundo evento válido en
+      // la MISMA pila síncrona (mismo patrón que `handleEndTurn` real, H5.9 §0.2).
+      const brokenConfig: JuiceConfig = {
+        ...JUICE_CONFIG,
+        CARD_PLAYED: [{ recipeId: 'typoRecipeId', mode: 'parallel' }],
+      };
+      const registry: JuiceRecipeRegistry = {
+        turnBanner: { id: 'turnBanner', play: vi.fn(async () => {}) },
+      };
+
+      const errors: unknown[] = [];
+      const originalHandler = process.listeners('unhandledRejection');
+      const handler = (reason: unknown) => errors.push(reason);
+      process.on('unhandledRejection', handler);
+
+      try {
+        const director = createEffectsDirector(
+          brokenConfig,
+          registry,
+          soundManager,
+          createFakeBigMomentClassifier(),
+          createFakeFocusController(),
+        );
+        director.attach(bridge, {} as Phaser.Scene);
+
+        const transitions: boolean[] = [];
+        director.queueSignal.subscribe((draining) => transitions.push(draining));
+
+        const brokenEvent: CombatEvent = {
+          type: 'CARD_PLAYED',
+          cardId: createId<'CardId'>('CardId', 'card-1') as CardId,
+          sourceId: 'card-instance-1',
+          leaderEnergyAfter: 2,
+        };
+        const validEvent: CombatEvent = {
+          type: 'TURN_ENDED',
+          previousTurnOwner: 'LEADER',
+          nextTurnOwner: 'ENEMY',
+          turnNumber: 1,
+        };
+
+        // Ambos emitidos EN LA MISMA pila síncrona — mismo patrón que `handleEndTurn` real.
+        emit(brokenEvent);
+        emit(validEvent);
+
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(registry.turnBanner!.play).toHaveBeenCalledTimes(1); // el 2º evento SÍ se resolvió
+        expect(director.queueSignal.isDraining()).toBe(false); // no queda atascado en `true`
+        expect(transitions).toEqual([true, false]); // una única transición completa, sin bloqueo
+        expect(errors).toHaveLength(1); // el error sigue siendo visible, no silencioso
+        expect(String(errors[0])).toMatch(/typoRecipeId/);
+      } finally {
+        process.removeListener('unhandledRejection', handler);
+        originalHandler.forEach((l) => process.on('unhandledRejection', l));
+      }
+    });
   });
 });

@@ -178,6 +178,7 @@ export function CombatBoardOverlay({
         name={leaderName}
         isOpen={openSheet === 'LEADER'}
         onOpenChange={(open) => setOpenSheet((cur) => (open ? 'LEADER' : cur === 'LEADER' ? null : cur))}
+        denseGap
       >
         <span style={{ color: isLeaderLowHealth ? COLOR_DANGER : COLOR_TEXT_PRIMARY }}>
           ♥ {snapshot.leaderDamage}/{ctx.leaderMaxHealth}
@@ -323,11 +324,25 @@ interface RoleBlockProps {
   /** NUEVO H4.x — cuando es `true`, renderiza SIN su propio `position: absolute` (el padre,
    *  `CharacterPanel`, ya se encarga de posicionar el bloque completo). */
   readonly embedded?: boolean;
+  /** FIX Reviewer post-E5 (bug real 2) — cuando es `true`, elimina el `gap` vertical entre
+   *  etiqueta/nombre/fila de datos (en vez de `SPACING.xs`). Necesario ÚNICAMENTE para el panel del
+   *  Líder: el bump de fuente de `TYPE.labelUpper`/`TYPE.dataMd` (H5.8 §2.2, 12→14px/15→17px) creció
+   *  el alto real renderizado de `RoleBlock` lo suficiente para que el panel del Líder (el más abajo
+   *  de los 3, más cerca del borde inferior del viewport) cruzara el margen mínimo disponible en
+   *  viewport 1400×900 (medido con el e2e real: overflow de ~1.46px). Escogido sobre alternativas (ver
+   *  discusión en `docs/specs/H5.8_layout_desktop_legibilidad.md` / resumen del fix): NO se toca
+   *  `board-layout.ts` (el margen de 32px que reserva ya es para la fila de habilidades, un elemento
+   *  DISTINTO — cambiarlo no habría movido ni un píxel el overflow real, que viene del alto propio de
+   *  `RoleBlock`, gobernado por CSS/fuentes, no por las posiciones Y de `board-layout.ts`), y NO se
+   *  revierte el bump de fuente (perdería la mejora de legibilidad de H5.8 para el Líder, el bloque más
+   *  consultado). Solo el panel del Líder usa `denseGap` — Enemigo/Escenario conservan el gap normal,
+   *  no tienen el mismo problema de margen. */
+  readonly denseGap?: boolean;
 }
 
 /** H4 spec §4.3 — bloque de rol: etiqueta (`TYPE.labelUpper`), nombre (`TYPE.displaySm`, Staatliches)
  *  y fila de datos (`TYPE.dataMd`, JetBrains Mono con `tabular-nums`) en chips separados por `gap`. */
-function RoleBlock({ x, y, label, name, children, embedded = false }: RoleBlockProps): JSX.Element {
+function RoleBlock({ x, y, label, name, children, embedded = false, denseGap = false }: RoleBlockProps): JSX.Element {
   return (
     <div
       style={{
@@ -335,7 +350,7 @@ function RoleBlock({ x, y, label, name, children, embedded = false }: RoleBlockP
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: SPACING.xs,
+        gap: denseGap ? 0 : SPACING.xs,
         textAlign: 'center',
       }}
     >
@@ -361,7 +376,7 @@ interface CharacterPanelProps extends RoleBlockProps {
  *  `CardTile`) y dispara `CharacterSheetPreview` (ficha ampliada) al mantener pulsado (400ms,
  *  `LONG_PRESS_MS` de `AbilityTile.tsx`, reutilizado) o al pasar el cursor (hover, desktop) sobre el
  *  tile compacto — spec H4_targeting_habilidades_y_ficha_personaje.md §3.2. */
-function CharacterPanel({ x, y, label, name, children, isOpen, onOpenChange }: CharacterPanelProps): JSX.Element {
+function CharacterPanel({ x, y, label, name, children, isOpen, onOpenChange, denseGap = false }: CharacterPanelProps): JSX.Element {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleTouchStart(): void {
@@ -390,7 +405,7 @@ function CharacterPanel({ x, y, label, name, children, isOpen, onOpenChange }: C
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
-      <RoleBlock x={0} y={0} label={label} name={name} embedded>
+      <RoleBlock x={0} y={0} label={label} name={name} embedded denseGap={denseGap}>
         {children}
       </RoleBlock>
     </div>
