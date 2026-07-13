@@ -887,7 +887,9 @@ Overhaul visual de la pantalla de combate y pantalla de inicio de run para mejor
 
 **Referencia:** vision.md "El turno se responde una pregunta a la vez", H2.7 (InputAdapter base), H3.8 (targeting visual — aquí es la integración en el flujo progresivo).
 
-**Estado:** ✅ RESUELTO
+**Estado:** ✅ RESUELTO (después reinterpretado; ver reapertura abajo).
+
+⚠️ **Reabierta 2026-07-13:** El alcance original fue sobre-aplicado tras playtesting real del Director Creativo. La máquina de estados de gating de categoría fue aplicada a **todas** las acciones, incluyendo Jugar Carta y Activar Habilidad. Sin embargo, estas dos acciones tienen un objetivo visual explícito en el tablero (la carta en la mano, el icono de habilidad), así que pedir una categoría abstracta antes de poder tocarlas es ceremonia innecesaria. **Corrección:** Jugar Carta y Activar Habilidad son tap directo (sin gating de categoría, igual a H3.1/H3.3), mientras que Generar Energía y Robar Carta (que no tienen objetivo visual propio) sí necesitan botones explícitos. La máquina de estados `TurnDecisionFlow` continúa existiendo pero su alcance se reduce a: (1) targeting cuando hay múltiples Secuaces, (2) selección de detail cuando aplica. Eliminar la fase `SELECT_CATEGORY` para Jugar/Activar; mantenerla solo para Generar/Robar como botones discretos a un lado del tablero. Refactorizar tests unitarios y flujo end-to-end en H5.5.
 
 ---
 
@@ -946,7 +948,9 @@ Overhaul visual de la pantalla de combate y pantalla de inicio de run para mejor
 
 **Referencia:** H5.2 (arquitectura de revelación), H2.7 (InputAdapter), H2.3 (CombatBridge), H2.9 (flujo end-to-end).
 
-**Estado:** ✅ RESUELTO
+**Estado:** ✅ RESUELTO (después reinterpretado; ver reapertura abajo).
+
+⚠️ **Reabierta 2026-07-13:** Junto con H5.2, el cableado fue sobre-aplicado. `TurnDecisionFlow` fue diseñado como el orchestrador central de **todas** las decisiones del turno, pero tras playtesting real quedó claro que Jugar Carta y Activar Habilidad deben ser tap directo sin ceremonia categórica previa. **Corrección:** Refactorizar `TurnDecisionFlow` para que sea un helper específico para targeting (cuando hay múltiples objetivos) y selección de detail (cuando aplica), no el orchestrador global del turno. Jugar Carta y Activar Habilidad mantienen su cableado de H3.1/H3.3 (tap directo → intent de acción → engine). Generar Energía y Robar Carta se presentan como botones discretos a un lado del tablero (no como opciones en TurnDecisionFlow). Refactorizar tests de integración para validar nuevo flujo: (1) tap en carta en mano → acción inmediata (sin categoría previa), (2) tap en habilidad → acción inmediata, (3) si hay Secuaces, targeting aparece (parte de TurnDecisionFlow), (4) Generar/Robar como botones independientes.
 
 ---
 
@@ -969,6 +973,62 @@ Overhaul visual de la pantalla de combate y pantalla de inicio de run para mejor
 **Referencia:** H5.3-H5.4 (sistema big/rutinario), H5.5 (revelación progresiva), H2.4-H2.5 (recetas), vision.md "Cómo se siente jugar un turno completo".
 
 **Estado:** ✅ RESUELTO
+
+---
+
+## Historias/Bugs nuevas — Correcciones E5 detectadas en playtesting real (2026-07-13, P0/Alta)
+
+### B5.1: HUD superior de nombre del Líder — reducir peso visual desproporcionado
+
+**Prioridad:** P0 / Alta (bloqueante para UX)
+
+**Descripción:** El HUD superior que muestra el nombre del Líder (ej. "SOLDADO BASE") está renderizado en texto muy grande con peso visual desproporcionado sin razón funcional clara. El Director Creativo indicó que esta área debe ser menos prominente, reservando atención visual para la mesa de dados central y las decisiones de turno.
+
+**Criterio de aceptación:**
+- Nombre del Líder sigue visible pero en tamaño más pequeño (50-70% del tamaño actual).
+- Peso visual reducido: color más neutral o opacidad reducida si está sobre fondo importante.
+- Información de vida del Líder (HP actual/máximo, Energía) sigue siendo legible pero no como competidor visual del HUD.
+- Layout del HUD superior sigue siendo funcional (muestra info relevante) pero no "grita" por atención.
+
+**Referencia:** Feedback Director Creativo 2026-07-13, vision.md (jerarquía visual).
+
+---
+
+### B5.2: Layout debe aprovechar ancho completo en desktop/navegador; priorizar legibilidad en desktop sobre móvil
+
+**Prioridad:** P0 / Alta (bloqueante para UX)
+
+**Descripción:** En navegador/desktop, el contenido de combate se renderiza comprimido en una columna estrecha central con grandes franjas negras vacías a los lados. El Director Creativo especificó explícitamente que se debe priorizar que el juego **se vea bien en navegador/desktop primero**, y que la adaptación a móvil es una batalla posterior, no simultánea. Esto incluye: (1) usar el ancho disponible para expandir los paneles y hacer elementos más legibles, (2) mejorar tamaño de texto, iconos y espaciado en todos los paneles (Secuaces, Escenario, Enemigo, HP/Fase), (3) asegurar que nada está "aplastado" por falta de espacio.
+
+**Criterio de aceptación:**
+- Layout responsivo: en viewport ancho (1200px+), paneles y elementos usan espacio disponible (no comprimidos en columna central).
+- Texto legible: nombres de Secuaces, Escenario, Enemigo, contadores de HP/Fase en tamaño ≥12px (o escalado proporcionalmente en móvil).
+- Espaciado consistente: paneles tienen padding/margin claro, sin apiñamiento.
+- Mesa de dados central sigue siendo el foco pero tiene espacio respirable alrededor.
+- Franjas negras vacías eliminadas; espacio usado funcionalalmente.
+- Tests visuales: abrir combate en desktop (1920px ancho) y verificar legibilidad sin sobreajuste de tamaños.
+
+**Referencia:** Feedback Director Creativo 2026-07-13 (explícito sobre desktop-first).
+
+---
+
+### B5.3: Flujo de fin de turno — transición automática al agotar acciones + visualización clara de acción del Enemigo
+
+**Prioridad:** P0 / Alta (bloqueante para flujo de juego)
+
+**Descripción:** El botón "Fin de Turno" no tiene sentido tal como está implementado. Cuando el jugador ya gastó sus 2 acciones (paso previo + 2 acciones), el turno debe terminar de forma **clara y automática** sin depender de un botón adicional confuso. Además, el cambio de turno hacia el Enemigo NO debe saltar directo a un popup ciego — antes debe mostrarse **visualmente qué hace el Enemigo** (qué carta/habilidad de Dramaturgia juega, con su propio momento de foco si aplica) para que el jugador entienda qué pasó, y solo entonces (si aplica) mostrar cualquier popup de cambio de turno.
+
+**Criterio de aceptación:**
+- Botón "Fin de Turno" se elimina del HUD o se deshabilita automáticamente al agotar las 2 acciones.
+- Al agotar la 2ª acción, turno transiciona automáticamente al Enemigo sin requerir confirmación del jugador.
+- Antes de permitir cualquier interacción del Enemigo con UI popup/modal, mostrar visualmente:
+  - Qué carta de Dramaturgia está jugando el Enemigo (mostrar en tablero o preview).
+  - Qué habilidad/efecto se ejecuta (con foco visual si es un "momento grande" según H5.3-H5.4).
+  - Resultado de la acción (daño, Trama, etc.).
+- Solo después de que se resuelve visualmente, mostrar cualquier modal de cambio de turno o información de resultado si aplica.
+- Tests: jugar turno del Líder hasta agotar 2 acciones, verificar que turno cambia automáticamente y acción del Enemigo se visualiza antes de UI adicional.
+
+**Referencia:** Feedback Director Creativo 2026-07-13 (explícito sobre automatización y visualización), vision.md "Cómo se siente jugar un turno completo".
 
 ---
 

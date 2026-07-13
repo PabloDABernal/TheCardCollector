@@ -108,6 +108,10 @@ Nunca tareas.
 - Momentos rutinarios (generar energía, robar carta): sin fade, resolución <500ms, automático sin pausa.
 - Usuario juega un combate completo: percibe información clara, ritmo controlado, decisiones pesadas en momentos que importan.
 
-**Estado:** COMPLETADO (772/772 tests en verde; 6 historias H5.1-H5.6 implementadas, revisadas y testeadas; mesa de datos central + revelación progresiva + jerarquía de foco/peso completamente integrados; 2 bugs encontrados y resueltos en review).
+**Estado:** EN CORRECCIÓN (P0 tras playtesting real del Director Creativo, 2026-07-13). Tests en verde pero decisión de diseño en H5.2/H5.5 fue sobre-aplicada: gating de categoría no debe afectar a Jugar Carta/Activar Habilidad (que tienen objetivo visual propio) sino solo a Generar Energía/Robar Carta. Mesa central (H5.1) y jerarquía big/rutinario (H5.3-H5.4, H5.6) validadas y correctas. Trabajo pendiente:
 
-**Próximo hito:** H6 (meta-progresión, pantalla de descanso entre combates, evolución de cartas, Level-Up del Líder entre batallas).
+1. **H5.2 (revelación progresiva) — refactorizar alcance:** Flujo secuencial solo para acciones sin objetivo visual (targeting cuando hay múltiples Secuaces). Eliminar gating de categoría para Jugar Carta/Activar Habilidad (tap directo).
+2. **H5.5 (cableado del flujo) — refactorizar componentes:** TurnDecisionFlow no es orchestrador central; es helper para targeting/selección de detail. Jugar/Activar siguen siendo tap directo como en H3.1/H3.3.
+3. **Nuevas correcciones de UX detectadas en playtesting:** (a) HUD superior con nombre del Líder demasiado prominente, (b) layout no aprovecha ancho en desktop (prioridad desktop/navegador sobre móvil), legibilidad de texto en paneles, (c) fin de turno automático al agotar acciones + visualizar acción del Enemigo antes de popup.
+
+**Próximo hito:** H6 (meta-progresión, pantalla de descanso entre combates, evolución de cartas, Level-Up del Líder entre batallas) — bloqueado hasta que E5 correcciones se cierren.

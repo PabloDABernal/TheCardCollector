@@ -24,7 +24,16 @@ Tres ideas actúan juntas, no como parches independientes:
 Los 5 Núcleos (dados por color) dejan de ser un panel más del HUD y pasan a ocupar el centro real de la pantalla, siempre visibles, siempre en foco — como una mesa física de verdad (referencia ya citada en decisions.md: forcetable.net/strawtable.net). Es la pieza que ya es el corazón táctico del sistema ("quitarle un color al rival" es la tensión central por diseño), así que debe ser también el centro de atención del jugador en todo momento, no algo que hay que ir a mirar a un lateral. Toda acción que consuma o afecte a un dado se lee como algo que ocurre físicamente en esa mesa.
 
 ### 2. El turno se responde una pregunta a la vez, no se lee de golpe
-En vez de exponer simultáneamente las 4 opciones de acción (jugar carta / generar energía / robar carta / activar habilidad) con todas sus sub-opciones (qué carta, qué dado, qué objetivo) desde el primer instante, el turno se presenta como una secuencia: primero "¿qué quieres hacer?", y solo tras responder eso se revela el detalle necesario para esa elección concreta. El jugador nunca tiene que leer todo el tablero antes de poder decidir algo — decide el tipo de jugada primero, afina después. Esto no cambia el paso previo gratis ni las 2 acciones pagadas; cambia el orden en que se entrega la información.
+
+**⚠️ Corregido 2026-07-13 tras playtesting real del Director Creativo:** El diseño original fue sobre-aplicado. Solo acciones SIN objetivo visual propio deben estar sujetas a gating de categoría.
+
+En vez de exponer simultáneamente todas las opciones de acción desde el primer instante, **las acciones que no tienen un objetivo visual directo en mesa** (Generar Energía, Robar Carta) se presentan como una secuencia con preguntas explícitas. Sin embargo, **Jugar Carta y Activar Habilidad tienen un objetivo visual ya visible** (la carta en la mano, el icono de habilidad en el Líder) — el jugador debe poder tocar directamente esos objetos sin pedir primero una categoría abstracta ("¿quieres jugar una carta?"). Esto es ceremonia innecesaria cuando el objetivo ya está a la vista. Por lo tanto:
+
+- **Jugar Carta:** tap directo en la carta en la mano → ejecución inmediata (si hay múltiples Secuaces, targeting visual aparece; si no, automático).
+- **Activar Habilidad:** tap directo en el icono de habilidad del Líder → ejecución inmediata (validación de CD y Núcleo vía estado visual en el icono).
+- **Generar Energía y Robar Carta:** botones pequeños y discretos a un lado del tablero, con UI explícita ("¿Generar Energía o Robar Carta?" si aplica en el paso previo).
+
+Esto preserva la idea de "revelación progresiva" para acciones que la necesitan (targeting cuando hay múltiples objetivos), sin sobrecargar acciones que son tap directo. El paso previo gratis (robar/energía) y las 2 acciones pagadas no cambian; solo cambia a quién se aplica el gating de categoría.
 
 ### 3. No todo pesa igual: momentos grandes vs. momentos rutinarios
 El turno tiene una jerarquía de importancia deliberada. Lo rutinario se resuelve rápido y sin ceremonia; los momentos que ya son mecánicamente decisivos se tratan como el punto álgido del turno, con foco total de pantalla dedicado solo a ellos.
