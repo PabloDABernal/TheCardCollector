@@ -5,6 +5,8 @@ import { createBoard } from './board';
 import { createLeaderRoleView, createEnemyRoleView, createScenarioRoleView } from './role-view';
 import { createBoardAnchorsView } from './board-anchors-view';
 import { createNucleoTable } from './nucleo-table-view';
+import { createNucleoTablePanel } from './nucleo-table-panel';
+import { NUCLEO_TABLE_CENTER_Y, NUCLEO_PANEL_WIDTH, NUCLEO_PANEL_HEIGHT } from './board-layout';
 
 export interface BoardView {
   /** Idempotente — puede llamarse tantas veces como se quiera con el mismo snapshot sin cambiar el
@@ -31,6 +33,14 @@ export function createBoardView(scene: Phaser.Scene, ctx: BoardViewContext): Boa
   // mantiene un game object invisible nombrado por `instanceId` para que la juice de impacto siga
   // animando en el punto correcto de pantalla (ver `board-anchors-view.ts`).
   const boardAnchorsView = createBoardAnchorsView(scene);
+  // NUEVO H5.1 §3 — fondo/borde distintivo de la mesa, dibujado ANTES que los dados (mismo `create`,
+  // orden de llamada = orden de capas) para que los dados queden por encima de él.
+  createNucleoTablePanel(scene, {
+    x: 540,
+    y: NUCLEO_TABLE_CENTER_Y,
+    width: NUCLEO_PANEL_WIDTH,
+    height: NUCLEO_PANEL_HEIGHT,
+  });
   const nucleoTableView = createNucleoTable(scene, []);
 
   return {

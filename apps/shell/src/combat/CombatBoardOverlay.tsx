@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import type { CombatStateSnapshot } from '@collector/domain-combat';
-import type { BoardViewContext, GestureCommandTranslatorHandle, TargetingPrompt } from '@collector/combat-scene';
+import type { BoardViewContext, GestureCommandTranslatorHandle, TargetingPrompt, TurnRevealStage } from '@collector/combat-scene';
 import {
   COMBAT_SCENE_VIEWPORT,
   LEADER_POSITION,
@@ -33,7 +33,12 @@ import { CharacterSheetPreview } from './card/CharacterSheetPreview';
 // H4 spec §2 — mismo offset que `role-view.ts` usaba para su `Text` de estado (retirado de Phaser,
 // migrado aquí), para que la posición visual de la línea de rol no cambie respecto a la versión
 // anterior en Phaser.
-const ROLE_TEXT_OFFSET_Y = 120;
+// H5.1 spec §2.3 — escalado proporcionalmente (140/200 = 0.7) tras el tile compacto de rol
+// (`role-view.ts` `ROLE_SIZE` 200→140): antes 120, ahora 84. Duplicado 1:1 documentado contra
+// `board-layout.ts` (`COMPACT_ROLE_HUD_TEXT_OFFSET_PX`, privado a ese módulo) — mismo criterio de
+// aislamiento que el resto de constantes duplicadas del proyecto (evita una dependencia cruzada
+// view-a-view solo por un número).
+const ROLE_TEXT_OFFSET_Y = 84;
 const LOW_HEALTH_RATIO = 0.3; // decisions.md/H4 spec §4.3 — umbral de "vida baja" para --danger
 
 export interface CombatBoardOverlayProps {
@@ -51,6 +56,10 @@ export interface CombatBoardOverlayProps {
   /** NUEVO H4.x — targeting vigente, consumido por `MinionRow` para resolver el highlight
    *  `selected` de un Secuaz que sea objetivo válido ahora mismo. */
   readonly targetingPrompt: TargetingPrompt;
+  /** NUEVO H5.5 §4 — fase vigente de revelación progresiva del turno (H5.2). Gobierna la
+   *  visibilidad/interactividad de `HandCardRow` y `AbilityRow` del Líder — el resto del tablero
+   *  (Núcleos, roles, Secuaces, Aliados, log) nunca se oculta por `stage` (H5.5 §5). */
+  readonly stage: TurnRevealStage;
 }
 
 /**
@@ -73,6 +82,7 @@ export function CombatBoardOverlay({
   scenarioName,
   gestureHandle,
   targetingPrompt,
+  stage,
 }: CombatBoardOverlayProps): JSX.Element {
   const leaderRemainingRatio =
     (ctx.leaderMaxHealth - snapshot.leaderDamage) / Math.max(ctx.leaderMaxHealth, 1);
@@ -213,17 +223,26 @@ export function CombatBoardOverlay({
       <MinionRow snapshot={snapshot} ctx={ctx} gestureHandle={gestureHandle} targetingPrompt={targetingPrompt} />
       <AllyRow snapshot={snapshot} ctx={ctx} />
 
-      {/* NUEVO H4 spec §1/§4/§6 — mano del Líder, sustituye `card-hand-view.ts` (Phaser). */}
-      {gestureHandle && <HandCardRow snapshot={snapshot} ctx={ctx} gestureHandle={gestureHandle} />}
+      {/* NUEVO H4 spec §1/§4/§6 — mano del Líder, sustituye `card-hand-view.ts` (Phaser).
+          MODIFICADO H5.5 §4 — SOLO visible/interactiva en DETAIL/PLAY_CARD: en CATEGORY (o
+          DETAIL/ACTIVATE_ABILITY) la fila queda OCULTA por completo (sin renderizar), no solo
+          deshabilitada — la revelación progresiva significa que el jugador no ve las cartas hasta
+          elegir la categoría, no que las ve atenuadas. */}
+      {gestureHandle && stage.stage === 'DETAIL' && stage.category === 'PLAY_CARD' && (
+        <HandCardRow snapshot={snapshot} ctx={ctx} gestureHandle={gestureHandle} />
+      )}
 
       {/* NUEVO H4 spec §2/§6 — habilidades del Líder (interactivas) y del Enemigo (informativas),
-          sustituye `ability-cooldown-view.ts` (Phaser). */}
+          sustituye `ability-cooldown-view.ts` (Phaser). MODIFICADO H5.5 §4 — habilidades del Líder
+          gated a DETAIL/ACTIVATE_ABILITY (mismo criterio que HandCardRow arriba). Habilidades del
+          Enemigo SIN cambio: siempre visibles, nunca interactivas. */}
       <AbilityRow
         snapshot={snapshot}
         abilities={ctx.leaderAbilities}
         side="LEADER"
         rowY={LEADER_ABILITIES_ROW_Y}
-        interactive={gestureHandle !== null}
+        interactive={gestureHandle !== null && stage.stage === 'DETAIL' && stage.category === 'ACTIVATE_ABILITY'}
+        visible={stage.stage === 'DETAIL' && stage.category === 'ACTIVATE_ABILITY'}
         {...(gestureHandle ? { gestureHandle } : {})}
       />
       <AbilityRow

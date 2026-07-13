@@ -20,3 +20,10 @@ export type { RejectionSignal, DieRejectionEvent } from './rejection-signal';
 // para alinear su indicador de disponibilidad con la validación real de esta misma máquina de
 // gestos (`handleAbilityTap`).
 export { findValidDiceForAbility, isAnyLeaderAbilityActivatable } from './ability-activation';
+
+// NUEVO H5.2 §1/§6 — `TurnDecisionFlow`/`TurnDecisionSignal`/`TurnRevealStage`/`ActionCategory` SÍ se
+// reexportan desde el barrel público (`src/index.ts`): `apps/shell` necesita los tipos para
+// `useTurnRevealStage`/`CombatHud`/`CombatBoardOverlay` (H5.5), aunque la construcción
+// (`createTurnDecisionFlow`) siga siendo un detalle interno de `CombatScene.create()`.
+export type { TurnDecisionFlow, TurnDecisionSignal, TurnRevealStage, ActionCategory, TurnDecisionFlowDeps } from './turn-decision-flow';
+export { createTurnDecisionFlow } from './turn-decision-flow';

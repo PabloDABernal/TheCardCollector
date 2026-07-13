@@ -5,7 +5,10 @@ import type { BoardViewContext } from './board-view-context';
 import { LEADER_POSITION, ENEMY_POSITION, SCENARIO_POSITION } from './board-layout';
 import { createRoundedFrameRectangle } from './rounded-frame';
 
-const ROLE_SIZE = { width: 200, height: 200 };
+// H5.1 spec §2.2/§2.3 — tile compacto (antes 200×200): libera presupuesto vertical para que
+// Enemigo/Secuaces/Escenario y Aliados/Mano/Líder quepan en las zonas compactas arriba/abajo de la
+// mesa de Núcleos, ahora ancla central del tablero (`board-layout.ts` `COMPACT_ROLE_TILE_HALF_PX`).
+const ROLE_SIZE = { width: 140, height: 140 };
 const LEADER_COLOR = 0x2980b9; // azul
 const ENEMY_COLOR = 0xc0392b; // rojo
 const SCENARIO_COLOR = 0x8e44ad; // violeta

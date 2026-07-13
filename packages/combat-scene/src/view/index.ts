@@ -38,5 +38,9 @@ export {
   // H4 spec §2.3 — `apps/shell` (`CombatBoardOverlay.tsx`) reutiliza estas MISMAS coordenadas para
   // las etiquetas de zona y las líneas de rol, sin duplicar ningún número de posición.
   PANEL_ZONES,
+  // NUEVO H5.1 §1/§7 — ancla raíz de la mesa de Núcleos (centro exacto del viewport), reutilizada por
+  // H5.5 para posicionar el selector de categoría de revelación progresiva de forma coherente con el
+  // nuevo centro de gravedad visual del tablero.
+  NUCLEO_TABLE_CENTER_Y,
 } from './board-layout';
 export { NUCLEO_COLOR_HEX } from './nucleo-colors';

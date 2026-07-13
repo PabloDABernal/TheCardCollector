@@ -233,3 +233,13 @@ Revisado `common-cards.json`, `mago-base-cards.json`, `soldado-base-cards.json`:
 
 ### 4. Traslado a Coordinator
 Se traslada a Coordinator (no se toca el JSON aquí) la lista concreta de ajustes sugeridos, ver resumen de esta sesión.
+
+## 2026-07-12 — Rediseño de experiencia de combate: mesa de dados central, revelación progresiva de decisiones, jerarquía de peso (Director Creativo + Game Designer)
+
+Responde al feedback del Director Creativo tras jugar el build de H4 ("sigue sin parecer un prototipo, necesito más chicha" / "no necesito cambios pequeños. cambio profundo y que luego vea un juego diferente"). El Director Creativo aprobó combinar las tres direcciones propuestas por Game Designer sin elegir una sola ("radical. haz todas").
+
+- **Qué:** rediseño de la capa de experiencia/UX del combate (NO de las reglas) con tres cambios combinados: (1) la mesa de 5 dados de Núcleo pasa a ser el centro visual permanente de la pantalla; (2) las decisiones del turno se revelan progresivamente, una pregunta a la vez; (3) jerarquía de peso entre momentos "grandes" (foco total) y "rutinarios" (rápidos, sin ceremonia).
+- **Por qué:** ver análisis completo en vision.md, sección "Experiencia objetivo del combate rediseñado (2026-07-12)". Diagnóstico: H4 ya resolvió la capa de "dónde están las cosas"; faltaba resolver la carga cognitiva de decisión y el contraste de peso entre acciones. No es falta de "juice" cosmético (H2/H3 ya lo implementaron); es **arquitectura de información y flujo de revelación de datos**.
+- **Alcance:** precede a un nuevo hito de UX de combate; se traslada a Coordinator para desglosar en épica/historias. **Ninguna regla de Núcleos, turno con paso previo + 2 acciones, cooldowns, Umbral, Trama, IA del Enemigo o velocidad de juego cambia.** Es 100% trabajo de secuenciación de UI, jerarquía visual/foco y layout.
+- **Contenido de juguete (2 Líderes, 2 Enemigos, 2 Escenarios) NO cambia en este trabajo** — solo la experiencia de presentación y secuenciación del combate.
+- **Referencias:** H1 cierre de reglas (decisions.md 2026-07-08), vision.md "Experiencia objetivo del combate rediseñado (2026-07-12)" (documento completo, no resumen — es la fuente de verdad).

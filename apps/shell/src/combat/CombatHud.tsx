@@ -1,6 +1,6 @@
 import type { CombatBridge } from '@collector/combat-bridge';
 import type { CombatStateSnapshot } from '@collector/domain-combat';
-import type { AbilityViewData } from '@collector/combat-scene';
+import type { AbilityViewData, ActionCategory, TurnDecisionFlow, TurnRevealStage } from '@collector/combat-scene';
 import { isAnyLeaderAbilityActivatable } from '@collector/combat-scene';
 import {
   COLOR_BINDER,
@@ -26,6 +26,11 @@ export interface CombatHudProps {
    *  disponibilidad por color real vía `isAnyLeaderAbilityActivatable`, en vez del agregado laxo
    *  anterior ("¿algún dado libre? Y ¿alguna habilidad en CD 0?" sin cruzarlos). */
   readonly leaderAbilities: readonly AbilityViewData[];
+  /** NUEVO H5.5 §3 — sustituye el dispatch directo de GENERATE_ENERGY/DRAW_CARD y añade el gating de
+   *  PLAY_CARD/ACTIVATE_ABILITY (H5.2 §4: `TurnDecisionFlow` es el único punto de dispatch para las 4
+   *  categorías a partir de esta historia). `null` mientras `CombatScene` no emitió `READY`. */
+  readonly turnDecisionFlow: TurnDecisionFlow | null;
+  readonly stage: TurnRevealStage;
 }
 
 const LEADER_ENERGY_MAX = 5; // GDD §2.2 / decisions.md — tope de Energía, mismo valor que el motor
@@ -41,7 +46,9 @@ const compactChipOverride = {
   fontSize: 'var(--hud-chip-font-size)',
 };
 
-type ControlId = 'PLAY_CARD' | 'ACTIVATE_ABILITY' | 'GENERATE_ENERGY' | 'DRAW_CARD';
+// H5.2 spec §1 — mismo vocabulario que `ActionCategory` (`@collector/combat-scene`); unificado aquí
+// (H5.5) en vez de mantener un tipo local duplicado.
+type ControlId = ActionCategory;
 
 /** H4 spec §6 — helper puro, testeable, reutilizado por los 4 controles (Jugar Carta / Activar
  *  Habilidad / Generar Energía / Robar Carta): centraliza qué texto de motivo mostrar por control
@@ -90,19 +97,18 @@ export function disabledReasonFor(
  * (pagada), más el paso previo gratuito (Robar/Energía gratis), visualmente distinto porque NO
  * consume ninguna de las 2 acciones del turno.
  *
- * Decisión de implementación (no trivial, documentada): "Jugar Carta" y "Activar Habilidad" no son
- * botones accionables desde este HUD — su gesto real ya vive en el canvas de Phaser (tap en una
- * carta de la mano / tap en un icono de habilidad, `gesture-command-translator.ts`). Aquí se
- * muestran como INDICADORES de disponibilidad (mismo criterio de estado activo/deshabilitado que
- * pide la spec), no como controles que despachen un comando por sí mismos — evita duplicar un
- * segundo mecanismo de selección de carta/objetivo/Núcleo fuera del tablero. "Generar Energía" y
- * "Robar Carta" (pagadas) SÍ son botones accionables aquí porque no requieren ninguna selección
- * adicional (sin objetivo, sin Núcleo) — igual que el paso previo gratuito.
+ * H5.5 spec §3 — SUSTITUYE la decisión anterior de H4: "Jugar Carta"/"Activar Habilidad" dejaban de
+ * ser botones accionables porque su gesto real vivía directamente en el canvas (tap en una carta de
+ * mano / icono de habilidad), sin selección de categoría previa. Con la revelación progresiva de
+ * H5.2, la elección de categoría es ahora un gesto EXPLÍCITO en el HUD — las 4 categorías (Jugar
+ * Carta, Activar Habilidad, Generar Energía, Robar Carta) pasan a ser botones reales por igual en
+ * fase `CATEGORY`, todos disparando `turnDecisionFlow.selectCategory(...)`. En fase `DETAIL`, la fila
+ * de 4 controles se sustituye por una cabecera de contexto + botón "← Atrás".
  *
  * H4 spec §6 — rediseño de cromo sobre el sistema de diseño real: tipografía Staatliches/Manrope/
  * JetBrains Mono, paleta con nombre, contador de acciones destacado en `--foil`.
  */
-export function CombatHud({ snapshot, bridge, onEndTurn, leaderName, leaderAbilities }: CombatHudProps): JSX.Element {
+export function CombatHud({ snapshot, bridge, onEndTurn, leaderName, leaderAbilities, turnDecisionFlow, stage }: CombatHudProps): JSX.Element {
   const isLeaderTurn = snapshot.turn.turnOwner === 'LEADER' && snapshot.status === 'IN_PROGRESS';
   const hasActionsRemaining = snapshot.actions.actionsTaken < snapshot.actions.actionsAllowed;
   const canAct = isLeaderTurn && hasActionsRemaining;
@@ -201,39 +207,59 @@ export function CombatHud({ snapshot, bridge, onEndTurn, leaderName, leaderAbili
         </button>
       </div>
 
-      {/* 2 acciones pagadas — 4 opciones, decisions.md "Estructura del turno del jugador". */}
-      <div className="combat-hud-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--hud-gap)' }}>
-        <span
-          aria-disabled={!canPlayCard}
-          title={disabledReasonFor('PLAY_CARD', snapshot, leaderAbilities) ?? undefined}
-          style={{ ...(canPlayCard ? enabledStyle : disabledStyle), ...compactChipOverride }}
-        >
-          {isCompact ? 'Carta' : 'Jugar Carta'}
-        </span>
-        <span
-          aria-disabled={!canActivateAbility}
-          title={disabledReasonFor('ACTIVATE_ABILITY', snapshot, leaderAbilities) ?? undefined}
-          style={{ ...(canActivateAbility ? enabledStyle : disabledStyle), ...compactChipOverride }}
-        >
-          {isCompact ? 'Habilidad' : 'Activar Habilidad'}
-        </span>
-        <button
-          disabled={!canGenerateEnergyPaid}
-          title={disabledReasonFor('GENERATE_ENERGY', snapshot, leaderAbilities) ?? undefined}
-          style={{ ...(canGenerateEnergyPaid ? enabledStyle : disabledStyle), ...compactChipOverride }}
-          onClick={() => bridge.dispatch({ type: 'GENERATE_ENERGY' })}
-        >
-          {isCompact ? 'Energía' : 'Generar Energía'}
-        </button>
-        <button
-          disabled={!canDrawCardPaid}
-          title={disabledReasonFor('DRAW_CARD', snapshot, leaderAbilities) ?? undefined}
-          style={{ ...(canDrawCardPaid ? enabledStyle : disabledStyle), ...compactChipOverride }}
-          onClick={() => bridge.dispatch({ type: 'DRAW_CARD' })}
-        >
-          {isCompact ? 'Robar' : 'Robar Carta'}
-        </button>
-      </div>
+      {/* NUEVO H5.5 §3 — 2 acciones pagadas, ahora gobernadas por `stage` (revelación progresiva de
+          H5.2). Fase CATEGORY: 4 botones reales, todos disparando `turnDecisionFlow.selectCategory`.
+          Fase DETAIL: cabecera de contexto + "← Atrás" (`turnDecisionFlow.cancelDetail`). */}
+      {stage.stage === 'CATEGORY' && (
+        <div className="combat-hud-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--hud-gap)' }}>
+          <button
+            disabled={!canPlayCard}
+            title={disabledReasonFor('PLAY_CARD', snapshot, leaderAbilities) ?? undefined}
+            style={{ ...(canPlayCard ? enabledStyle : disabledStyle), ...compactChipOverride }}
+            onClick={() => turnDecisionFlow?.selectCategory('PLAY_CARD')}
+          >
+            {isCompact ? 'Carta' : 'Jugar Carta'}
+          </button>
+          <button
+            disabled={!canActivateAbility}
+            title={disabledReasonFor('ACTIVATE_ABILITY', snapshot, leaderAbilities) ?? undefined}
+            style={{ ...(canActivateAbility ? enabledStyle : disabledStyle), ...compactChipOverride }}
+            onClick={() => turnDecisionFlow?.selectCategory('ACTIVATE_ABILITY')}
+          >
+            {isCompact ? 'Habilidad' : 'Activar Habilidad'}
+          </button>
+          <button
+            disabled={!canGenerateEnergyPaid}
+            title={disabledReasonFor('GENERATE_ENERGY', snapshot, leaderAbilities) ?? undefined}
+            style={{ ...(canGenerateEnergyPaid ? enabledStyle : disabledStyle), ...compactChipOverride }}
+            onClick={() => turnDecisionFlow?.selectCategory('GENERATE_ENERGY')}
+          >
+            {isCompact ? 'Energía' : 'Generar Energía'}
+          </button>
+          <button
+            disabled={!canDrawCardPaid}
+            title={disabledReasonFor('DRAW_CARD', snapshot, leaderAbilities) ?? undefined}
+            style={{ ...(canDrawCardPaid ? enabledStyle : disabledStyle), ...compactChipOverride }}
+            onClick={() => turnDecisionFlow?.selectCategory('DRAW_CARD')}
+          >
+            {isCompact ? 'Robar' : 'Robar Carta'}
+          </button>
+        </div>
+      )}
+
+      {stage.stage === 'DETAIL' && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: SPACING.sm }}>
+          <span style={{ ...TYPE.labelUpper, color: COLOR_TEXT_SECONDARY }}>
+            {stage.category === 'PLAY_CARD' ? 'Elige una carta' : 'Elige una habilidad'}
+          </span>
+          <button
+            style={{ ...chipStyle(true), background: 'transparent' }}
+            onClick={() => turnDecisionFlow?.cancelDetail()}
+          >
+            ← Atrás
+          </button>
+        </div>
+      )}
 
       <button
         onClick={onEndTurn}

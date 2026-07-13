@@ -35,6 +35,13 @@ export interface JuiceStep {
    *  criterio ya sentado por `resolveFloatingNumberEntries`/`computeIntensity` para parámetros
    *  visuales dependientes del evento. */
   readonly soundId?: SoundCueId;
+  /** NUEVO H5.3 §2.1 — `true` marca este evento como momento grande de forma ESTÁTICA (independiente
+   *  del valor del evento). Convención: si un evento tiene más de un `JuiceStep`, todos comparten el
+   *  mismo valor de `isBigMoment` (es una propiedad del EVENTO, no del step individual — se declara
+   *  por step porque `JuiceConfig`/`JuiceStep` ya es la unidad de configuración existente, evita
+   *  crear una tabla paralela `eventType -> boolean`). `undefined`/`false` = no grande por esta vía
+   *  (puede seguir siendo grande vía `BigMomentClassifier`, ver `big-moment-classifier.ts`). */
+  readonly isBigMoment?: boolean;
 }
 
 /** Contrato que toda receta (stub en H2.4, real en H2.5) debe cumplir. `id` debe coincidir

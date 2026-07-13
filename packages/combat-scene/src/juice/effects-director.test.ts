@@ -8,11 +8,12 @@ import type { CombatBridge, CombatEvent } from '@collector/combat-bridge';
 import { createId } from '@collector/domain-shared';
 import type { CardId, CardInstanceId, NucleoInstanceId } from '@collector/domain-shared';
 import type Phaser from 'phaser';
-import { createEffectsDirector } from './effects-director';
+import { createEffectsDirector, MIN_BIG_MOMENT_HOLD_MS } from './effects-director';
 import { JUICE_CONFIG } from './juice-config';
 import type { JuiceConfig } from './juice-config';
 import type { JuiceRecipe, JuiceRecipeRegistry } from './juice-recipe';
 import type { SoundManager } from '../audio/sound-manager';
+import { createFakeJuiceScene } from './recipes/test-utils/fake-juice-scene';
 
 function createMockSceneBridge() {
   const listeners: Array<(e: CombatEvent) => void> = [];
@@ -71,6 +72,17 @@ function createFakeSoundManager(): SoundManager {
   return { unlock: vi.fn(), play: vi.fn() };
 }
 
+/** NUEVO H5.3 §5 — `BigMomentClassifier`/`FocusController` fakes mínimos: por defecto ningún evento
+ *  es "grande" (mismo comportamiento observable que antes de H5.3 en los tests preexistentes de este
+ *  archivo, que no ejercitan foco). Casos nuevos (H5.3) sobreescriben `classify`. */
+function createFakeBigMomentClassifier(classify: (event: CombatEvent) => boolean = () => false) {
+  return { classify: vi.fn(classify) };
+}
+
+function createFakeFocusController() {
+  return { begin: vi.fn(async () => {}), end: vi.fn(async () => {}) };
+}
+
 const NUCLEO_ID_1 = createId<'NucleoInstanceId'>('NucleoInstanceId', 'nucleo-1') as NucleoInstanceId;
 const NUCLEO_ID_2 = createId<'NucleoInstanceId'>('NucleoInstanceId', 'nucleo-2') as NucleoInstanceId;
 const ALLY_INSTANCE_ID = createId<'CardInstanceId'>('CardInstanceId', 'ally-1') as CardInstanceId;
@@ -80,7 +92,13 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
     const { bridge, emit } = createMockSceneBridge();
     const { registry } = createTestRegistry();
     const soundManager = createFakeSoundManager();
-    const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry, soundManager);
+    const director = createEffectsDirector(
+      JUICE_CONFIG,
+      registry as unknown as JuiceRecipeRegistry,
+      soundManager,
+      createFakeBigMomentClassifier(),
+      createFakeFocusController(),
+    );
     director.attach(bridge, {} as Phaser.Scene);
 
     const event: CombatEvent = {
@@ -108,7 +126,13 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
     const { bridge, emit } = createMockSceneBridge();
     const { registry, callOrder } = createTestRegistry();
     const soundManager = createFakeSoundManager();
-    const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry, soundManager);
+    const director = createEffectsDirector(
+      JUICE_CONFIG,
+      registry as unknown as JuiceRecipeRegistry,
+      soundManager,
+      createFakeBigMomentClassifier(),
+      createFakeFocusController(),
+    );
     director.attach(bridge, {} as Phaser.Scene);
 
     const event: CombatEvent = {
@@ -171,7 +195,13 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
       soundOnly: { id: 'soundOnly', play: vi.fn(async () => {}) },
       turnBanner: { id: 'turnBanner', play: vi.fn(async () => {}) },
     };
-    const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry, soundManager);
+    const director = createEffectsDirector(
+      JUICE_CONFIG,
+      registry as unknown as JuiceRecipeRegistry,
+      soundManager,
+      createFakeBigMomentClassifier(),
+      createFakeFocusController(),
+    );
     director.attach(bridge, {} as Phaser.Scene);
 
     const event: CombatEvent = {
@@ -201,7 +231,13 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
     const { bridge, emit } = createMockSceneBridge();
     const { registry } = createTestRegistry();
     const soundManager = createFakeSoundManager();
-    const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry, soundManager);
+    const director = createEffectsDirector(
+      JUICE_CONFIG,
+      registry as unknown as JuiceRecipeRegistry,
+      soundManager,
+      createFakeBigMomentClassifier(),
+      createFakeFocusController(),
+    );
     director.attach(bridge, {} as Phaser.Scene);
 
     const event: CombatEvent = {
@@ -230,7 +266,13 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
     const { bridge, emit } = createMockSceneBridge();
     const { registry } = createTestRegistry();
     const soundManager = createFakeSoundManager();
-    const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry, soundManager);
+    const director = createEffectsDirector(
+      JUICE_CONFIG,
+      registry as unknown as JuiceRecipeRegistry,
+      soundManager,
+      createFakeBigMomentClassifier(),
+      createFakeFocusController(),
+    );
     director.attach(bridge, {} as Phaser.Scene);
 
     const event: CombatEvent = {
@@ -252,7 +294,13 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
     const { bridge, emit } = createMockSceneBridge();
     const { registry } = createTestRegistry();
     const soundManager = createFakeSoundManager();
-    const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry, soundManager);
+    const director = createEffectsDirector(
+      JUICE_CONFIG,
+      registry as unknown as JuiceRecipeRegistry,
+      soundManager,
+      createFakeBigMomentClassifier(),
+      createFakeFocusController(),
+    );
     director.attach(bridge, {} as Phaser.Scene);
 
     const event: CombatEvent = {
@@ -277,7 +325,13 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
     const { bridge, emit } = createMockSceneBridge();
     const { registry } = createTestRegistry();
     const soundManager = createFakeSoundManager();
-    const director = createEffectsDirector(JUICE_CONFIG, registry as unknown as JuiceRecipeRegistry, soundManager);
+    const director = createEffectsDirector(
+      JUICE_CONFIG,
+      registry as unknown as JuiceRecipeRegistry,
+      soundManager,
+      createFakeBigMomentClassifier(),
+      createFakeFocusController(),
+    );
     director.attach(bridge, {} as Phaser.Scene);
 
     const event: CombatEvent = {
@@ -324,7 +378,13 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
     process.on('unhandledRejection', handler);
 
     try {
-      const director = createEffectsDirector(brokenConfig, registry as unknown as JuiceRecipeRegistry, soundManager);
+      const director = createEffectsDirector(
+        brokenConfig,
+        registry as unknown as JuiceRecipeRegistry,
+        soundManager,
+        createFakeBigMomentClassifier(),
+        createFakeFocusController(),
+      );
       director.attach(bridge, {} as Phaser.Scene);
 
       const event: CombatEvent = {
@@ -346,5 +406,103 @@ describe('EffectsDirector — resolución evento→receta (H2.4)', () => {
       process.removeListener('unhandledRejection', handler);
       originalHandler.forEach((l) => process.on('unhandledRejection', l));
     }
+  });
+
+  // H5.3 spec §5 casos 7-10 — wrap automático de foco alrededor de eventos "grandes".
+  describe('H5.3 — wrap de foco (isBigMoment estático + BigMomentClassifier dinámico)', () => {
+    it('7. evento con steps[0].isBigMoment === true: focusController.begin/end se invocan alrededor de recipe.play', async () => {
+      const { bridge, emit } = createMockSceneBridge();
+      const soundManager = createFakeSoundManager();
+      const bigMomentClassifier = createFakeBigMomentClassifier();
+      const focusController = createFakeFocusController();
+      const { scene } = createFakeJuiceScene();
+
+      const config: JuiceConfig = {
+        ...JUICE_CONFIG,
+        PHASE_CHANGED: [{ recipeId: 'screenShake', mode: 'sequential', isBigMoment: true }],
+      };
+      const registry: JuiceRecipeRegistry = { screenShake: { id: 'screenShake', play: vi.fn(async () => {}) } };
+
+      const director = createEffectsDirector(config, registry, soundManager, bigMomentClassifier, focusController);
+      director.attach(bridge, scene);
+
+      emit({ type: 'PHASE_CHANGED', source: 'ENEMY', fromPhaseNumber: 1, toPhaseNumber: 2 });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(focusController.begin).toHaveBeenCalledTimes(1);
+      expect(focusController.end).toHaveBeenCalledTimes(1);
+      expect(registry['screenShake']!.play).toHaveBeenCalledTimes(1);
+    });
+
+    it('8. isBigMoment ausente en todos los steps y bigMomentClassifier.classify=false: focusController nunca se llama', async () => {
+      const { bridge, emit } = createMockSceneBridge();
+      const soundManager = createFakeSoundManager();
+      const bigMomentClassifier = createFakeBigMomentClassifier(() => false);
+      const focusController = createFakeFocusController();
+      const { scene } = createFakeJuiceScene();
+      const registry: JuiceRecipeRegistry = { turnBanner: { id: 'turnBanner', play: vi.fn(async () => {}) } };
+
+      const director = createEffectsDirector(JUICE_CONFIG, registry, soundManager, bigMomentClassifier, focusController);
+      director.attach(bridge, scene);
+
+      emit({ type: 'TURN_ENDED', previousTurnOwner: 'LEADER', nextTurnOwner: 'ENEMY', turnNumber: 1 });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(focusController.begin).not.toHaveBeenCalled();
+      expect(focusController.end).not.toHaveBeenCalled();
+    });
+
+    it('9. isBigMoment ausente pero bigMomentClassifier.classify=true: focusController SÍ se llama (promoción dinámica)', async () => {
+      const { bridge, emit } = createMockSceneBridge();
+      const soundManager = createFakeSoundManager();
+      const bigMomentClassifier = createFakeBigMomentClassifier(() => true);
+      const focusController = createFakeFocusController();
+      const { scene } = createFakeJuiceScene();
+      const registry: JuiceRecipeRegistry = { turnBanner: { id: 'turnBanner', play: vi.fn(async () => {}) } };
+
+      const director = createEffectsDirector(JUICE_CONFIG, registry, soundManager, bigMomentClassifier, focusController);
+      director.attach(bridge, scene);
+
+      emit({ type: 'TURN_ENDED', previousTurnOwner: 'LEADER', nextTurnOwner: 'ENEMY', turnNumber: 1 });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(focusController.begin).toHaveBeenCalledTimes(1);
+      expect(focusController.end).toHaveBeenCalledTimes(1);
+    });
+
+    it('10. focusController.end no se llama antes de que resuelva el delayedCall de espera mínima (MIN_BIG_MOMENT_HOLD_MS), aunque recipe.play ya haya completado', async () => {
+      const { bridge, emit } = createMockSceneBridge();
+      const soundManager = createFakeSoundManager();
+      const bigMomentClassifier = createFakeBigMomentClassifier();
+      const focusController = createFakeFocusController();
+      // autoComplete: false — controla a mano cuándo resuelve `scene.time.delayedCall`, para poder
+      // observar el estado ANTES de que la espera mínima termine.
+      const { scene, recordedDelayedCalls, runDelayedCall } = createFakeJuiceScene({ autoComplete: false });
+      const registry: JuiceRecipeRegistry = { screenShake: { id: 'screenShake', play: vi.fn(async () => {}) } };
+      const config: JuiceConfig = {
+        ...JUICE_CONFIG,
+        PHASE_CHANGED: [{ recipeId: 'screenShake', mode: 'sequential', isBigMoment: true }],
+      };
+
+      const director = createEffectsDirector(config, registry, soundManager, bigMomentClassifier, focusController);
+      director.attach(bridge, scene);
+
+      emit({ type: 'PHASE_CHANGED', source: 'ENEMY', fromPhaseNumber: 1, toPhaseNumber: 2 });
+
+      // Deja resolver los microtasks pendientes (begin(), recipe.play()) hasta que el código llegue
+      // al `scene.time.delayedCall` de espera mínima.
+      for (let i = 0; i < 10; i += 1) await Promise.resolve();
+
+      expect(recordedDelayedCalls).toHaveLength(1);
+      expect(recordedDelayedCalls[0]!.delayMs).toBeLessThanOrEqual(MIN_BIG_MOMENT_HOLD_MS);
+      expect(recordedDelayedCalls[0]!.delayMs).toBeGreaterThan(0);
+      expect(focusController.end).not.toHaveBeenCalled();
+
+      runDelayedCall(0);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(focusController.end).toHaveBeenCalledTimes(1);
+    });
   });
 });

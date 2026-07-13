@@ -1,10 +1,10 @@
 import Phaser from 'phaser';
 import type { AbilityId, CardId } from '@collector/domain-shared';
 import type { CombatBridge, Unsubscribe } from '@collector/combat-bridge';
-import { createEffectsDirector, JUICE_CONFIG, createRecipeRegistry } from '../juice';
+import { createEffectsDirector, JUICE_CONFIG, createRecipeRegistry, createBigMomentClassifier, createFocusController } from '../juice';
 import { createInputAdapter, type InputAdapter } from '../input';
 import { createBoardView, createTargetingHighlightView, createDieRejectionView, type BoardViewContext } from '../view';
-import { createGestureCommandTranslator, type TargetingSignal } from '../interaction';
+import { createGestureCommandTranslator, createTurnDecisionFlow, type TargetingSignal, type TurnDecisionFlow } from '../interaction';
 import { createWebAudioSoundManager } from '../audio';
 import { COMBAT_SCENE_VIEWPORT } from '../view/board-layout';
 
@@ -62,6 +62,9 @@ export class CombatScene extends Phaser.Scene {
    *  (poblado en `create()`, no en `init()` — mismo criterio que el resto de recursos de escena). */
   private translatorHandle!: GestureCommandTranslatorHandle;
   private targetingSignal!: TargetingSignal;
+  /** NUEVO H5.2 §3/H5.5 §1 — máquina de estados de revelación progresiva del turno (construida en
+   *  `create()`, no en `init()` — mismo criterio que el resto de recursos de escena). */
+  private turnDecisionFlowHandle!: TurnDecisionFlow;
 
   constructor() {
     super('CombatScene');
@@ -77,6 +80,12 @@ export class CombatScene extends Phaser.Scene {
    *  `TargetingPromptBanner` (React) invoquen directo el tap real sin pasar por `InputAdapter`. */
   getGestureCommandTranslator(): GestureCommandTranslatorHandle {
     return this.translatorHandle;
+  }
+
+  /** NUEVO H5.5 §1 — expuesto a `apps/shell` tras `READY`, mismo ciclo de vida que
+   *  `getTargetingSignal()`/`getGestureCommandTranslator()`. */
+  getTurnDecisionFlow(): TurnDecisionFlow {
+    return this.turnDecisionFlowHandle;
   }
 
   /** Fase 1 del ciclo de vida Phaser — recibe `CombatSceneInitData`. Únicamente asigna `this.bridge`/
@@ -120,7 +129,20 @@ export class CombatScene extends Phaser.Scene {
     const soundManager = createWebAudioSoundManager({ debug: true });
     this.input.once('pointerdown', () => soundManager.unlock());
 
-    const effectsDirector = createEffectsDirector(JUICE_CONFIG, createRecipeRegistry(soundManager), soundManager);
+    // NUEVO H5.3 §1/§2.2 — clasificador dinámico de "momento grande" por cruce de umbral (Trama/vida).
+    const bigMomentClassifier = createBigMomentClassifier(this.boardContext, this.bridge);
+    // NUEVO H5.4 §1 — sesión de foco reentrante-segura, MISMA instancia inyectada tanto en
+    // `createRecipeRegistry` (focusZoom/focusBlur/unfocusReset) como en `createEffectsDirector`
+    // (wrap automático de foco, H5.3 §2.2) — nunca se crean 2 controladores separados.
+    const focusController = createFocusController();
+
+    const effectsDirector = createEffectsDirector(
+      JUICE_CONFIG,
+      createRecipeRegistry(soundManager, focusController),
+      soundManager,
+      bigMomentClassifier,
+      focusController,
+    );
     const unsubscribeEffects: Unsubscribe = effectsDirector.attach(this.bridge, this);
 
     // H2.7 §2.3 — umbrales por defecto; H2.8/H2.9 pueden pasar config si el feel lo pide. Sin consumidor
@@ -155,6 +177,13 @@ export class CombatScene extends Phaser.Scene {
     };
     const unsubscribeTranslator: Unsubscribe = this.inputAdapter.subscribe((gesture) => {
       translator.handleGesture(gesture);
+    });
+
+    // NUEVO H5.2 §3/H5.5 §1 — construido inmediatamente después de `translator`, mismo punto donde
+    // ya se construyen `this.targetingSignal`/`this.translatorHandle`.
+    this.turnDecisionFlowHandle = createTurnDecisionFlow({
+      bridge: this.bridge,
+      cancelPending: () => translator.cancelPending(),
     });
 
     // NUEVO H4 spec §5.4 — highlight visual (glow `--foil` pulsante) sobre los sprites de mesa
